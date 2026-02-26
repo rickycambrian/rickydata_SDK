@@ -308,6 +308,7 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
         try {
           const tokenResult = await createWalletTokenFlow(gatewayUrl, privateKey, expiresAt);
           store.setToken(tokenResult.token, tokenResult.walletAddress, profile, tokenResult.expiresAt);
+          store.setPrivateKey(privateKey, profile);
           spinner.succeed(chalk.green('Authenticated successfully (wallet token)'));
           console.log(`  Wallet: ${chalk.cyan(tokenResult.walletAddress)}`);
           console.log(`  Expires: ${chalk.cyan(tokenResult.expiresAt)}`);
@@ -321,6 +322,7 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
 
         const challengeResult = await runAuthChallenge(gatewayUrl, privateKey);
         store.setToken(challengeResult.token, challengeResult.walletAddress, profile);
+        store.setPrivateKey(privateKey, profile);
         spinner.succeed(chalk.green('Authenticated successfully'));
         console.log(`  Wallet: ${chalk.cyan(challengeResult.walletAddress)}`);
         console.log(`  Profile: ${chalk.cyan(profile)}`);
@@ -353,6 +355,14 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
         console.log(`Expires: ${label} (${cred.expiresAt})`);
       }
       console.log(`Token:   ${chalk.dim(cred.token.slice(0, 20) + '...')}`);
+
+      // Show x402 payment status
+      const pk = store.getPrivateKey(profile);
+      if (pk) {
+        console.log(`x402:    ${chalk.green('✓ payments enabled')}`);
+      } else {
+        console.log(`x402:    ${chalk.yellow('✗ no private key')} (login with --private-key to enable)`);
+      }
 
       // Non-blocking balance check
       try {

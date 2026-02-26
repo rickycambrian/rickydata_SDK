@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import ora from 'ora';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
 import { formatOutput, formatJson, type OutputFormat } from '../output/formatter.js';
@@ -8,13 +9,89 @@ import { CLI_VERSION } from '../version.js';
 
 const MCP_PROTOCOL_VERSION = '2025-03-26';
 
-function requireAuth(store: CredentialStore, profile: string): string {
-  const cred = store.getToken(profile);
-  if (!cred) {
-    fail('Not authenticated. Run `rickydata auth login` first.');
-  }
-  return cred.token;
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function mcpHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
+
+/** Send a JSON-RPC request to the MCP gateway. Returns the parsed JSON-RPC result. */
+async function mcpRequest(
+  mcpUrl: string,
+  method: string,
+  params: Record<string, unknown>,
+  id: number,
+  headers: Record<string, string>,
+): Promise<unknown> {
+  const res = await fetch(mcpUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+  });
+  if (!res.ok) {
+    throw new Error(`MCP ${method} failed: ${res.status} ${await res.text()}`);
+  }
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('text/event-stream')) {
+    const text = await res.text();
+    for (const line of text.split('\n')) {
+      if (line.startsWith('data: ')) {
+        try {
+          const json = JSON.parse(line.slice(6));
+          if (json.result !== undefined) return json.result;
+          if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+        } catch (e) { if (e instanceof Error && e.message.includes('MCP')) throw e; }
+      }
+    }
+    throw new Error(`No result in SSE response for ${method}`);
+  }
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return json.result;
+}
+
+/** Initialize an MCP session (required before tools/list or tools/call). */
+async function mcpInitialize(mcpUrl: string, headers: Record<string, string>): Promise<void> {
+  await mcpRequest(mcpUrl, 'initialize', {
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: { name: 'rickydata-cli', version: CLI_VERSION },
+  }, 1, headers);
+}
+
+/** Call a meta-tool via MCP tools/call. */
+async function mcpCallMetaTool(
+  mcpUrl: string,
+  headers: Record<string, string>,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  await mcpInitialize(mcpUrl, headers);
+  const result = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 2, headers);
+  return result;
+}
+
+/** Parse the text content from an MCP tool result. */
+function extractResultText(result: unknown): string {
+  if (!result || typeof result !== 'object') return JSON.stringify(result);
+  const r = result as { content?: Array<{ type: string; text?: string }> };
+  if (Array.isArray(r.content)) {
+    return r.content
+      .filter(c => c.type === 'text' && c.text)
+      .map(c => c.text!)
+      .join('\n');
+  }
+  return JSON.stringify(result);
+}
+
+function parseResultJson(result: unknown): unknown {
+  const text = extractResultText(result);
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+// ── Agent MCP helpers (kept from original) ───────────────────────────
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -138,11 +215,345 @@ async function callAgentMcpTool(
   return json.result;
 }
 
-export function createMcpCommands(config: ConfigManager, store: CredentialStore): Command {
-  const mcp = new Command('mcp').description("Access an agent's MCP tools directly");
+// ── x402 Payment Helper ──────────────────────────────────────────────
 
-  // mcp tools <agent-id>
+interface PaymentInfo {
+  amount: string;
+  paid: boolean;
+}
+
+async function mcpCallWithPayment(
+  mcpUrl: string,
+  token: string | undefined,
+  privateKey: string | undefined,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<{ result: unknown; payment?: PaymentInfo }> {
+  const headers = mcpHeaders(token);
+
+  // Initialize
+  await mcpInitialize(mcpUrl, headers);
+
+  // Try the call
+  const result = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 3, headers);
+
+  // Check if the result indicates payment required
+  const parsed = parseResultJson(result);
+  if (parsed && typeof parsed === 'object' && (parsed as Record<string, unknown>).error === 'PAYMENT_REQUIRED') {
+    const pr = (parsed as Record<string, unknown>).paymentRequirements as Record<string, unknown> | undefined;
+    if (!pr) throw new CliError('Payment required but no payment requirements returned');
+
+    if (!privateKey) {
+      throw new CliError(
+        'Payment required ($' + (pr.priceUsd || '0.0005') + ' USDC). ' +
+        'Run `rickydata auth login --private-key 0x...` to enable x402 payments.'
+      );
+    }
+
+    // Sign payment
+    const { privateKeyToAccount } = await import('viem/accounts');
+    const { signPayment } = await import('../../payment/payment-signer.js');
+
+    const key = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+    const account = privateKeyToAccount(key as `0x${string}`);
+
+    const paymentReqs = {
+      amount: String(pr.maxAmountRequired || Math.floor(parseFloat(String(pr.priceUsd || '0.0005')) * 1_000_000)),
+      recipient: pr.payTo as string,
+      usdcContract: (pr.asset as string) || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      network: `eip155:${(pr.network as string) === 'base' ? '8453' : '8453'}`,
+      chainId: 8453,
+    };
+
+    const { header } = await signPayment(account, paymentReqs);
+
+    // Retry with payment header
+    const paidHeaders = { ...headers, 'X-Payment': header };
+    // Need to re-initialize with payment headers
+    await mcpInitialize(mcpUrl, paidHeaders);
+    const paidResult = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 4, paidHeaders);
+
+    return {
+      result: paidResult,
+      payment: {
+        amount: String(pr.priceUsd || '$0.0005'),
+        paid: true,
+      },
+    };
+  }
+
+  return { result };
+}
+
+// ── Command Builder ──────────────────────────────────────────────────
+
+export function createMcpCommands(config: ConfigManager, store: CredentialStore): Command {
+  const mcp = new Command('mcp').description('MCP gateway tools — search, enable, and call MCP server tools');
+
+  // ── mcp search <query> ────────────────────────────────────────────
   mcp
+    .command('search <query>')
+    .description('Search available MCP servers')
+    .option('--limit <n>', 'Max results', '20')
+    .option('--category <cat>', 'Filter by category')
+    .option('--format <format>', 'Output format (table|json)', 'table')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (query: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const token = store.getToken(profile)?.token;
+      const format = opts.format as OutputFormat;
+
+      try {
+        const result = await mcpCallMetaTool(mcpUrl, mcpHeaders(token), 'gateway__search_servers', {
+          query,
+          limit: parseInt(opts.limit),
+          ...(opts.category ? { category: opts.category } : {}),
+        });
+
+        const data = parseResultJson(result) as Record<string, unknown> | null;
+        if (!data || !Array.isArray((data as Record<string, unknown>).servers)) {
+          console.log(chalk.yellow('No results'));
+          return;
+        }
+
+        if (format === 'json') {
+          console.log(formatJson(data));
+          return;
+        }
+
+        const servers = data.servers as Array<Record<string, unknown>>;
+        const rows = servers.map((s) => ({
+          name: String(s.name || s.title || ''),
+          tools: String(s.toolsCount ?? 0),
+          categories: (Array.isArray(s.categories) ? s.categories : []).join(', '),
+          score: s.securityScore != null ? String(s.securityScore) : '-',
+          id: String(s.id || ''),
+        }));
+
+        console.log(
+          formatOutput(rows, [
+            { header: 'Name', key: 'name', width: 35 },
+            { header: 'Tools', key: 'tools', width: 7 },
+            { header: 'Categories', key: 'categories', width: 25 },
+            { header: 'Score', key: 'score', width: 7 },
+            { header: 'ID', key: 'id', width: 38 },
+          ], format)
+        );
+        console.log(chalk.dim(`\nShowing ${data.showing} of ${data.total} servers`));
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp enable <name-or-id> ───────────────────────────────────────
+  mcp
+    .command('enable <name-or-id>')
+    .description('Enable an MCP server by name or ID')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (nameOrId: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const token = store.getToken(profile)?.token;
+      if (!token) fail('Not authenticated. Run `rickydata auth login` first.');
+
+      const spinner = ora('Enabling server...').start();
+      try {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId);
+        const args = isUUID
+          ? { server_id: nameOrId }
+          : { server_name: nameOrId };
+
+        const result = await mcpCallMetaTool(mcpUrl, mcpHeaders(token), 'gateway__enable_server', args);
+        const data = parseResultJson(result) as Record<string, unknown> | null;
+
+        if (data && data.enabled) {
+          const server = data.server as Record<string, unknown> | undefined;
+          spinner.succeed(chalk.green(`${server?.title || nameOrId} enabled (${server?.toolsCount || '?'} tools)`));
+        } else {
+          spinner.fail(chalk.red(extractResultText(result)));
+        }
+      } catch (err) {
+        spinner.fail(chalk.red('Failed to enable server'));
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp disable <name-or-id> ──────────────────────────────────────
+  mcp
+    .command('disable <name-or-id>')
+    .description('Disable a previously enabled MCP server')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (nameOrId: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const token = store.getToken(profile)?.token;
+      if (!token) fail('Not authenticated. Run `rickydata auth login` first.');
+
+      try {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId);
+        const args = isUUID
+          ? { server_id: nameOrId }
+          : { server_name: nameOrId };
+
+        const result = await mcpCallMetaTool(mcpUrl, mcpHeaders(token), 'gateway__disable_server', args);
+        const data = parseResultJson(result) as Record<string, unknown> | null;
+
+        if (data && data.disabled) {
+          console.log(chalk.green('✓ Server disabled'));
+        } else {
+          console.log(chalk.red(extractResultText(result)));
+        }
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp tools ─────────────────────────────────────────────────────
+  mcp
+    .command('tools')
+    .description('List tools from enabled servers')
+    .option('--format <format>', 'Output format (table|json)', 'table')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const token = store.getToken(profile)?.token;
+      if (!token) fail('Not authenticated. Run `rickydata auth login` first.');
+      const format = opts.format as OutputFormat;
+
+      try {
+        const headers = mcpHeaders(token);
+        await mcpInitialize(mcpUrl, headers);
+        const result = await mcpRequest(mcpUrl, 'tools/list', {}, 2, headers) as { tools?: MCPTool[] };
+        const tools = result?.tools ?? [];
+
+        // Filter out meta-tools (gateway__*)
+        const serverTools = tools.filter(t => !t.name.startsWith('gateway__'));
+
+        if (format === 'json') {
+          console.log(formatJson(serverTools));
+          return;
+        }
+
+        if (serverTools.length === 0) {
+          console.log(chalk.yellow('No server tools enabled. Use `rickydata mcp search` and `rickydata mcp enable` first.'));
+          return;
+        }
+
+        const rows = serverTools.map(t => ({
+          name: t.name,
+          description: (t.description ?? '').slice(0, 60),
+        }));
+
+        console.log(
+          formatOutput(rows, [
+            { header: 'Tool Name', key: 'name', width: 45 },
+            { header: 'Description', key: 'description', width: 62 },
+          ], format)
+        );
+        console.log(chalk.dim(`\n${serverTools.length} tool(s) from enabled servers`));
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp call <tool-name> [args-json] ──────────────────────────────
+  mcp
+    .command('call <tool-name> [args-json]')
+    .description('Call an MCP tool (auto-pays x402 if required)')
+    .option('--format <format>', 'Output format', 'json')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (toolName: string, argsJson: string | undefined, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const cred = store.getToken(profile);
+      const token = cred?.token;
+      const privateKey = store.getPrivateKey(profile) ?? undefined;
+
+      let args: Record<string, unknown> = {};
+      if (argsJson) {
+        try {
+          args = JSON.parse(argsJson);
+        } catch {
+          fail('Invalid JSON for args. Example: \'{"query": "hello"}\'');
+        }
+      }
+
+      try {
+        const { result, payment } = await mcpCallWithPayment(mcpUrl, token, privateKey, toolName, args);
+
+        if (payment?.paid) {
+          console.log(chalk.green(`Paid $${payment.amount} USDC`));
+        }
+
+        const text = extractResultText(result);
+        try {
+          console.log(formatJson(JSON.parse(text)));
+        } catch {
+          console.log(text);
+        }
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp info <name-or-id> ─────────────────────────────────────────
+  mcp
+    .command('info <name-or-id>')
+    .description('Get detailed server information')
+    .option('--format <format>', 'Output format', 'json')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (nameOrId: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '') + '/mcp';
+      const token = store.getToken(profile)?.token;
+
+      try {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId);
+        const args = isUUID
+          ? { server_id: nameOrId }
+          : { server_name: nameOrId };
+
+        const result = await mcpCallMetaTool(mcpUrl, mcpHeaders(token), 'gateway__server_info', args);
+        const data = parseResultJson(result);
+        console.log(formatJson(data));
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  // ── mcp connect ───────────────────────────────────────────────────
+  mcp
+    .command('connect')
+    .description('Print the claude mcp add command for connecting')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
+      const cred = store.getToken(profile);
+
+      console.log(chalk.cyan('Add MCP Gateway to Claude Code:\n'));
+      if (cred?.token) {
+        console.log(`  claude mcp add --transport http \\`);
+        console.log(`    --header "Authorization:Bearer ${cred.token}" \\`);
+        console.log(`    mcp-gateway ${mcpUrl}/mcp`);
+      } else {
+        console.log(`  claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`);
+      }
+      console.log();
+    });
+
+  // ── mcp agent (subcommand group for existing agent-MCP) ───────────
+  const agent = new Command('agent').description('Agent MCP tools (via agent gateway)');
+
+  function requireAuth(profile: string): string {
+    const cred = store.getToken(profile);
+    if (!cred) fail('Not authenticated. Run `rickydata auth login` first.');
+    return cred.token;
+  }
+
+  agent
     .command('tools <agent-id>')
     .description("List an agent's MCP tools")
     .option('--format <format>', 'Output format (table|json)', 'table')
@@ -151,7 +562,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
     .action(async (agentId: string, opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
-      const token = requireAuth(store, profile);
+      const token = requireAuth(profile);
       const format = opts.format as OutputFormat;
 
       try {
@@ -184,8 +595,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       }
     });
 
-  // mcp call <agent-id> <tool-name> [args-json]
-  mcp
+  agent
     .command('call <agent-id> <tool-name> [args-json]')
     .description('Call an MCP tool on an agent')
     .option('--format <format>', 'Output format (table|json)', 'json')
@@ -194,7 +604,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
     .action(async (agentId: string, toolName: string, argsJson: string | undefined, opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
-      const token = requireAuth(store, profile);
+      const token = requireAuth(profile);
 
       let args: Record<string, unknown> = {};
       if (argsJson) {
@@ -212,6 +622,8 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         throw new CliError(err instanceof Error ? err.message : String(err));
       }
     });
+
+  mcp.addCommand(agent);
 
   return mcp;
 }

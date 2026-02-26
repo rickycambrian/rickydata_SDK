@@ -7,6 +7,7 @@ export interface StoredCredential {
   walletAddress: string;
   storedAt: string;
   expiresAt?: string;
+  privateKey?: string;
 }
 
 export interface CredentialsFile {
@@ -109,5 +110,19 @@ export class CredentialStore {
 
   hasToken(profile = 'default'): boolean {
     return this.getToken(profile) !== null;
+  }
+
+  setPrivateKey(privateKey: string, profile = 'default'): void {
+    const creds = this.load();
+    if (!creds.profiles[profile]) {
+      creds.profiles[profile] = { token: '', walletAddress: '', storedAt: new Date().toISOString() };
+    }
+    creds.profiles[profile].privateKey = privateKey;
+    this.save();
+  }
+
+  getPrivateKey(profile = 'default'): string | null {
+    const cred = this.getToken(profile);
+    return cred?.privateKey ?? null;
   }
 }
