@@ -29,24 +29,51 @@ function isWalletTokenEndpointUnavailable(error: unknown): boolean {
 
 function promptSecret(prompt: string): Promise<string> {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
+    process.stdout.write(prompt);
 
-    // Disable echo for secret input
-    const origWrite = (rl as unknown as { output: { write: (s: string) => void } }).output.write.bind(
-      (rl as unknown as { output: { write: (s: string) => void } }).output
-    );
-    (rl as unknown as { output: { write: (s: string) => void } }).output.write = (s: string) => {
-      if (s === prompt || !s.trim()) origWrite(s);
+    const input: string[] = [];
+
+    if (!process.stdin.isTTY) {
+      // Non-interactive: fall back to readline (no masking)
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question('', (answer) => { rl.close(); resolve(answer); });
+      return;
+    }
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    const onData = (key: string) => {
+      const code = key.charCodeAt(0);
+
+      if (key === '\r' || key === '\n') {
+        // Enter pressed
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(input.join(''));
+      } else if (code === 3) {
+        // Ctrl+C
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        process.exit(0);
+      } else if (code === 127 || code === 8) {
+        // Backspace
+        if (input.length > 0) {
+          input.pop();
+          process.stdout.write('\b \b');
+        }
+      } else if (code >= 32) {
+        // Printable character
+        input.push(key);
+        process.stdout.write('*');
+      }
     };
 
-    rl.question(prompt, (answer) => {
-      origWrite('\n');
-      rl.close();
-      resolve(answer);
-    });
+    process.stdin.on('data', onData);
   });
 }
 
@@ -304,7 +331,7 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
     .command('status')
     .description('Show current authentication status')
     .option('--profile <profile>', 'Profile to check')
-    .action((opts) => {
+    .action(async (opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const cred = store.getToken(profile);
 
@@ -322,6 +349,30 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
         console.log(`Expires: ${label} (${cred.expiresAt})`);
       }
       console.log(`Token:   ${chalk.dim(cred.token.slice(0, 20) + '...')}`);
+
+      // Non-blocking balance check
+      try {
+        const gatewayUrl = (config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
+        const balanceRes = await fetch(`${gatewayUrl}/wallet/balance`, {
+          headers: { Authorization: `Bearer ${cred.token}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (balanceRes.ok) {
+          const balData = await balanceRes.json();
+          const balance = parseFloat(String(balData.availableBalanceUsd ?? balData.balance ?? '0').replace(/^\$/, '')) || 0;
+          if (balance === 0) {
+            console.log();
+            console.log(chalk.red.bold('⚠ Wallet balance is $0.00 — fund your wallet to use tools and agents'));
+            console.log(chalk.dim('  Run `rickydata wallet balance` for deposit instructions'));
+          } else if (balance < 1.0) {
+            console.log(chalk.yellow(`  Balance: $${balance.toFixed(4)} USDC (low)`));
+          } else {
+            console.log(chalk.green(`  Balance: $${balance.toFixed(2)} USDC`));
+          }
+        }
+      } catch {
+        // Silently ignore — auth status should work offline
+      }
     });
 
   // auth logout

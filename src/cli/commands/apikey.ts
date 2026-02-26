@@ -17,24 +17,53 @@ function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-function promptSecret(question: string): Promise<string> {
+function promptSecret(prompt: string): Promise<string> {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    // Suppress echo for secret input
-    const origWrite = (rl as unknown as { output: NodeJS.WritableStream }).output.write.bind(
-      (rl as unknown as { output: NodeJS.WritableStream }).output
-    );
-    (rl as unknown as { output: { write: (s: string) => void } }).output.write = (s: string) => {
-      if (s === question || !s.trim()) (origWrite as (s: string) => void)(s);
+    process.stdout.write(prompt);
+
+    const input: string[] = [];
+
+    if (!process.stdin.isTTY) {
+      // Non-interactive: fall back to readline (no masking)
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question('', (answer) => { rl.close(); resolve(answer); });
+      return;
+    }
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    const onData = (key: string) => {
+      const code = key.charCodeAt(0);
+
+      if (key === '\r' || key === '\n') {
+        // Enter pressed
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(input.join(''));
+      } else if (code === 3) {
+        // Ctrl+C
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        process.exit(0);
+      } else if (code === 127 || code === 8) {
+        // Backspace
+        if (input.length > 0) {
+          input.pop();
+          process.stdout.write('\b \b');
+        }
+      } else if (code >= 32) {
+        // Printable character
+        input.push(key);
+        process.stdout.write('*');
+      }
     };
-    rl.question(question, (answer) => {
-      (origWrite as (s: string) => void)('\n');
-      rl.close();
-      resolve(answer);
-    });
+
+    process.stdin.on('data', onData);
   });
 }
 
