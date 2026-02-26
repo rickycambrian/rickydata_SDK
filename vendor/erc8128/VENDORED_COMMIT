@@ -1,0 +1,5 @@
+upstream_repo=https://github.com/slice-so/erc8128
+commit_sha=ba095d89776be88e1156d509d2baca28d87906fb
+package=@slicekit/erc8128
+version=0.1.0
+tarball_shasum=63c34784d9c60ad54dc97d69c2aeb24e1619a5a8

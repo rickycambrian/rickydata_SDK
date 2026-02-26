@@ -1,0 +1,48 @@
+{
+  "name": "@slicekit/erc8128",
+  "version": "0.1.0",
+  "description": "Minimal ERC-8128 implementation for signing and verifying HTTP requests with Ethereum accounts",
+  "scripts": {
+    "format": "biome format --write",
+    "lint": "biome lint --write",
+    "check": "biome check --write",
+    "build": "bun run build.ts",
+    "test": "bun test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "slice-so",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/esm/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "default": "./dist/esm/index.js"
+    }
+  },
+  "files": [
+    "./dist"
+  ],
+  "dependencies": {
+    "@noble/hashes": "^1.8.0"
+  },
+  "peerDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slice-so/erc8128"
+  },
+  "homepage": "https://slice.so",
+  "keywords": [
+    "http",
+    "ethereum",
+    "wallet",
+    "web3",
+    "dapp",
+    "dappkit"
+  ]
+}

@@ -1,0 +1,402 @@
+import type { AuthSession } from './types/payment.js';
+
+export type EthHttpSigner = {
+  address: `0x${string}`;
+  chainId: number;
+  signMessage: (message: Uint8Array) => Promise<`0x${string}`>;
+};
+
+export interface AuthenticateAutoOptions {
+  signFn?: (message: string) => Promise<string>;
+  walletAddress?: string;
+  operatorWalletAddress?: string;
+  erc8128Signer?: EthHttpSigner;
+  walletTokenExpiresAt?: string;
+  walletTokenTtlMs?: number;
+}
+
+interface Erc8128SignerClient {
+  fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+}
+
+interface Erc8128Module {
+  createSignerClient(signer: EthHttpSigner): Erc8128SignerClient;
+}
+
+type WalletTokenStage = 'token-message' | 'create-token';
+
+class WalletTokenRequestError extends Error {
+  status: number;
+  stage: WalletTokenStage;
+
+  constructor(stage: WalletTokenStage, status: number, message: string) {
+    super(message);
+    this.name = 'WalletTokenRequestError';
+    this.status = status;
+    this.stage = stage;
+  }
+}
+
+function isWalletTokenEndpointUnavailable(error: unknown): boolean {
+  if (error instanceof WalletTokenRequestError) {
+    return error.status === 404 || error.status === 405 || error.status === 501 || error.status === 503;
+  }
+  return false;
+}
+
+let erc8128ModulePromise: Promise<Erc8128Module> | null = null;
+
+async function loadVendoredErc8128(): Promise<Erc8128Module> {
+  if (erc8128ModulePromise) return erc8128ModulePromise;
+  erc8128ModulePromise = (async () => {
+    const moduleUrl = new URL('../vendor/erc8128/dist/esm/index.js', import.meta.url).href;
+    const mod = (await import(moduleUrl)) as unknown as Erc8128Module;
+    if (!mod || typeof mod.createSignerClient !== 'function') {
+      throw new Error('Vendored ERC-8128 module missing createSignerClient export');
+    }
+    return mod;
+  })();
+  return erc8128ModulePromise;
+}
+
+/**
+ * Create a long-lived wallet token via the MCP Gateway.
+ *
+ * The returned token (`mcpwt_...`) is self-verifying and requires
+ * zero server-side storage. It survives gateway restarts.
+ *
+ * @param gatewayUrl - Gateway base URL (e.g. 'https://mcp.rickydata.org')
+ * @param signFn - EIP-191 personal_sign function (e.g. wallet.signMessage)
+ * @param walletAddress - Ethereum wallet address (0x-prefixed)
+ * @param expiresAt - ISO 8601 expiry (e.g. '2027-02-13T00:00:00Z')
+ * @returns The token string (mcpwt_...) or throws on failure
+ */
+export async function createWalletToken(
+  gatewayUrl: string,
+  signFn: (message: string) => Promise<string>,
+  walletAddress: string,
+  expiresAt: string,
+): Promise<{ token: string; walletAddress: string; expiresAt: string }> {
+  const base = gatewayUrl.replace(/\/$/, '');
+
+  // 1. Get the canonical message to sign
+  const msgRes = await fetch(
+    `${base}/api/auth/token-message?walletAddress=${encodeURIComponent(walletAddress)}&expiresAt=${encodeURIComponent(expiresAt)}`
+  );
+  if (!msgRes.ok) {
+    const body = await msgRes.text();
+    throw new WalletTokenRequestError(
+      'token-message',
+      msgRes.status,
+      `Failed to get token message: ${msgRes.status} ${body}`,
+    );
+  }
+  const { message } = await msgRes.json();
+
+  // 2. Sign with wallet
+  const signature = await signFn(message);
+
+  // 3. Create the self-verifying token
+  const tokenRes = await fetch(`${base}/api/auth/create-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress, signature, expiresAt }),
+  });
+  if (!tokenRes.ok) {
+    const body = await tokenRes.text();
+    throw new WalletTokenRequestError(
+      'create-token',
+      tokenRes.status,
+      `Failed to create wallet token: ${tokenRes.status} ${body}`,
+    );
+  }
+  return tokenRes.json();
+}
+
+export class AuthManager {
+  private baseUrl: string;
+  private token: string | null = null;
+  private address: string | null = null;
+  private expiresAt: number | null = null;
+  private signerClient: Erc8128SignerClient | null = null;
+
+  // Stored credentials for re-authentication
+  private _signFn: ((message: string) => Promise<string>) | null = null;
+  private _authMode: 'signature' | 'test' | 'walletToken' | 'erc8128' | null = null;
+  private _walletTokenExpiresAt: string | null = null;
+
+  /** Guard against concurrent re-authentication */
+  private _reauthPromise: Promise<AuthSession> | null = null;
+
+  private static warnedLegacyWalletOnlyAuth = false;
+
+  constructor(baseUrl: string, existingToken?: string) {
+    this.baseUrl = baseUrl;
+    if (existingToken) this.token = existingToken;
+  }
+
+  get isAuthenticated(): boolean {
+    return this.token !== null || this._authMode === 'erc8128';
+  }
+
+  /** True if the token has a known expiry time that has passed (with 60s buffer). */
+  get isExpired(): boolean {
+    if (!this.expiresAt) return false;
+    return Date.now() >= this.expiresAt - 60_000; // 60s safety margin
+  }
+
+  /** True if we have stored credentials and can automatically re-authenticate. */
+  get canReauthenticate(): boolean {
+    return this._authMode !== null && this._authMode !== 'erc8128';
+  }
+
+  getToken(): string {
+    if (!this.token) throw new Error('Not authenticated. Call authenticate() first.');
+    return this.token;
+  }
+
+  getAuthHeaders(): Record<string, string> {
+    if (this._authMode === 'erc8128') return {};
+    return this.token ? { Authorization: `Bearer ${this.token}` } : {};
+  }
+
+  isErc8128Mode(): boolean {
+    return this._authMode === 'erc8128' && this.signerClient !== null;
+  }
+
+  async erc8128Fetch(url: string, init?: RequestInit): Promise<Response> {
+    if (!this.signerClient) {
+      throw new Error('ERC-8128 mode is not initialized. Call authenticateWithErc8128() first.');
+    }
+    return this.signerClient.fetch(url, init);
+  }
+
+  async fetchWithAuth(
+    url: string,
+    init?: RequestInit,
+    opts?: { retryOn401?: boolean }
+  ): Promise<Response> {
+    if (this.isErc8128Mode()) {
+      return this.erc8128Fetch(url, init);
+    }
+
+    const retryOn401 = opts?.retryOn401 !== false;
+
+    if (this.isExpired && this.canReauthenticate) {
+      await this.reauthenticate();
+    }
+
+    const addBearer = (requestInit?: RequestInit): RequestInit => {
+      const headers = new Headers(requestInit?.headers || {});
+      const authHeaders = this.getAuthHeaders();
+      for (const [name, value] of Object.entries(authHeaders)) {
+        headers.set(name, value);
+      }
+      return { ...requestInit, headers };
+    };
+
+    let res = await fetch(url, addBearer(init));
+    if (retryOn401 && res.status === 401 && this.canReauthenticate) {
+      await this.reauthenticate();
+      res = await fetch(url, addBearer(init));
+    }
+    return res;
+  }
+
+  async authenticate(signFn?: (message: string) => Promise<string>, walletAddress?: string): Promise<AuthSession> {
+    this.signerClient = null;
+    // Store credentials for future re-authentication
+    if (signFn && walletAddress) {
+      this._signFn = signFn;
+      this._authMode = 'signature';
+      this.address = walletAddress;
+      return this.authenticateWithSignature(walletAddress, signFn);
+    }
+    if (!signFn && walletAddress && !AuthManager.warnedLegacyWalletOnlyAuth) {
+      AuthManager.warnedLegacyWalletOnlyAuth = true;
+      console.warn(
+        '[SDK] authenticate(undefined, walletAddress) uses test mode and is not recommended for production. ' +
+        'Use authenticateWithWalletToken(), authenticateWithErc8128(), or authenticateAuto().',
+      );
+    }
+    this._authMode = 'test';
+    this.address = walletAddress ?? '0x0000000000000000000000000000000000000000';
+    return this.authenticateTestMode(this.address);
+  }
+
+  /**
+   * Production-safe auth strategy.
+   *
+   * Strategy order:
+   * 1) Operator strict path: ERC-8128 signer (when signer + operator wallet match)
+   * 2) User path: wallet-token auth (when signFn + walletAddress available)
+   * 3) Fallback: challenge/verify signature auth (only when wallet-token endpoint is unavailable)
+   * 4) Legacy fallback: existing authenticate(...) behavior
+   */
+  async authenticateAuto(options: AuthenticateAutoOptions): Promise<AuthSession | null> {
+    const {
+      signFn,
+      walletAddress,
+      operatorWalletAddress,
+      erc8128Signer,
+      walletTokenExpiresAt,
+      walletTokenTtlMs,
+    } = options;
+
+    const normalizedWallet = walletAddress?.toLowerCase();
+    const normalizedOperator = operatorWalletAddress?.toLowerCase();
+    const normalizedSigner = erc8128Signer?.address?.toLowerCase();
+
+    if (erc8128Signer && normalizedOperator && normalizedSigner === normalizedOperator) {
+      if (!normalizedWallet || normalizedWallet === normalizedOperator) {
+        await this.authenticateWithErc8128(erc8128Signer);
+        return null;
+      }
+    }
+
+    if (signFn && walletAddress) {
+      const expiresAt = walletTokenExpiresAt
+        ?? new Date(Date.now() + (walletTokenTtlMs ?? 30 * 24 * 60 * 60 * 1000)).toISOString();
+      try {
+        return await this.authenticateWithWalletToken(signFn, walletAddress, expiresAt);
+      } catch (error) {
+        if (!isWalletTokenEndpointUnavailable(error)) {
+          throw error;
+        }
+        this.signerClient = null;
+        this._signFn = signFn;
+        this._authMode = 'signature';
+        this.address = walletAddress;
+        return this.authenticateWithSignature(walletAddress, signFn);
+      }
+    }
+
+    return this.authenticate(signFn, walletAddress);
+  }
+
+  async authenticateWithErc8128(signer: EthHttpSigner): Promise<void> {
+    const module = await loadVendoredErc8128();
+    this.signerClient = module.createSignerClient(signer);
+    this._authMode = 'erc8128';
+    this._signFn = null;
+    this._walletTokenExpiresAt = null;
+    this.address = signer.address;
+    this.token = null;
+    this.expiresAt = null;
+  }
+
+  /**
+   * Authenticate with a long-lived wallet token.
+   *
+   * Creates a self-verifying token (mcpwt_) via the gateway and stores it.
+   * The token survives gateway restarts and does not need re-authentication
+   * until it expires.
+   *
+   * @param signFn - EIP-191 personal_sign function
+   * @param walletAddress - Ethereum wallet address
+   * @param expiresAt - ISO 8601 expiry (e.g. '2027-02-13T00:00:00Z')
+   */
+  async authenticateWithWalletToken(
+    signFn: (message: string) => Promise<string>,
+    walletAddress: string,
+    expiresAt: string,
+  ): Promise<AuthSession> {
+    this.signerClient = null;
+    this._signFn = signFn;
+    this._authMode = 'walletToken';
+    this._walletTokenExpiresAt = expiresAt;
+    this.address = walletAddress;
+
+    const result = await createWalletToken(this.baseUrl, signFn, walletAddress, expiresAt);
+    this.token = result.token;
+    this.expiresAt = this.parseExpiresAt(result.expiresAt);
+    return { token: result.token, address: result.walletAddress, expiresAt: result.expiresAt };
+  }
+
+  /**
+   * Re-authenticate using previously stored credentials.
+   * Safe to call concurrently — deduplicates into a single auth request.
+   * Throws if authenticate() was never called.
+   */
+  async reauthenticate(): Promise<AuthSession> {
+    if (!this._authMode) {
+      throw new Error('Cannot re-authenticate: no previous credentials stored. Call authenticate() first.');
+    }
+
+    // Deduplicate concurrent re-auth calls
+    if (this._reauthPromise) return this._reauthPromise;
+
+    this._reauthPromise = (async () => {
+      try {
+        if (this._authMode === 'erc8128') {
+          throw new Error('ERC-8128 mode does not use token re-authentication');
+        }
+        if (this._authMode === 'walletToken' && this._signFn && this.address && this._walletTokenExpiresAt) {
+          return await this.authenticateWithWalletToken(this._signFn, this.address, this._walletTokenExpiresAt);
+        }
+        if (this._authMode === 'signature' && this._signFn && this.address) {
+          return await this.authenticateWithSignature(this.address, this._signFn);
+        }
+        return await this.authenticateTestMode(this.address ?? '0x0000000000000000000000000000000000000000');
+      } finally {
+        this._reauthPromise = null;
+      }
+    })();
+
+    return this._reauthPromise;
+  }
+
+  private parseExpiresAt(expiresAt: unknown): number | null {
+    if (typeof expiresAt === 'number') return expiresAt;
+    if (typeof expiresAt === 'string' && expiresAt) {
+      const ms = Date.parse(expiresAt);
+      return isNaN(ms) ? null : ms;
+    }
+    return null;
+  }
+
+  private async authenticateTestMode(address: string): Promise<AuthSession> {
+    const res = await fetch(`${this.baseUrl}/api/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ testMode: true, walletAddress: address }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Auth failed: ${res.status} ${body}`);
+    }
+    const data = await res.json();
+    this.token = data.token;
+    this.address = address;
+    this.expiresAt = this.parseExpiresAt(data.expiresAt);
+    return { token: data.token, address, expiresAt: data.expiresAt ?? '' };
+  }
+
+  private async authenticateWithSignature(address: string, signFn: (msg: string) => Promise<string>): Promise<AuthSession> {
+    // Get challenge (stateless — no address param needed)
+    const challengeRes = await fetch(`${this.baseUrl}/api/auth/challenge`);
+    if (!challengeRes.ok) {
+      throw new Error(`Challenge request failed: ${challengeRes.status}`);
+    }
+    const { nonce, message } = await challengeRes.json();
+
+    // Sign the challenge message
+    const signature = await signFn(message);
+
+    // Verify with walletAddress and nonce
+    const verifyRes = await fetch(`${this.baseUrl}/api/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: address, signature, nonce }),
+    });
+    if (!verifyRes.ok) {
+      const body = await verifyRes.text();
+      throw new Error(`Verify failed: ${verifyRes.status} ${body}`);
+    }
+    const data = await verifyRes.json();
+    this.token = data.token;
+    this.address = address;
+    this.expiresAt = this.parseExpiresAt(data.expiresAt);
+    return { token: data.token, address, expiresAt: data.expiresAt ?? '' };
+  }
+}
