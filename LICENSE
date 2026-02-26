@@ -1,65 +1,21 @@
-PROPRIETARY SOFTWARE LICENSE
+MIT License
 
-Copyright (c) 2026 Riccardo Esclapon (rickydata). All Rights Reserved.
+Copyright (c) 2026 Riccardo Esclapon (rickydata)
 
-This software and associated documentation files (the "Software") are the
-proprietary and confidential property of Riccardo Esclapon (rickydata) ("Owner").
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-NOTICE: All information contained herein is, and remains the property of
-the Owner. The intellectual and technical concepts contained herein are
-proprietary to the Owner and are protected by trade secret and copyright
-law. Dissemination of this information or reproduction of this material
-is strictly forbidden unless prior written permission is obtained from
-the Owner.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-NO LICENSE IS GRANTED
-
-No license, express or implied, by estoppel or otherwise, is granted to
-any person or entity under this notice. Without limiting the foregoing,
-no permission is granted to:
-
-  (a) Copy, reproduce, or duplicate the Software or any portion thereof;
-  (b) Modify, adapt, translate, or create derivative works based on the
-      Software;
-  (c) Distribute, sublicense, lease, rent, loan, or otherwise transfer
-      the Software to any third party;
-  (d) Reverse engineer, disassemble, decompile, or otherwise attempt to
-      derive the source code of the Software;
-  (e) Use the Software to provide, operate, or offer a competing service,
-      product, or platform;
-  (f) Remove, alter, or obscure any proprietary notices, labels, or marks
-      on the Software.
-
-SERVICE ACCESS
-
-Access to services provided by the Software (including but not limited to
-the MCP Gateway, Agent Gateway, MCP Marketplace, and associated APIs) is
-governed exclusively by the applicable Terms of Service and is subject to
-payment obligations as defined therein. Use of the hosted service does not
-constitute a license to the underlying Software.
-
-CONFIDENTIALITY
-
-The source code, architecture, algorithms, and implementation details of
-the Software constitute trade secrets of the Owner. Any unauthorized
-access, use, or disclosure of such information is prohibited and may
-result in legal action.
-
-DISCLAIMER OF WARRANTIES
-
-THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE OWNER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
-FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE.
-
-GOVERNING LAW
-
-This license shall be governed by and construed in accordance with the
-laws of the jurisdiction in which the Owner resides, without regard to
-conflict of law principles.
-
-CONTACT
-
-For licensing inquiries, permissions, or commercial use requests:
-Riccardo Esclapon (rickydata)
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

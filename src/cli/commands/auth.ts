@@ -44,32 +44,36 @@ function promptSecret(prompt: string): Promise<string> {
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
 
-    const onData = (key: string) => {
-      const code = key.charCodeAt(0);
+    const onData = (chunk: string) => {
+      // Iterate each character (handles paste events with multiple chars)
+      for (const ch of chunk) {
+        const code = ch.charCodeAt(0);
 
-      if (key === '\r' || key === '\n') {
-        // Enter pressed
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-        process.stdin.removeListener('data', onData);
-        process.stdout.write('\n');
-        resolve(input.join(''));
-      } else if (code === 3) {
-        // Ctrl+C
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-        process.stdin.removeListener('data', onData);
-        process.exit(0);
-      } else if (code === 127 || code === 8) {
-        // Backspace
-        if (input.length > 0) {
-          input.pop();
-          process.stdout.write('\b \b');
+        if (ch === '\r' || ch === '\n') {
+          // Enter pressed
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdin.removeListener('data', onData);
+          process.stdout.write('\n');
+          resolve(input.join(''));
+          return;
+        } else if (code === 3) {
+          // Ctrl+C
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdin.removeListener('data', onData);
+          process.exit(0);
+        } else if (code === 127 || code === 8) {
+          // Backspace
+          if (input.length > 0) {
+            input.pop();
+            process.stdout.write('\b \b');
+          }
+        } else if (code >= 32) {
+          // Printable character
+          input.push(ch);
+          process.stdout.write('*');
         }
-      } else if (code >= 32) {
-        // Printable character
-        input.push(key);
-        process.stdout.write('*');
       }
     };
 

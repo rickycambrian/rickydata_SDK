@@ -1,6 +1,6 @@
 {
   "name": "rickydata",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "TypeScript SDK and CLI for the MCP Gateway — auth, agents, tool calling, and x402 payments",
   "type": "module",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
     "viem": "^2.0.0",
     "vitest": "^3.0.0"
   },
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "dependencies": {
     "chalk": "^5.6.2",
     "cli-table3": "^0.6.5",
