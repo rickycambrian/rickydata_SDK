@@ -330,9 +330,8 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
       const spinner = ora('Authenticating...').start();
       try {
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        const mcpGatewayUrl = (config.getMcpGatewayUrl(profile)).replace(/\/$/, '');
         try {
-          const tokenResult = await createWalletTokenFlow(mcpGatewayUrl, privateKey, expiresAt);
+          const tokenResult = await createWalletTokenFlow(gatewayUrl, privateKey, expiresAt);
           store.setToken(tokenResult.token, tokenResult.walletAddress, profile, tokenResult.expiresAt);
           store.setPrivateKey(privateKey, profile);
           spinner.succeed(chalk.green('Authenticated successfully (wallet token)'));
