@@ -631,14 +631,14 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
       const cred = store.getToken(profile);
 
-      const args = ['mcp', 'add', '--transport', 'http'];
+      // --header is variadic in claude CLI, so it MUST come after positional args
+      const args = ['mcp', 'add', '--transport', 'http', 'mcp-gateway', `${mcpUrl}/mcp`];
       if (cred?.token) {
         args.push('--header', `Authorization:Bearer ${cred.token}`);
       }
-      args.push('mcp-gateway', `${mcpUrl}/mcp`);
 
       const cmdStr = cred?.token
-        ? `claude mcp add --transport http \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..." \\\n    mcp-gateway ${mcpUrl}/mcp`
+        ? `claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`
         : `claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`;
 
       if (opts.dryRun) {

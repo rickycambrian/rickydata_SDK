@@ -559,24 +559,38 @@ describe('mcp commands', () => {
   });
 
   describe('mcp connect', () => {
-    it('prints claude mcp add command with token when authenticated', async () => {
+    it('executes claude mcp add or prints command with token when authenticated', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const program = createProgram(config, store);
       await program.parseAsync(['node', 'rickydata', 'mcp', 'connect']);
 
       const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-      expect(output).toContain('claude mcp add');
-      expect(output).toContain('--transport http');
-      expect(output).toContain('Authorization:Bearer mcpwt_test');
-      expect(output).toContain('mcp.rickydata.org/mcp');
+      // Either the command ran successfully or fell back to printing
+      expect(
+        output.includes('MCP Gateway added to Claude Code') ||
+        output.includes('claude mcp add'),
+      ).toBe(true);
     });
 
-    it('prints unauthenticated command when not logged in', async () => {
+    it('prints command in dry-run mode with token', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const program = createProgram(config, store);
+      await program.parseAsync(['node', 'rickydata', 'mcp', 'connect', '--dry-run']);
+
+      const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(output).toContain('claude mcp add');
+      expect(output).toContain('--transport http');
+      expect(output).toContain('mcp-gateway');
+      expect(output).toContain('mcp.rickydata.org/mcp');
+      expect(output).toContain('Authorization:Bearer mcpwt_test');
+    });
+
+    it('prints unauthenticated command in dry-run mode when not logged in', async () => {
       store.clear();
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const program = createProgram(config, store);
-      await program.parseAsync(['node', 'rickydata', 'mcp', 'connect']);
+      await program.parseAsync(['node', 'rickydata', 'mcp', 'connect', '--dry-run']);
 
       const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
       expect(output).toContain('claude mcp add --transport http mcp-gateway');
