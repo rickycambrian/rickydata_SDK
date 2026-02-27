@@ -623,22 +623,54 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
   // ── mcp connect ───────────────────────────────────────────────────
   mcp
     .command('connect')
-    .description('Print the claude mcp add command for connecting')
+    .description('Connect MCP Gateway to Claude Code (runs claude mcp add)')
     .option('--profile <profile>', 'Config profile')
+    .option('--dry-run', 'Print the command without executing it')
     .action(async (opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
       const cred = store.getToken(profile);
 
-      console.log(chalk.cyan('Add MCP Gateway to Claude Code:\n'));
+      const args = ['mcp', 'add', '--transport', 'http'];
       if (cred?.token) {
-        console.log(`  claude mcp add --transport http \\`);
-        console.log(`    --header "Authorization:Bearer ${cred.token}" \\`);
-        console.log(`    mcp-gateway ${mcpUrl}/mcp`);
-      } else {
-        console.log(`  claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`);
+        args.push('--header', `Authorization:Bearer ${cred.token}`);
       }
-      console.log();
+      args.push('mcp-gateway', `${mcpUrl}/mcp`);
+
+      const cmdStr = cred?.token
+        ? `claude mcp add --transport http \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..." \\\n    mcp-gateway ${mcpUrl}/mcp`
+        : `claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`;
+
+      if (opts.dryRun) {
+        console.log(chalk.cyan('Command (not executed):\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+        return;
+      }
+
+      const { execFileSync } = await import('child_process');
+      try {
+        // Remove existing mcp-gateway first (ignore errors if not present)
+        try {
+          execFileSync('claude', ['mcp', 'remove', 'mcp-gateway'], { stdio: 'pipe' });
+        } catch {
+          // Not present — fine
+        }
+
+        execFileSync('claude', args, { stdio: 'inherit' });
+        console.log(chalk.green('\n✓ MCP Gateway added to Claude Code'));
+        if (cred?.token) {
+          console.log(chalk.dim('  Authenticated with your wallet token'));
+        } else {
+          console.log(chalk.dim('  No auth — anonymous mode (run `rickydata auth login` first for full access)'));
+        }
+        console.log(chalk.dim('  Restart Claude Code to pick up the new tools'));
+      } catch (err) {
+        // claude CLI not found or failed — fall back to printing
+        console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+      }
     });
 
   // ── mcp agent (subcommand group for existing agent-MCP) ───────────
