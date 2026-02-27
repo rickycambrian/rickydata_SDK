@@ -495,12 +495,21 @@ describe('mcp commands', () => {
       });
       vi.stubGlobal('fetch', mockFetch);
 
-      // Mock viem/accounts and payment-signer
+      // Mock viem/accounts, viem (for checkUsdcBalance), and payment-signer
       vi.mock('viem/accounts', () => ({
         privateKeyToAccount: () => ({
           address: '0x75992f829DF3B5d515D70DB0f77A98171cE261EF',
           signTypedData: async () => '0xsig',
         }),
+      }));
+      vi.mock('viem', () => ({
+        createPublicClient: () => ({
+          readContract: async () => BigInt(1_000_000), // 1.0 USDC — enough to cover $0.0005
+        }),
+        http: () => ({}),
+      }));
+      vi.mock('viem/chains', () => ({
+        base: { id: 8453, name: 'Base' },
       }));
       vi.mock('../../src/payment/payment-signer.js', () => ({
         signPayment: async () => ({ header: 'base64mockpayment', receipt: {} }),

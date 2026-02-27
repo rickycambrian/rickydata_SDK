@@ -12,7 +12,7 @@ const MCP_PROTOCOL_VERSION = '2025-03-26';
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function mcpHeaders(token?: string): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
@@ -217,6 +217,31 @@ async function callAgentMcpTool(
 
 // ── x402 Payment Helper ──────────────────────────────────────────────
 
+const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
+const BASE_CHAIN_ID = 8453;
+
+/** Returns USDC balance in base units (6 decimals) for the given address on Base mainnet. */
+async function checkUsdcBalance(address: string): Promise<bigint> {
+  const { createPublicClient, http } = await import('viem');
+  const { base } = await import('viem/chains');
+
+  const client = createPublicClient({ chain: base, transport: http() });
+  return client.readContract({
+    address: USDC_CONTRACT,
+    abi: [
+      {
+        name: 'balanceOf',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'account', type: 'address' }],
+        outputs: [{ name: '', type: 'uint256' }],
+      },
+    ] as const,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  });
+}
+
 interface PaymentInfo {
   amount: string;
   paid: boolean;
@@ -228,6 +253,7 @@ async function mcpCallWithPayment(
   privateKey: string | undefined,
   toolName: string,
   args: Record<string, unknown>,
+  onColdStartRetry?: () => void,
 ): Promise<{ result: unknown; payment?: PaymentInfo }> {
   const headers = mcpHeaders(token);
 
@@ -257,12 +283,24 @@ async function mcpCallWithPayment(
     const key = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
     const account = privateKeyToAccount(key as `0x${string}`);
 
+    // Check USDC balance before signing
+    const requiredAmount = BigInt(String(pr.maxAmountRequired || Math.floor(parseFloat(String(pr.priceUsd || '0.0005')) * 1_000_000)));
+    const balance = await checkUsdcBalance(account.address);
+    if (balance < requiredAmount) {
+      const balanceUsd = (Number(balance) / 1_000_000).toFixed(6);
+      const requiredUsd = (Number(requiredAmount) / 1_000_000).toFixed(6);
+      throw new CliError(
+        `Insufficient USDC balance. Have $${balanceUsd}, need $${requiredUsd} on Base mainnet.\n` +
+        `Deposit USDC to your wallet: ${account.address}`
+      );
+    }
+
     const paymentReqs = {
-      amount: String(pr.maxAmountRequired || Math.floor(parseFloat(String(pr.priceUsd || '0.0005')) * 1_000_000)),
+      amount: String(requiredAmount),
       recipient: pr.payTo as string,
-      usdcContract: (pr.asset as string) || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      network: `eip155:${(pr.network as string) === 'base' ? '8453' : '8453'}`,
-      chainId: 8453,
+      usdcContract: (pr.asset as string) || USDC_CONTRACT,
+      network: `eip155:${BASE_CHAIN_ID}`,
+      chainId: BASE_CHAIN_ID,
     };
 
     const { header } = await signPayment(account, paymentReqs);
@@ -271,7 +309,15 @@ async function mcpCallWithPayment(
     const paidHeaders = { ...headers, 'X-Payment': header };
     // Need to re-initialize with payment headers
     await mcpInitialize(mcpUrl, paidHeaders);
-    const paidResult = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 4, paidHeaders);
+    let paidResult = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 4, paidHeaders);
+
+    // Cold-start retry: if the server timed out during spin-up, wait and retry once
+    if (isColdStartError(paidResult)) {
+      onColdStartRetry?.();
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      await mcpInitialize(mcpUrl, paidHeaders);
+      paidResult = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 5, paidHeaders);
+    }
 
     return {
       result: paidResult,
@@ -282,7 +328,50 @@ async function mcpCallWithPayment(
     };
   }
 
+  // Cold-start retry for free calls too
+  if (isColdStartError(result)) {
+    onColdStartRetry?.();
+    await new Promise(resolve => setTimeout(resolve, 10_000));
+    await mcpInitialize(mcpUrl, headers);
+    const retried = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 4, headers);
+    return { result: retried };
+  }
+
   return { result };
+}
+
+/** Returns true if a tool result indicates a server cold-start timeout. */
+function isColdStartError(result: unknown): boolean {
+  const text = extractResultText(result).toLowerCase();
+  return text.includes('connection closed') || text.includes('timeout');
+}
+
+/** Returns a user-friendly error message with actionable next steps. */
+function classifyMcpError(err: unknown, context: 'search' | 'enable' | 'disable' | 'tools' | 'call' | 'info'): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('authentication')) {
+    return `Authentication failed. Run \`rickydata auth login\` and try again.\n  ${msg}`;
+  }
+  if (lower.includes('403') || lower.includes('forbidden')) {
+    return `Access denied. Your token may have expired — run \`rickydata auth login\` to refresh.\n  ${msg}`;
+  }
+  if (lower.includes('404') || lower.includes('not found')) {
+    if (context === 'enable' || context === 'disable' || context === 'info') {
+      return `Server not found. Use \`rickydata mcp search <name>\` to find the correct name or ID.\n  ${msg}`;
+    }
+    if (context === 'call') {
+      return `Tool not found. Use \`rickydata mcp tools\` to list available tools.\n  ${msg}`;
+    }
+  }
+  if (lower.includes('fetch failed') || lower.includes('econnrefused') || lower.includes('network')) {
+    return `Cannot reach MCP gateway. Check your connection or run \`rickydata auth status\` to verify the gateway URL.\n  ${msg}`;
+  }
+  if (lower.includes('secrets') || lower.includes('needs_secrets') || lower.includes('api key')) {
+    return `This server requires secrets. Configure them at https://mcpmarketplace.rickydata.org and try again.\n  ${msg}`;
+  }
+  return msg;
 }
 
 // ── Command Builder ──────────────────────────────────────────────────
@@ -342,7 +431,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         );
         console.log(chalk.dim(`\nShowing ${data.showing} of ${data.total} servers`));
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'search'));
       }
     });
 
@@ -375,7 +464,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         }
       } catch (err) {
         spinner.fail(chalk.red('Failed to enable server'));
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'enable'));
       }
     });
 
@@ -405,7 +494,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
           console.log(chalk.red(extractResultText(result)));
         }
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'disable'));
       }
     });
 
@@ -454,7 +543,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         );
         console.log(chalk.dim(`\n${serverTools.length} tool(s) from enabled servers`));
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'tools'));
       }
     });
 
@@ -480,8 +569,15 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         }
       }
 
+      let retrySpinner: ReturnType<typeof ora> | undefined;
+      const onColdStartRetry = () => {
+        retrySpinner = ora('Server is starting up, retrying in 10s...').start();
+      };
+
       try {
-        const { result, payment } = await mcpCallWithPayment(mcpUrl, token, privateKey, toolName, args);
+        const { result, payment } = await mcpCallWithPayment(mcpUrl, token, privateKey, toolName, args, onColdStartRetry);
+
+        retrySpinner?.succeed('Server ready, got result');
 
         if (payment?.paid) {
           console.log(chalk.green(`Paid $${payment.amount} USDC`));
@@ -494,7 +590,8 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
           console.log(text);
         }
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        retrySpinner?.fail('Retry failed');
+        throw new CliError(classifyMcpError(err, 'call'));
       }
     });
 
@@ -519,7 +616,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         const data = parseResultJson(result);
         console.log(formatJson(data));
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'info'));
       }
     });
 
@@ -591,7 +688,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         );
         console.log(chalk.dim(`\n${tools.length} tool(s)`));
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'tools'));
       }
     });
 
@@ -619,7 +716,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         const result = await callAgentMcpTool(gatewayUrl, token, agentId, toolName, args);
         console.log(formatJson(result));
       } catch (err) {
-        throw new CliError(err instanceof Error ? err.message : String(err));
+        throw new CliError(classifyMcpError(err, 'call'));
       }
     });
 

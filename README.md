@@ -2,15 +2,13 @@
 
 TypeScript SDK and CLI for the MCP Gateway — auth, agents, tool calling, and x402 payments on Base mainnet.
 
-> Migrated from `@mcp-gateway/sdk` in the [mcp_deployments_registry](https://github.com/rickycambrian/mcp_deployments_registry) monorepo.
+> Extracted from the [mcp_deployments_registry](https://github.com/rickycambrian/mcp_deployments_registry) monorepo into a standalone repo for independent versioning. The monorepo retains a read-only copy at `mcp-gateway-sdk/`.
 
 ## Install
 
 ```bash
 npm install -g rickydata
 ```
-
-Peer dependency for SDK usage: `viem ^2.0.0`
 
 ## Architecture
 
@@ -20,28 +18,47 @@ This SDK connects to the MCP Gateway ecosystem:
 - **Marketplace**: https://mcpmarketplace.rickydata.org — Browse + manage servers
 - **Source**: Extracted from [mcp_deployments_registry](https://github.com/rickycambrian/mcp_deployments_registry)
 
+### Repo Relationship
+
+| Repo | Purpose |
+|------|---------|
+| [`rickydata_SDK`](https://github.com/rickycambrian/rickydata_SDK) | **This repo** — SDK library + CLI (`rickydata` on npm) |
+| [`mcp_deployments_registry`](https://github.com/rickycambrian/mcp_deployments_registry) | Platform monorepo — gateway backends, marketplace, `.claude/` skills/agents |
+| `mcp_deployments_registry/mcp-gateway-sdk/` | Read-only legacy reference copy (do not use) |
+
+The SDK is published independently from the monorepo. Development happens here; deploy-time configuration (skills, agents, CI/CD) lives in `mcp_deployments_registry`.
+
 ## CLI Quick Start
 
-The fastest way to get started:
-
 ```bash
-# 1. Log in (opens browser for sign-in)
+# 1. Install
+npm install -g rickydata
+
+# 2. Log in (opens browser for sign-in via email, Google, GitHub, Discord, or wallet)
 rickydata auth login
 
-# 2. Browse available agents
-rickydata agents list
+# 3. Search and enable MCP servers
+rickydata mcp search "brave"
+rickydata mcp enable brave-search-mcp-server   # requires auth
 
-# 3. Store your Anthropic API key (required for agent chat)
-rickydata apikey set
+# 4. Connect the gateway to Claude Code (prints the claude mcp add command)
+rickydata mcp connect
 
-# 4. Chat with an agent
-rickydata chat <agent-id>
+# 5. List your enabled tools
+rickydata mcp tools
 
-# 5. Check wallet balance and deposit address
+# 6. Call a tool directly with auto x402 payment
+rickydata mcp call io-github-brave-brave-search-mcp-server__brave_web_search '{"query":"MCP protocol"}'
+
+# 7. Check wallet balance and deposit address
 rickydata wallet balance
 
-# 6. Check auth status
-rickydata auth status
+# 8. Set your Anthropic API key for agent chat (BYOK — required)
+rickydata apikey set
+
+# 9. Chat with an agent
+rickydata agents list
+rickydata chat <agent-id>
 ```
 
 `mcpg` is still available as a compatibility alias.
@@ -92,8 +109,16 @@ rickydata
 │   ├── status         Check if BYOK is configured
 │   └── delete         Remove stored API key
 ├── mcp
-│   ├── tools <id>     List an agent's MCP tools
-│   └── call <id>      Call an MCP tool directly
+│   ├── search <query> Search marketplace servers by name/category
+│   ├── enable <name>  Enable a server by name or ID (requires auth)
+│   ├── disable <name> Disable a server (requires auth)
+│   ├── tools          List tools from enabled servers (requires auth)
+│   ├── call <tool>    Call a tool directly (auto-pays x402 if needed)
+│   ├── info <name>    Get detailed server information
+│   ├── connect        Print the claude mcp add command for connecting
+│   └── agent
+│       ├── tools <id> List an agent's MCP tools
+│       └── call <id>  Call an MCP tool on an agent
 └── config
     ├── set            Set a config value
     ├── get            Get a config value
@@ -112,35 +137,49 @@ Inside `rickydata chat`, type:
 
 ## Connecting MCP Servers to Claude Code
 
-Use any agent as an MCP server in Claude Code, giving Claude access to the agent's tools:
+The easiest way — after logging in, just run:
 
 ```bash
-# Get your auth token
-rickydata auth token create --private-key $PRIVATE_KEY
-
-# Add an agent as MCP server in Claude Code
-claude mcp add --transport http \
-  --header "Authorization:Bearer YOUR_TOKEN" \
-  agent-name https://agents.rickydata.org/agents/AGENT_ID/mcp
+rickydata mcp connect
+# Prints the exact claude mcp add command with your token pre-filled
 ```
 
-Or connect to the full MCP Gateway (all ~5,000 tools):
+Or manually:
 
 ```bash
 # No auth (all tools, no wallet scoping)
 claude mcp add --transport http mcp-gateway https://mcp.rickydata.org/mcp
 
-# With auth (wallet-scoped tools)
+# With auth (wallet-scoped, only tools from servers you've enabled)
 claude mcp add --transport http \
   --header "Authorization:Bearer YOUR_TOKEN" \
   mcp-gateway https://mcp.rickydata.org/mcp
 ```
 
-### Listing an Agent's Tools
+### Listing Gateway Tools
 
 ```bash
-rickydata mcp tools <agent-id>
-rickydata mcp call <agent-id> <tool-name> '{"arg": "value"}'
+# Search for servers
+rickydata mcp search "filesystem"
+
+# Enable a server (wallet-scoped)
+rickydata mcp enable filesystem-mcp-server
+
+# List your enabled tools
+rickydata mcp tools
+
+# Call a tool (auto-pays $0.0005 USDC if needed)
+rickydata mcp call <tool-slug-name> '{"arg": "value"}'
+```
+
+### Using an Agent as MCP Server
+
+```bash
+# List an agent's tools
+rickydata mcp agent tools <agent-id>
+
+# Call an agent's MCP tool
+rickydata mcp agent call <agent-id> <tool-name> '{"arg": "value"}'
 ```
 
 ## Wallet & Funding
