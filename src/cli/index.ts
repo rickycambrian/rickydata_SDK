@@ -10,6 +10,7 @@ import { createSessionsCommands } from './commands/sessions.js';
 import { createWalletCommands } from './commands/wallet.js';
 import { createApiKeyCommands } from './commands/apikey.js';
 import { createMcpCommands } from './commands/mcp.js';
+import { createInitCommand } from './commands/init.js';
 import { toCliError } from './errors.js';
 import { CLI_VERSION } from './version.js';
 
@@ -24,6 +25,7 @@ export function createProgram(configManager?: ConfigManager, credentialStore?: C
     .description('RickyData CLI — manage agents, auth, and MCP tools')
     .version(CLI_VERSION);
 
+  program.addCommand(createInitCommand(config, store));
   program.addCommand(createAuthCommands(config, store));
   program.addCommand(createConfigCommands(config));
   program.addCommand(createAgentsCommands(config, store));
