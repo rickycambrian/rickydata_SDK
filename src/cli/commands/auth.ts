@@ -253,7 +253,15 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
             // JWT decode failed — store anyway
           }
         } else if (pastedToken.startsWith('mcpwt_')) {
-          walletAddress = '(wallet-token)';
+          try {
+            const payload = JSON.parse(
+              Buffer.from(pastedToken.slice('mcpwt_'.length), 'base64url').toString()
+            );
+            if (payload.wallet) walletAddress = payload.wallet;
+            if (payload.exp) expiresAtIso = new Date(payload.exp * 1000).toISOString();
+          } catch {
+            walletAddress = '(wallet-token)';
+          }
         }
 
         store.setToken(pastedToken, walletAddress, profile, expiresAtIso);
