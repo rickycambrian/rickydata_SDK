@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PREV_HOOKS_FILE="$REPO_ROOT/.githooks/.previous-hooks-path"
+
+# Chain a previously configured pre-commit hook path when setup-secret-scrub
+# migrated core.hooksPath to .githooks.
+if [ -f "$PREV_HOOKS_FILE" ]; then
+  PREV_HOOKS_PATH="$(cat "$PREV_HOOKS_FILE" 2>/dev/null || true)"
+  if [ -n "$PREV_HOOKS_PATH" ] && [ "$PREV_HOOKS_PATH" != ".githooks" ]; then
+    if [[ "$PREV_HOOKS_PATH" = /* ]]; then
+      PREV_HOOK="$PREV_HOOKS_PATH/pre-commit"
+    else
+      PREV_HOOK="$REPO_ROOT/$PREV_HOOKS_PATH/pre-commit"
+    fi
+
+    if [ -x "$PREV_HOOK" ]; then
+      "$PREV_HOOK"
+    fi
+  fi
+fi
+
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+fi
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "Secret guard: python not found (tried python3, python)."
+  exit 2
+fi
+
+"$PYTHON_BIN" "$REPO_ROOT/scripts/secret-guard.py" --staged
+

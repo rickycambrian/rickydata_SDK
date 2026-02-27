@@ -2,3 +2,13 @@ node_modules/
 /dist/
 *.tsbuildinfo
 .DS_Store
+
+# >>> agentic-secrets-obfuscation >>>
+# Local secret hydration map (ignored by git).
+.git-secrets-map.local.json
+
+# Created by setup script when chaining a previously configured hooks path.
+.githooks/.previous-hooks-path
+# <<< agentic-secrets-obfuscation <<<
+
+

@@ -1,0 +1,11 @@
+# >>> agentic-secrets-obfuscation >>>
+# Secret scrub filter: keep placeholders in git history, hydrate values locally.
+*.md filter=secretscrub text
+*.txt filter=secretscrub text
+*.sh filter=secretscrub text
+*.bash filter=secretscrub text
+*.zsh filter=secretscrub text
+*.env.example filter=secretscrub text
+.env.local.example filter=secretscrub text
+# <<< agentic-secrets-obfuscation <<<
+
