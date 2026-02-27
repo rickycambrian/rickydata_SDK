@@ -65,19 +65,26 @@ rickydata chat <agent-id>
 
 ### Authentication Methods
 
-| Method | Command | Best For |
-|--------|---------|----------|
-| Browser login | `rickydata auth login` | Quick start — sign in with email, Google, GitHub, Discord, or wallet |
-| Private key | `rickydata auth login --private-key <key>` | Long-lived token (30 days), no browser needed |
-| Direct token | `rickydata auth login --token mcpwt_...` | Pre-existing wallet tokens |
+| Method | Command | Token Type | Works With |
+|--------|---------|------------|-----------|
+| Private key | `rickydata auth login --private-key <key>` | `mcpwt_` (30 days) | MCP + Agent gateways |
+| Direct token | `rickydata auth login --token mcpwt_...` | `mcpwt_` (any expiry) | MCP + Agent gateways |
+| Browser login | `rickydata auth login` | JWT (24h) or `mcpwt_` | See note below |
 
-**Browser login flow** (recommended — no private key required):
+**Private key login** (recommended for full access):
+1. Run `rickydata auth login --private-key 0x...`
+2. CLI creates a wallet token (`mcpwt_`) via the MCP gateway — valid for 30 days
+3. Token and private key stored in `~/.rickydata/credentials.json` (mode 0600)
+4. Private key enables automatic x402 payments for `mcp call`
+
+**Browser login flow** (no private key required):
 1. Run `rickydata auth login`
 2. Browser opens to `https://mcpmarketplace.rickydata.org/#/auth/cli`
 3. Sign in with email, Google, GitHub, Discord, or any Web3 wallet
-4. Copy the generated token from the page
-5. Paste into the CLI prompt and press Enter
-6. Token is stored in `~/.rickydata/credentials.json`
+4. Copy the generated token from the page and paste into the CLI prompt
+5. Token is stored in `~/.rickydata/credentials.json`
+
+> **Note**: Browser login currently produces a JWT (24h expiry, agent gateway only) for email/social login users. Web3 wallet users may get a `mcpwt_` token. Use `--private-key` to guarantee a `mcpwt_` token that works with both gateways.
 
 ## CLI Command Reference
 

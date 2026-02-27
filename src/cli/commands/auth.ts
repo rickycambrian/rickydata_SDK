@@ -201,8 +201,25 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
         if (!opts.token.startsWith('mcpwt_')) {
           fail('Token must start with mcpwt_');
         }
-        store.setToken(opts.token, '(unknown)', profile);
+        let walletAddress = '(unknown)';
+        let expiresAtIso: string | undefined;
+        try {
+          const payload = JSON.parse(
+            Buffer.from(opts.token.slice('mcpwt_'.length), 'base64url').toString()
+          );
+          if (payload.wallet) walletAddress = payload.wallet;
+          if (payload.exp) expiresAtIso = new Date(payload.exp * 1000).toISOString();
+        } catch {
+          // Malformed payload — store anyway with unknown wallet
+        }
+        store.setToken(opts.token, walletAddress, profile, expiresAtIso);
         console.log(chalk.green('Token stored successfully.'));
+        if (walletAddress !== '(unknown)') {
+          console.log(`  Wallet:  ${chalk.cyan(walletAddress)}`);
+        }
+        if (expiresAtIso) {
+          console.log(`  Expires: ${chalk.cyan(expiresAtIso)}`);
+        }
         console.log(chalk.dim(`Profile: ${profile}`));
         return;
       }
@@ -313,8 +330,9 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
       const spinner = ora('Authenticating...').start();
       try {
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const mcpGatewayUrl = (config.getMcpGatewayUrl(profile)).replace(/\/$/, '');
         try {
-          const tokenResult = await createWalletTokenFlow(gatewayUrl, privateKey, expiresAt);
+          const tokenResult = await createWalletTokenFlow(mcpGatewayUrl, privateKey, expiresAt);
           store.setToken(tokenResult.token, tokenResult.walletAddress, profile, tokenResult.expiresAt);
           store.setPrivateKey(privateKey, profile);
           spinner.succeed(chalk.green('Authenticated successfully (wallet token)'));
@@ -357,10 +375,38 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
       console.log(`Status:  ${chalk.green('Authenticated')}`);
       console.log(`Wallet:  ${chalk.cyan(cred.walletAddress)}`);
       console.log(`Stored:  ${chalk.dim(cred.storedAt)}`);
+
+      // Detect token type and cross-gateway compatibility
+      const isMcpWalletToken = cred.token.startsWith('mcpwt_');
+      if (isMcpWalletToken) {
+        console.log(`Type:    ${chalk.green('mcpwt_')} ${chalk.dim('(wallet token — works with both agent and MCP gateways)')}`);
+      } else {
+        console.log(`Type:    ${chalk.yellow('JWT')} ${chalk.dim('(agent gateway only — 24h expiry)')}`);
+      }
+
       if (cred.expiresAt) {
-        const expired = new Date(cred.expiresAt) < new Date();
+        const expiryDate = new Date(cred.expiresAt);
+        const now = new Date();
+        const expired = expiryDate < now;
+        const msRemaining = expiryDate.getTime() - now.getTime();
+
+        let timeRemaining = '';
+        if (!expired) {
+          const days = Math.floor(msRemaining / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((msRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutes = Math.floor((msRemaining % (1000 * 60 * 60)) / (1000 * 60));
+          if (days > 0) {
+            timeRemaining = `${days}d ${hours}h remaining`;
+          } else if (hours > 0) {
+            timeRemaining = `${hours}h ${minutes}m remaining`;
+          } else {
+            timeRemaining = `${minutes}m remaining`;
+          }
+        }
+
         const label = expired ? chalk.red('Expired') : chalk.green('Valid');
-        console.log(`Expires: ${label} (${cred.expiresAt})`);
+        const remaining = expired ? chalk.red('(expired)') : chalk.dim(`(${timeRemaining})`);
+        console.log(`Expires: ${label} ${remaining} — ${cred.expiresAt}`);
       }
       console.log(`Token:   ${chalk.dim(cred.token.slice(0, 20) + '...')}`);
 
