@@ -754,10 +754,10 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
 
   mcp.addCommand(agent);
 
-  // ── mcp connect-kf ──────────────────────────────────────────────────
+  // ── mcp connect-server ──────────────────────────────────────────────
   mcp
-    .command('connect-kf')
-    .description('Connect KnowledgeFlow MCP server to Claude Code')
+    .command('connect-server')
+    .description('Connect rickydata MCP server to Claude Code')
     .option('--profile <profile>', 'Config profile')
     .option('--dry-run', 'Print the command without executing it')
     .action(async (opts) => {
@@ -769,15 +769,15 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         const { default: open } = await import('open');
         await open('https://mcpmarketplace.rickydata.org/#/auth/cli');
         console.log(chalk.dim('After authenticating, run: rickydata auth login'));
-        console.log(chalk.dim('Then re-run: rickydata mcp connect-kf'));
+        console.log(chalk.dim('Then re-run: rickydata mcp connect-server'));
         return;
       }
 
-      const kfUrl = 'https://cambrian-agentic-mcp-server-981646676182.us-central1.run.app';
-      const args = ['mcp', 'add', '--transport', 'http', 'rickydata-kf', `${kfUrl}/mcp`];
+      const serverUrl = 'https://cambrian-agentic-mcp-server-981646676182.us-central1.run.app';
+      const args = ['mcp', 'add', '--transport', 'http', 'rickydata', `${serverUrl}/mcp`];
       args.push('--header', `Authorization:Bearer ${cred.token}`);
 
-      const cmdStr = `claude mcp add --transport http rickydata-kf ${kfUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`;
+      const cmdStr = `claude mcp add --transport http rickydata ${serverUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`;
 
       if (opts.dryRun) {
         console.log(chalk.cyan('Command (not executed):\n'));
@@ -789,15 +789,14 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       const { execFileSync } = await import('child_process');
       try {
         try {
-          execFileSync('claude', ['mcp', 'remove', 'rickydata-kf'], { stdio: 'pipe' });
+          execFileSync('claude', ['mcp', 'remove', 'rickydata'], { stdio: 'pipe' });
         } catch {
           // Not present — fine
         }
 
         execFileSync('claude', args, { stdio: 'inherit' });
-        console.log(chalk.green('\n✓ KnowledgeFlow MCP server added to Claude Code'));
+        console.log(chalk.green('\n✓ rickydata MCP server added to Claude Code'));
         console.log(chalk.dim('  Authenticated with your wallet token'));
-        console.log(chalk.dim('  111+ tools: canvas workflows, marketplace, agents, semantic search'));
         console.log(chalk.dim('  Restart Claude Code to pick up the new tools'));
       } catch {
         console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
