@@ -10,6 +10,7 @@ import { createSessionsCommands } from './commands/sessions.js';
 import { createWalletCommands } from './commands/wallet.js';
 import { createApiKeyCommands } from './commands/apikey.js';
 import { createMcpCommands } from './commands/mcp.js';
+import { createCanvasCommands } from './commands/canvas.js';
 import { createInitCommand } from './commands/init.js';
 import { toCliError } from './errors.js';
 import { CLI_VERSION } from './version.js';
@@ -34,6 +35,7 @@ export function createProgram(configManager?: ConfigManager, credentialStore?: C
   program.addCommand(createWalletCommands(config, store));
   program.addCommand(createApiKeyCommands(config, store));
   program.addCommand(createMcpCommands(config, store));
+  program.addCommand(createCanvasCommands(config, store));
 
   return program;
 }

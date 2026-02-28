@@ -71,6 +71,60 @@ rickydata chat <agent-id>    # Start chatting
 
 Cost: 10% platform markup on Anthropic LLM cost + $0.0005 per MCP tool call.
 
+## Canvas Workflows
+
+Build and execute visual workflow DAGs that chain agents, MCP tools, approval gates, and GitHub actions.
+
+### CLI
+
+```bash
+# List saved workflows
+rickydata canvas list
+
+# Execute a workflow (streams progress in real-time)
+rickydata canvas execute <entity-id>
+rickydata canvas execute ./my-workflow.canvas.json --verbose
+
+# Check run history
+rickydata canvas runs
+rickydata canvas run <run-id>
+
+# Import/export portable .canvas.json files
+rickydata canvas import ./workflow.canvas.json
+rickydata canvas export <entity-id> --output ./backup.canvas.json
+```
+
+### Claude Code Integration (MCP Server)
+
+Register the canvas MCP server to give Claude Code 7 canvas workflow tools:
+
+```bash
+claude mcp add --transport stdio canvas-workflows rickydata mcp canvas-server
+```
+
+Available tools: `canvas_list_workflows`, `canvas_get_workflow`, `canvas_execute_workflow`, `canvas_execute_workflow_from_json`, `canvas_list_runs`, `canvas_get_run`, `canvas_save_workflow`.
+
+### SDK
+
+```typescript
+import { CanvasClient, AuthManager } from 'rickydata';
+
+const auth = new AuthManager('https://agents.rickydata.org', 'mcpwt_...');
+const canvas = new CanvasClient({ auth });
+
+// List saved workflows
+const workflows = await canvas.listWorkflows();
+
+// Execute with SSE streaming
+for await (const event of canvas.executeWorkflow({ nodes, connections })) {
+  console.log(event.type, event.data);
+}
+
+// Or wait for the final result
+const result = await canvas.executeWorkflowSync({ nodes, connections });
+console.log(result.status, result.results);
+```
+
 ---
 
 <details>
@@ -158,6 +212,13 @@ rickydata
 ├── agents
 │   ├── list           List available agents
 │   └── describe <id>  Show agent details
+├── canvas
+│   ├── list           List saved workflows
+│   ├── execute <id>   Execute by entity ID or local .json file
+│   ├── runs           List recent execution runs
+│   ├── run <id>       Show run details
+│   ├── import <file>  Import a .canvas.json file
+│   └── export <id>    Export workflow to .canvas.json
 ├── chat <agent-id>    Interactive agent chat (requires BYOK)
 ├── sessions
 │   ├── list / get / resume / delete
@@ -230,6 +291,31 @@ const task = await client.sendMessage({
 });
 ```
 
+### Canvas Workflow Execution
+
+```typescript
+import { CanvasClient, AuthManager } from 'rickydata';
+
+const auth = new AuthManager('https://agents.rickydata.org', 'mcpwt_...');
+const canvas = new CanvasClient({ auth });
+
+// Stream execution events
+for await (const event of canvas.executeWorkflow({
+  nodes: [
+    { id: 'input', type: 'textInputNode', data: { value: 'Summarize MCP protocol' } },
+    { id: 'agent', type: 'agentNode', data: { prompt: 'Summarize the input', model: 'haiku' } },
+    { id: 'output', type: 'resultsNode', data: {} },
+  ],
+  connections: [
+    { source: 'input', target: 'agent' },
+    { source: 'agent', target: 'output' },
+  ],
+})) {
+  if (event.type === 'node_completed') console.log(`${event.data.nodeId}: done`);
+  if (event.type === 'run_completed') console.log('Results:', event.data.results);
+}
+```
+
 ### Agent as MCP Server
 
 ```typescript
@@ -286,6 +372,18 @@ const result = await client.callTool('research-agent', 'web_research', { topic: 
 | `listTools(agentId)` | List agent's MCP tools |
 | `callTool(agentId, name, args?)` | Call a tool |
 
+### CanvasClient
+
+| Method | Description |
+|--------|-------------|
+| `executeWorkflow(request, signal?)` | SSE streaming execution (async generator) |
+| `executeWorkflowSync(request, options?)` | Wait for complete result |
+| `listWorkflows()` | List saved workflows from Geo |
+| `saveWorkflow(workflow)` | Save a new workflow |
+| `listRuns()` | List execution runs |
+| `getRun(runId)` | Get run details |
+| `approveGate(runId, approvalId, decision)` | Approve/reject an approval gate |
+
 ### Error Handling
 
 All errors extend `MCPGatewayError`. Key subtypes: `SpendingLimitExceededError`, `CircuitBreakerTrippedError`, `EndpointNotAllowedError`, `DuplicatePaymentError`, `PaymentSigningError`.
@@ -297,7 +395,7 @@ All errors extend `MCPGatewayError`. Key subtypes: `SpendingLimitExceededError`,
 | Service | URL | Purpose |
 |---------|-----|---------|
 | MCP Gateway | https://mcp.rickydata.org | MCP server hosting + tool proxy |
-| Agent Gateway | https://agents.rickydata.org | BYOK Claude agents |
+| Agent Gateway | https://agents.rickydata.org | BYOK Claude agents + canvas runtime |
 | Marketplace | https://mcpmarketplace.rickydata.org | Browse + manage servers |
 
 Source: [`rickydata_SDK`](https://github.com/rickycambrian/rickydata_SDK) (this repo) / [`mcp_deployments_registry`](https://github.com/rickycambrian/mcp_deployments_registry) (platform)

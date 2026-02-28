@@ -2,7 +2,7 @@
 export { MCPGateway } from './client.js';
 
 // Auth
-export { createWalletToken } from './auth.js';
+export { AuthManager, createWalletToken } from './auth.js';
 export type { AuthenticateAutoOptions, EthHttpSigner } from './auth.js';
 
 // Spending wallet
@@ -95,3 +95,56 @@ export type {
   TaskListResponse,
   ListTasksOptions,
 } from './a2a/index.js';
+
+// Canvas MCP Server
+export { CanvasMCPServer, startCanvasMCPServer, createCanvasTools } from './mcp/index.js';
+export type { CanvasMCPTool, MCPToolResponse } from './mcp/index.js';
+
+// Canvas Workflow Client
+export { CanvasClient } from './canvas/index.js';
+export type {
+  CanvasClientConfig,
+  CanvasWorkflowJSON,
+  CanvasNodeDefinition,
+  CanvasEdgeDefinition,
+  TextInputNodeData,
+  AgentNodeData,
+  MCPToolNodeData,
+  ResultsNodeData,
+  AgentTeamOrchestratorNodeData,
+  AgentTeamTeammateNodeData,
+  ApprovalGateNodeData,
+  GitHubRepoNodeData,
+  GitHubCreateBranchNodeData,
+  GitHubCreateIssueNodeData,
+  GitHubCommitFilesNodeData,
+  GitHubOpenDraftPRNodeData,
+  GitHubMarkPRReadyNodeData,
+  BrowserVerifyNodeData,
+  CanvasNodeData,
+  CanvasNode,
+  CanvasConnection,
+  CanvasRuntimeMode,
+  CanvasRuntimeOptions,
+  CanvasTeamTeammateRuntime,
+  CanvasTeamRuntimePayload,
+  CanvasWorkflowRequest,
+  CanvasRunStatusValue,
+  CanvasNodeStatusValue,
+  CanvasRunState,
+  CanvasRunStartedEvent,
+  CanvasNodeStartedEvent,
+  CanvasNodeLogEvent,
+  CanvasNodeCompletedEvent,
+  CanvasNodeFailedEvent,
+  CanvasApprovalRequiredEvent,
+  CanvasApprovalResolvedEvent,
+  CanvasTeamAgentEvent,
+  CanvasTextEvent,
+  CanvasRunCompletedEvent,
+  CanvasRunFailedEvent,
+  CanvasErrorEvent,
+  CanvasSSEEvent,
+  GeoWorkflow,
+  CanvasExecutionResult,
+} from './canvas/index.js';

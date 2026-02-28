@@ -21,6 +21,14 @@
     "./wallet": {
       "import": "./dist/wallet/index.js",
       "types": "./dist/wallet/index.d.ts"
+    },
+    "./canvas": {
+      "import": "./dist/canvas/index.js",
+      "types": "./dist/canvas/index.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
     }
   },
   "bin": {
