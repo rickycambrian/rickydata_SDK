@@ -754,5 +754,132 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
 
   mcp.addCommand(agent);
 
+  // ── mcp connect-kf ──────────────────────────────────────────────────
+  mcp
+    .command('connect-kf')
+    .description('Connect KnowledgeFlow MCP server to Claude Code')
+    .option('--profile <profile>', 'Config profile')
+    .option('--dry-run', 'Print the command without executing it')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const cred = store.getToken(profile);
+
+      if (!cred?.token) {
+        console.log(chalk.yellow('Not authenticated. Opening browser to log in...\n'));
+        const { default: open } = await import('open');
+        await open('https://mcpmarketplace.rickydata.org/#/auth/cli');
+        console.log(chalk.dim('After authenticating, run: rickydata auth login'));
+        console.log(chalk.dim('Then re-run: rickydata mcp connect-kf'));
+        return;
+      }
+
+      const kfUrl = 'https://cambrian-agentic-mcp-server-981646676182.us-central1.run.app';
+      const args = ['mcp', 'add', '--transport', 'http', 'rickydata-kf', `${kfUrl}/mcp`];
+      args.push('--header', `Authorization:Bearer ${cred.token}`);
+
+      const cmdStr = `claude mcp add --transport http rickydata-kf ${kfUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`;
+
+      if (opts.dryRun) {
+        console.log(chalk.cyan('Command (not executed):\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+        return;
+      }
+
+      const { execFileSync } = await import('child_process');
+      try {
+        try {
+          execFileSync('claude', ['mcp', 'remove', 'rickydata-kf'], { stdio: 'pipe' });
+        } catch {
+          // Not present — fine
+        }
+
+        execFileSync('claude', args, { stdio: 'inherit' });
+        console.log(chalk.green('\n✓ KnowledgeFlow MCP server added to Claude Code'));
+        console.log(chalk.dim('  Authenticated with your wallet token'));
+        console.log(chalk.dim('  111+ tools: canvas workflows, marketplace, agents, semantic search'));
+        console.log(chalk.dim('  Restart Claude Code to pick up the new tools'));
+      } catch {
+        console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+      }
+    });
+
+  // ── mcp canvas-server ──────────────────────────────────────────────
+  mcp
+    .command('canvas-server')
+    .description('Start a local MCP server exposing canvas workflow tools (stdio transport)')
+    .option('--profile <profile>', 'Config profile')
+    .option('--gateway <url>', 'Override agent gateway URL')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
+      const cred = store.getToken(profile);
+
+      if (!cred?.token) {
+        fail('Not authenticated. Run `rickydata auth login` first.');
+      }
+
+      const { startCanvasMCPServer } = await import('../../mcp/canvas-server.js');
+
+      // Log to stderr so it doesn't interfere with JSON-RPC on stdout
+      console.error(`Canvas MCP server starting (gateway: ${gatewayUrl})`);
+
+      await startCanvasMCPServer(gatewayUrl, cred.token);
+    });
+
+  // ── mcp canvas-connect ─────────────────────────────────────────────
+  mcp
+    .command('canvas-connect')
+    .description('Register canvas workflow MCP server with Claude Code')
+    .option('--profile <profile>', 'Config profile')
+    .option('--dry-run', 'Print the command without executing it')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+
+      // Verify auth
+      const cred = store.getToken(profile);
+      if (!cred?.token) {
+        fail('Not authenticated. Run `rickydata auth login` first.');
+      }
+
+      const args = [
+        'mcp', 'add', '--transport', 'stdio',
+        'canvas-workflows',
+        '--',
+        'rickydata', 'mcp', 'canvas-server',
+        ...(opts.profile ? ['--profile', opts.profile] : []),
+      ];
+
+      const cmdStr = `claude ${args.join(' ')}`;
+
+      if (opts.dryRun) {
+        console.log(chalk.cyan('Command (not executed):\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+        return;
+      }
+
+      const { execFileSync } = await import('child_process');
+      try {
+        // Remove existing canvas-workflows first (ignore errors if not present)
+        try {
+          execFileSync('claude', ['mcp', 'remove', 'canvas-workflows'], { stdio: 'pipe' });
+        } catch {
+          // Not present — fine
+        }
+
+        execFileSync('claude', args, { stdio: 'inherit' });
+        console.log(chalk.green('\n✓ Canvas workflow MCP server registered with Claude Code'));
+        console.log(chalk.dim('  Tools: canvas_list_workflows, canvas_get_workflow, canvas_execute_workflow, etc.'));
+        console.log(chalk.dim('  Restart Claude Code to pick up the new tools'));
+      } catch {
+        console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+      }
+    });
+
   return mcp;
 }
