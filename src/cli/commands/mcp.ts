@@ -773,7 +773,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         return;
       }
 
-      const serverUrl = 'https://cambrian-agentic-mcp-server-981646676182.us-central1.run.app';
+      const serverUrl = 'https://rickydata-mcp-server-2dbp4scmrq-uc.a.run.app';
       const args = ['mcp', 'add', '--transport', 'http', 'rickydata', `${serverUrl}/mcp`];
       args.push('--header', `Authorization:Bearer ${cred.token}`);
 
