@@ -411,10 +411,29 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
 
       // Show x402 payment status
       const pk = store.getPrivateKey(profile);
-      if (pk) {
+      let managedRelayAvailable = false;
+      try {
+        const mcpGatewayUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
+        const cfgRes = await fetch(`${mcpGatewayUrl}/api/payments/config`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (cfgRes.ok) {
+          const cfg = await cfgRes.json() as { managedRelayEnabled?: boolean; managedRelayMode?: string };
+          managedRelayAvailable = cfg.managedRelayEnabled === true || cfg.managedRelayMode === 'hybrid';
+        }
+      } catch {
+        // Ignore — offline/status should still render
+      }
+
+      if (managedRelayAvailable) {
+        console.log(`x402:    ${chalk.green('✓ managed relay available')} ${chalk.dim('(token-only mode supported)')}`);
+        if (pk) {
+          console.log(`         ${chalk.green('✓ self-custody private key configured')} ${chalk.dim('(advanced mode)')}`);
+        }
+      } else if (pk) {
         console.log(`x402:    ${chalk.green('✓ payments enabled')}`);
       } else {
-        console.log(`x402:    ${chalk.yellow('✗ no private key')} (login with --private-key to enable)`);
+        console.log(`x402:    ${chalk.yellow('✗ no private key')} (login with --private-key to enable self-custody mode)`);
       }
 
       // Non-blocking balance check

@@ -144,7 +144,7 @@ Opens your browser to sign in with email, Google, GitHub, Discord, or any Web3 w
 |--------|---------|-------------|
 | Browser login | `rickydata auth login` | Default — works for everyone |
 | Direct token | `rickydata auth login --token mcpwt_...` | Paste a token from another source |
-| Private key | `rickydata auth login --private-key 0x...` | Automated scripts, enables x402 signing |
+| Private key | `rickydata auth login --private-key 0x...` | Advanced/self-custody x402 signing |
 
 ### Connecting to Claude Code
 
@@ -170,8 +170,8 @@ All payments use **USDC on Base mainnet** (Chain 8453).
 
 | Action | Cost |
 |--------|------|
-| MCP tool call (via Claude Code) | Free (authenticated bypass) |
-| MCP tool call (via CLI `mcp call`) | $0.0005 USDC (requires private key) |
+| MCP tool call (default token flow) | $0.0005 USDC (managed relay + wallet top-up) |
+| MCP tool call (self-custody mode) | $0.0005 USDC (private-key signing) |
 | Agent chat | 10% markup on LLM cost |
 | Browsing / searching / tools/list | Free |
 
@@ -258,6 +258,10 @@ const servers = await gw.listServers();
 ```
 
 ### Call Tools with x402 Payments
+
+Hybrid model:
+- Default: wallet token (`mcpwt_...`) + managed relay (no private key required).
+- Advanced: self-custody signing with `SpendingWallet`.
 
 ```typescript
 import { MCPGateway, SpendingWallet } from 'rickydata';

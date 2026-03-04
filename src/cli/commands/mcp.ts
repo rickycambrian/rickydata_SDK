@@ -247,6 +247,42 @@ interface PaymentInfo {
   paid: boolean;
 }
 
+interface ManagedRelayInfo {
+  mode: 'managed';
+  payerAddress: string;
+  requiredBaseUnits: string;
+  availableBaseUnits?: string;
+  topUpUrl: string;
+}
+
+function parseManagedRelayInfo(pr: Record<string, unknown> | undefined): ManagedRelayInfo | null {
+  if (!pr || typeof pr !== 'object') return null;
+  const relay = pr.relay;
+  if (!relay || typeof relay !== 'object') return null;
+  const r = relay as Record<string, unknown>;
+  if (r.mode !== 'managed') return null;
+  const payerAddress = String(r.payerAddress || '');
+  const requiredBaseUnits = String(r.requiredBaseUnits || '');
+  const topUpUrl = String(r.topUpUrl || 'https://mcpmarketplace.rickydata.org/#/wallet');
+  const availableBaseUnits = r.availableBaseUnits != null ? String(r.availableBaseUnits) : undefined;
+  if (!payerAddress || !requiredBaseUnits) return null;
+  return {
+    mode: 'managed',
+    payerAddress,
+    requiredBaseUnits,
+    availableBaseUnits,
+    topUpUrl,
+  };
+}
+
+function baseUnitsToUsdString(baseUnits: string | undefined): string {
+  if (!baseUnits || !/^\d+$/.test(baseUnits)) return 'unknown';
+  const n = BigInt(baseUnits);
+  const intPart = n / 1_000_000n;
+  const fracPart = (n % 1_000_000n).toString().padStart(6, '0');
+  return `${intPart}.${fracPart}`;
+}
+
 async function mcpCallWithPayment(
   mcpUrl: string,
   token: string | undefined,
@@ -268,8 +304,20 @@ async function mcpCallWithPayment(
   if (parsed && typeof parsed === 'object' && (parsed as Record<string, unknown>).error === 'PAYMENT_REQUIRED') {
     const pr = (parsed as Record<string, unknown>).paymentRequirements as Record<string, unknown> | undefined;
     if (!pr) throw new CliError('Payment required but no payment requirements returned');
+    const relay = parseManagedRelayInfo(pr);
 
     if (!privateKey) {
+      if (relay) {
+        const requiredUsd = baseUnitsToUsdString(relay.requiredBaseUnits);
+        const availableUsd = baseUnitsToUsdString(relay.availableBaseUnits);
+        throw new CliError(
+          `Payment required ($${pr.priceUsd || '0.0005'} USDC).\n` +
+          `Managed relay wallet: ${relay.payerAddress}\n` +
+          `Required: $${requiredUsd} USDC, Available: $${availableUsd} USDC\n` +
+          `Top up and retry: ${relay.topUpUrl}\n` +
+          `Check balance with: rickydata wallet balance`
+        );
+      }
       throw new CliError(
         'Payment required ($' + (pr.priceUsd || '0.0005') + ' USDC). ' +
         'Run `rickydata auth login --private-key 0x...` to enable x402 payments.'
@@ -306,7 +354,7 @@ async function mcpCallWithPayment(
     const { header } = await signPayment(account, paymentReqs);
 
     // Retry with payment header
-    const paidHeaders = { ...headers, 'X-Payment': header };
+    const paidHeaders = { ...headers, 'PAYMENT-SIGNATURE': header, 'X-Payment': header };
     // Need to re-initialize with payment headers
     await mcpInitialize(mcpUrl, paidHeaders);
     let paidResult = await mcpRequest(mcpUrl, 'tools/call', { name: toolName, arguments: args }, 4, paidHeaders);
@@ -623,23 +671,29 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
   // ── mcp connect ───────────────────────────────────────────────────
   mcp
     .command('connect')
-    .description('Connect MCP Gateway to Claude Code (runs claude mcp add)')
+    .description('Connect rickydata MCP server to Claude Code (runs claude mcp add)')
     .option('--profile <profile>', 'Config profile')
     .option('--dry-run', 'Print the command without executing it')
     .action(async (opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
-      const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
       const cred = store.getToken(profile);
 
-      // --header is variadic in claude CLI, so it MUST come after positional args
-      const args = ['mcp', 'add', '--transport', 'http', 'mcp-gateway', `${mcpUrl}/mcp`];
-      if (cred?.token) {
-        args.push('--header', `Authorization:Bearer ${cred.token}`);
+      if (!cred?.token) {
+        console.log(chalk.yellow('Not authenticated. Opening browser to log in...\n'));
+        try {
+          const { default: open } = await import('open');
+          await open('https://mcpmarketplace.rickydata.org/#/auth/cli');
+        } catch { /* ignore */ }
+        console.log(chalk.dim('After authenticating, run: rickydata auth login'));
+        console.log(chalk.dim('Then re-run: rickydata mcp connect'));
+        return;
       }
 
-      const cmdStr = cred?.token
-        ? `claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`
-        : `claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`;
+      const serverUrl = 'https://rickydata-mcp-server-2dbp4scmrq-uc.a.run.app';
+      const args = ['mcp', 'add', '--transport', 'http', 'rickydata', `${serverUrl}/mcp`];
+      args.push('--header', `Authorization:Bearer ${cred.token}`);
+
+      const cmdStr = `claude mcp add --transport http rickydata ${serverUrl}/mcp \\\n    --header "Authorization:Bearer ${cred.token.slice(0, 20)}..."`;
 
       if (opts.dryRun) {
         console.log(chalk.cyan('Command (not executed):\n'));
@@ -650,23 +704,24 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
 
       const { execFileSync } = await import('child_process');
       try {
-        // Remove existing mcp-gateway first (ignore errors if not present)
+        // Remove old mcp-gateway if present
         try {
           execFileSync('claude', ['mcp', 'remove', 'mcp-gateway'], { stdio: 'pipe' });
         } catch {
           // Not present — fine
         }
+        // Remove existing rickydata if present
+        try {
+          execFileSync('claude', ['mcp', 'remove', 'rickydata'], { stdio: 'pipe' });
+        } catch {
+          // Not present — fine
+        }
 
         execFileSync('claude', args, { stdio: 'inherit' });
-        console.log(chalk.green('\n✓ MCP Gateway added to Claude Code'));
-        if (cred?.token) {
-          console.log(chalk.dim('  Authenticated with your wallet token'));
-        } else {
-          console.log(chalk.dim('  No auth — anonymous mode (run `rickydata auth login` first for full access)'));
-        }
+        console.log(chalk.green('\n✓ rickydata MCP server added to Claude Code'));
+        console.log(chalk.dim('  Authenticated with your wallet token'));
         console.log(chalk.dim('  Restart Claude Code to pick up the new tools'));
-      } catch (err) {
-        // claude CLI not found or failed — fall back to printing
+      } catch {
         console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
         console.log(`  ${cmdStr}`);
         console.log();

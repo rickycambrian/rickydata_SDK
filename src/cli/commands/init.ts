@@ -149,9 +149,11 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
-      // ─── Step 2: MCP Gateway Connection ──────────────────────────
-      console.log(chalk.bold('Step 2/4: MCP Gateway Connection'));
-      console.log(chalk.dim('────────────────────────────────'));
+      // ─── Step 2: rickydata MCP Server ─────────────────────────
+      console.log(chalk.bold('Step 2/4: rickydata MCP Server'));
+      console.log(chalk.dim('──────────────────────────────'));
+
+      const rickyServerUrl = 'https://rickydata-mcp-server-2dbp4scmrq-uc.a.run.app';
 
       let claudeInstalled = false;
       try {
@@ -169,8 +171,8 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
         console.log('After installing, run this to connect manually:');
         console.log();
         const cmdStr = token
-          ? `  claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp \\\n    --header "Authorization:Bearer ${token.slice(0, 20)}..."`
-          : `  claude mcp add --transport http mcp-gateway ${mcpUrl}/mcp`;
+          ? `  claude mcp add --transport http rickydata ${rickyServerUrl}/mcp \\\n    --header "Authorization:Bearer ${token.slice(0, 20)}..."`
+          : `  claude mcp add --transport http rickydata ${rickyServerUrl}/mcp`;
         console.log(chalk.cyan(cmdStr));
         console.log();
       } else {
@@ -180,31 +182,34 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
         let alreadyConfigured = false;
         try {
           const listOut = execFileSync('claude', ['mcp', 'list'], { stdio: 'pipe', encoding: 'utf-8' });
-          alreadyConfigured = listOut.includes('mcp-gateway');
+          alreadyConfigured = listOut.includes('rickydata');
         } catch {
           // mcp list failed — probably not configured
         }
 
         let shouldConfigure = true;
         if (alreadyConfigured && !autoYes) {
-          console.log(chalk.dim('MCP Gateway is already configured in Claude Code.'));
+          console.log(chalk.dim('rickydata MCP server is already configured in Claude Code.'));
           shouldConfigure = await promptYesNo('  Reconfigure with current token?', true);
         }
 
         if (shouldConfigure) {
           const spinner = ora('Connecting to Claude Code...').start();
           try {
+            // Remove old mcp-gateway if present
             try { execFileSync('claude', ['mcp', 'remove', 'mcp-gateway'], { stdio: 'pipe' }); } catch { /* not present */ }
+            // Remove existing rickydata if present
+            try { execFileSync('claude', ['mcp', 'remove', 'rickydata'], { stdio: 'pipe' }); } catch { /* not present */ }
 
-            const args = ['mcp', 'add', '--transport', 'http', 'mcp-gateway', `${mcpUrl}/mcp`];
+            const args = ['mcp', 'add', '--transport', 'http', 'rickydata', `${rickyServerUrl}/mcp`];
             if (token) args.push('--header', `Authorization:Bearer ${token}`);
 
             execFileSync('claude', args, { stdio: 'pipe' });
-            spinner.succeed('MCP Gateway added to Claude Code');
+            spinner.succeed('rickydata MCP server added to Claude Code');
           } catch (err) {
             spinner.fail('Failed to configure Claude Code');
             console.log(chalk.dim(`  Error: ${err instanceof Error ? err.message : String(err)}`));
-            console.log(chalk.dim('  Run `rickydata mcp connect` to retry'));
+            console.log(chalk.dim('  Run `rickydata mcp connect-server` to retry'));
           }
         } else {
           console.log(chalk.dim('  Skipped — keeping existing configuration'));
