@@ -59,6 +59,73 @@ function validateWalletSettingKey(key: string): void {
   );
 }
 
+/* ── transaction formatting helpers ───────────────────────── */
+
+const USDC_DECIMALS = 6;
+
+/** Parse a raw amount value to USD. Handles both base-unit integers and pre-formatted decimals. */
+function parseTxUsd(raw: unknown): number {
+  if (raw == null) return 0;
+  const s = String(raw);
+  if (s.includes('.')) return parseFloat(s) || 0;
+  // Pure integer string → USDC base units (6 decimals)
+  const n = Number(s);
+  if (Number.isFinite(n) && n !== 0) return n / 10 ** USDC_DECIMALS;
+  return 0;
+}
+
+/** Format a raw amount to USD string. */
+function formatTxUsd(raw: unknown): string {
+  const usd = parseTxUsd(raw);
+  if (usd === 0) return '—';
+  return `$${usd.toFixed(4)}`;
+}
+
+/** Format amount with sign and color based on transaction type. */
+function formatTxAmount(raw: unknown, type: string): string {
+  const usd = parseTxUsd(raw);
+  if (usd === 0) return '—';
+  const isCredit = type === 'deposit_detected' || type === 'deposit' || type === 'settlement' || type === 'admin_reset';
+  const sign = isCredit ? '+' : '-';
+  const formatted = `${sign}$${usd.toFixed(4)}`;
+  return isCredit ? chalk.green(formatted) : chalk.red(formatted);
+}
+
+/** Format a transaction type with color coding. */
+function formatTxType(type: string): string {
+  switch (type) {
+    case 'spend': return chalk.red(type);
+    case 'deposit_detected': return chalk.green('deposit');
+    case 'deposit': return chalk.green(type);
+    case 'settlement': return chalk.blue(type);
+    case 'withdrawal': return chalk.yellow(type);
+    case 'legacy_sweep': return chalk.dim('sweep');
+    case 'admin_reset': return chalk.magenta('reset');
+    default: return type;
+  }
+}
+
+/** Format a timestamp or date string to human-readable short form. */
+function formatTxDate(raw: unknown): string {
+  if (raw == null || raw === '') return '—';
+  let d: Date;
+  if (typeof raw === 'number') {
+    d = new Date(raw);
+  } else {
+    const s = String(raw);
+    const parsed = Date.parse(s);
+    if (Number.isNaN(parsed)) return s;
+    d = new Date(parsed);
+  }
+  if (Number.isNaN(d.getTime())) return String(raw);
+  // "Mar 4 15:45" — compact and readable
+  const mon = d.toLocaleString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const hr = d.getHours().toString().padStart(2, '0');
+  const min = d.getMinutes().toString().padStart(2, '0');
+  return `${mon} ${day} ${hr}:${min}`;
+}
+
 export function createWalletCommands(config: ConfigManager, store: CredentialStore): Command {
   const wallet = new Command('wallet').description('Manage wallet balance and transactions');
 
@@ -172,24 +239,42 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
         const rows = txList.map((tx) => {
           const t = tx as Record<string, unknown>;
           return {
-            date: String(t.createdAt ?? t.timestamp ?? ''),
-            type: String(t.type ?? t.kind ?? ''),
-            amount: String(t.amount ?? t.usdc ?? ''),
-            status: String(t.status ?? ''),
-            hash: String(t.txHash ?? t.hash ?? '').slice(0, 16) || '—',
+            date: formatTxDate(t.createdAt ?? t.timestamp),
+            type: formatTxType(String(t.type ?? t.kind ?? '')),
+            amount: formatTxAmount(t.amount ?? t.usdc, String(t.type ?? t.kind ?? '')),
+            agent: t.agentId ? String(t.agentId).slice(0, 12) : '—',
+            details: String(t.details ?? t.status ?? '—'),
+            tools: t.toolCallCount != null ? String(t.toolCallCount) : '—',
+            balance: formatTxUsd(t.balance),
           };
         });
 
         console.log(
           formatOutput(rows, [
-            { header: 'Date', key: 'date', width: 25 },
-            { header: 'Type', key: 'type', width: 15 },
-            { header: 'Amount', key: 'amount', width: 15 },
-            { header: 'Status', key: 'status', width: 12 },
-            { header: 'Hash', key: 'hash', width: 20 },
+            { header: 'Date', key: 'date', width: 20 },
+            { header: 'Type', key: 'type', width: 18 },
+            { header: 'Amount', key: 'amount', width: 14 },
+            { header: 'Agent', key: 'agent', width: 14 },
+            { header: 'Details', key: 'details', width: 14 },
+            { header: 'Tools', key: 'tools', width: 7 },
+            { header: 'Balance', key: 'balance', width: 14 },
           ], format)
         );
-        console.log(chalk.dim(`\n${txList.length} transaction(s)`));
+
+        // Summary line
+        const spendTxs = txList.filter((tx) => {
+          const t = tx as Record<string, unknown>;
+          return String(t.type ?? t.kind ?? '') === 'spend';
+        });
+        const totalSpend: number = spendTxs.reduce<number>((sum, tx) => {
+          const t = tx as Record<string, unknown>;
+          return sum + parseTxUsd(t.amount ?? t.usdc);
+        }, 0);
+
+        const parts = [`${txList.length} transaction(s)`];
+        if (totalSpend > 0) parts.push(`total spend: $${totalSpend.toFixed(4)}`);
+        if (data.hasMore) parts.push('use --limit to see more');
+        console.log(chalk.dim(`\n${parts.join(' · ')}`));
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));
       }
