@@ -1,6 +1,7 @@
 node_modules/
-/dist/
+dist/
 *.tsbuildinfo
+.turbo
 .DS_Store
 
 # >>> agentic-secrets-obfuscation >>>

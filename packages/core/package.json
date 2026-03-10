@@ -1,0 +1,80 @@
+{
+  "name": "rickydata",
+  "version": "1.1.0",
+  "description": "TypeScript SDK and CLI for the MCP Gateway — auth, agents, tool calling, and x402 payments",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./agent": {
+      "import": "./dist/agent/index.js",
+      "types": "./dist/agent/index.d.ts"
+    },
+    "./a2a": {
+      "import": "./dist/a2a/index.js",
+      "types": "./dist/a2a/index.d.ts"
+    },
+    "./wallet": {
+      "import": "./dist/wallet/index.js",
+      "types": "./dist/wallet/index.d.ts"
+    },
+    "./canvas": {
+      "import": "./dist/canvas/index.js",
+      "types": "./dist/canvas/index.d.ts"
+    },
+    "./pixel": {
+      "import": "./dist/pixel/index.js",
+      "types": "./dist/pixel/index.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
+    }
+  },
+  "bin": {
+    "rickydata": "./bin/rickydata.js",
+    "mcpg": "./bin/mcpg.js"
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rickycambrian/rickydata_SDK.git"
+  },
+  "homepage": "https://mcpmarketplace.rickydata.org",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agents",
+    "cli"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "typescript": "^5.3.0",
+    "viem": "^2.0.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "open": "^11.0.0",
+    "ora": "^9.3.0",
+    "viem": "^2.0.0"
+  }
+}
