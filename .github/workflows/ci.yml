@@ -17,5 +17,5 @@ jobs:
       - run: npm test
       - name: CLI smoke test
         run: |
-          node bin/rickydata.js --version
-          node bin/mcpg.js --version
+          node packages/core/bin/rickydata.js --version
+          node packages/core/bin/mcpg.js --version
