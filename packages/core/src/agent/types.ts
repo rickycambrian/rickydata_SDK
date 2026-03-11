@@ -242,7 +242,23 @@ export interface WalletSettings {
   persistConversations?: boolean;
   conversationRetentionDays?: number;
   favoriteAgentIds?: string[];
+  groupConversations?: GroupConversationMeta[];
+  kfdbTenantId?: string;
+  kfdbApiKey?: string;
   [key: string]: unknown;
+}
+
+export interface GroupConversationMeta {
+  groupId: string;
+  groupName: string;
+  participantIds: string[];
+  participantNames: string[];
+  orchestratorPrompt: string;
+  orchestratorModel: string;
+  lastMessage: string;
+  lastMessageAt: string;
+  messageCount: number;
+  kfdbSessionId?: string;
 }
 
 export interface WalletBalanceResponse {

@@ -47,6 +47,7 @@ export type {
 
   // Wallet
   WalletSettings,
+  GroupConversationMeta,
   WalletBalanceResponse,
   WalletTransactionsResponse,
 
