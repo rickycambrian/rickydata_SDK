@@ -25,8 +25,10 @@ export function useWalletBalance(opts?: UseWalletBalanceOptions) {
     enabled: opts?.enabled !== false,
   });
 
-  const balance = query.data?.availableBalance ?? '0';
-  const num = parseFloat(balance);
+  const rawBalance = query.data?.availableBalance ?? '0';
+  // Gateway returns balance in micro-units (6 decimals for USDC)
+  const num = parseFloat(rawBalance) / 1_000_000;
+  const balance = String(num);
   const balanceDisplay = isNaN(num) ? '$0.00'
     : num >= 0.01 ? `$${num.toFixed(2)}`
     : num > 0 ? `$${num.toFixed(4)}`
@@ -38,6 +40,7 @@ export function useWalletBalance(opts?: UseWalletBalanceOptions) {
     balanceDisplay,
     depositAddress: query.data?.unifiedDepositAddress,
     agentSpends: query.data?.agentSpends,
+    depositInstructions: query.data?.depositInstructions,
     refresh: () => query.refetch(),
   };
 }

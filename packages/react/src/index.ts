@@ -38,6 +38,9 @@ export type { SecretOrchestratorProps } from './components/SecretOrchestrator.js
 export { WalletChip } from './components/WalletChip.js';
 export type { WalletChipProps } from './components/WalletChip.js';
 
+export { DepositPanel } from './components/DepositPanel.js';
+export type { DepositPanelProps, DepositStatus } from './components/DepositPanel.js';
+
 // Types
 export type { ChatMessage, ToolExecution, SecretSection } from './types.js';
 

@@ -44,6 +44,7 @@ export function useAgentChat({
 
   const modelRef = useRef(model);
   modelRef.current = model;
+  const messageQueueRef = useRef<string[]>([]);
 
   // Check API key status on mount
   useEffect(() => {
@@ -75,7 +76,11 @@ export function useAgentChat({
   }, [client, agentId, resumeSessionId]);
 
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || sending) return;
+    if (!text.trim()) return;
+    if (sending) {
+      messageQueueRef.current.push(text.trim());
+      return;
+    }
 
     // Block if API key not configured
     if (apiKeyConfigured === false) {
@@ -239,8 +244,13 @@ export function useAgentChat({
       setSending(false);
       setStreamingPhase('idle');
       setActiveTools([]);
+      // Process queued messages
+      const nextMessage = messageQueueRef.current.shift();
+      if (nextMessage) {
+        setTimeout(() => sendMessage(nextMessage), 0);
+      }
     }
-  }, [client, agentId, sending, sessionId, apiKeyConfigured]);
+  }, [client, agentId, sessionId, apiKeyConfigured]);
 
   const refreshApiKeyStatus = useCallback(() => {
     client.getApiKeyStatus()
