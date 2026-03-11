@@ -1054,14 +1054,15 @@ export function buildTeamWorkflowPayload(
   orchestratorPrompt: string,
   orchestratorModel: string,
   userMessage: string,
+  teamName: string,
 ): TeamWorkflowPayload {
   const inputNodeId = 'text-input-1';
   const orchestratorNodeId = 'agent-team-orchestrator-1';
 
   return {
     nodes: [
-      { id: inputNodeId, type: 'text-input', data: { text: userMessage } },
-      { id: orchestratorNodeId, type: 'agent-team-orchestrator', data: { prompt: orchestratorPrompt, model: orchestratorModel } },
+      { id: inputNodeId, type: 'text-input', data: { value: userMessage } },
+      { id: orchestratorNodeId, type: 'agent-team-orchestrator', data: { teamName, prompt: orchestratorPrompt, model: orchestratorModel } },
     ],
     connections: [
       { source: inputNodeId, target: orchestratorNodeId },

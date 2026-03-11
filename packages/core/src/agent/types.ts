@@ -165,7 +165,17 @@ export interface AgentDetailResponse {
   description: string;
   model: string;
   tools: string[];
+  toolsCount?: number;
   skills: Array<{ name: string; title: string; description: string }>;
+  skillsCount?: number;
+  categories?: string[];
+  mcpServers?: string[];
+  pricing?: {
+    type: string;
+    amount: string;
+    currency: string;
+    description: string;
+  };
 }
 
 // ─── Sessions ───────────────────────────────────────────────
@@ -239,6 +249,16 @@ export interface WalletBalanceResponse {
   availableBalance: string;
   unifiedDepositAddress: string;
   agentSpends: Record<string, { totalSpent: string }>;
+  depositInstructions?: {
+    network?: string;
+    chainId?: number;
+    chainName?: string;
+    token?: string;
+    tokenAddress?: string;
+    decimals?: number;
+    minimumDeposit?: string;
+    warning?: string;
+  };
 }
 
 export interface WalletTransactionsResponse {
