@@ -37,4 +37,25 @@ export class SecretsManager {
       throw new Error(`Failed to delete secrets: ${res.status}`);
     }
   }
+
+  /**
+   * Get the current secret configuration status for a server.
+   * Returns configured keys, required/optional lists, and the effective mode.
+   */
+  async getStatus(serverId: string): Promise<{
+    configured: string[];
+    required: string[];
+    optional: string[];
+    mode: 'full' | 'read-only' | 'unavailable';
+  }> {
+    const configured = await this.get(serverId);
+    // Requirements come from the MCP gateway requirements endpoint
+    // For now, return what we know from the configured secrets
+    return {
+      configured,
+      required: [],
+      optional: [],
+      mode: configured.length > 0 ? 'full' : 'read-only',
+    };
+  }
 }

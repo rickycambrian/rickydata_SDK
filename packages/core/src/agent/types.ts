@@ -208,6 +208,7 @@ export interface ServerRequirement {
   serverId: string;
   name: string;
   required: string[];
+  optional?: string[];
   configured?: string[];
   missing?: string[];
 }
