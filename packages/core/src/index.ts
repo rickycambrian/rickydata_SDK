@@ -241,3 +241,42 @@ export type {
   AnswerSheetFeedbackResult,
   AnswerSheetClientConfig,
 } from './answer-sheets/index.js';
+
+// Pipeline Client (autonomous issue resolution)
+export { PipelineClient } from './pipeline/index.js';
+export type {
+  PipelineResolveRequest,
+  PipelineResolveResponse,
+  PipelineResolveOptions,
+  PipelineRouting,
+  PipelineRunStatus,
+  PipelineStatusResponse,
+  PipelineROIDataStatus,
+  PipelineOutcomeType,
+  PipelineOutcomeReport,
+  PipelineOutcomeResponse,
+  PipelineROIUpdate,
+  PipelineClientConfig,
+} from './pipeline/index.js';
+
+// Benchmark Client
+export { BenchmarkClient } from './benchmarks/index.js';
+export type {
+  BenchmarkTask,
+  BenchmarkRun,
+  DiffQualityScore,
+  CostMetrics,
+  CreateTaskRequest,
+  TaskSearchOptions,
+  TaskListResult,
+  RecordRunRequest,
+  RunSearchOptions,
+  RunListResult,
+  ROIRecommendation,
+  ROIQuery,
+  ROIResult,
+  CacheROIRequest,
+  ConfigStatEntry,
+  BenchmarkStats,
+  BenchmarkClientConfig,
+} from './benchmarks/index.js';

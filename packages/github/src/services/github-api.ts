@@ -1,0 +1,119 @@
+import type {
+  GitHubInstallation,
+  GitHubIssue,
+  InstallationPolicy,
+  InstallationTriggers,
+  PaginatedResponse,
+  ListOptions,
+  WorkSession,
+  PullRequest,
+} from '../types.js';
+
+export interface GitHubApiConfig {
+  baseUrl: string;
+  getToken: () => Promise<string | undefined>;
+}
+
+export class GitHubApi {
+  private readonly baseUrl: string;
+  private readonly getToken: () => Promise<string | undefined>;
+
+  constructor(config: GitHubApiConfig) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.getToken = config.getToken;
+  }
+
+  // Installations
+  async listInstallations(): Promise<GitHubInstallation[]> {
+    return this.request('/github/installations');
+  }
+
+  async registerInstallation(installationId: string, repos: string[]): Promise<GitHubInstallation> {
+    return this.request('/github/installations', {
+      method: 'POST',
+      body: JSON.stringify({ installationId, repos }),
+    });
+  }
+
+  async updatePolicy(installationId: string, policy: Partial<InstallationPolicy>): Promise<GitHubInstallation> {
+    return this.request(`/github/installations/${installationId}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ policy }),
+    });
+  }
+
+  async updateTriggers(installationId: string, triggers: Partial<InstallationTriggers>): Promise<GitHubInstallation> {
+    return this.request(`/github/installations/${installationId}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ triggers }),
+    });
+  }
+
+  async setTrustTier(installationId: string, tier: GitHubInstallation['trustTier']): Promise<GitHubInstallation> {
+    return this.request(`/github/installations/${installationId}/trust-tier`, {
+      method: 'PUT',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async toggleKillSwitch(installationId: string, enabled: boolean): Promise<GitHubInstallation> {
+    return this.request(`/github/installations/${installationId}/kill-switch`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async getInstallationStats(installationId: string): Promise<GitHubInstallation['stats']> {
+    return this.request(`/github/installations/${installationId}/stats`);
+  }
+
+  // Issues
+  async listIssues(
+    owner: string,
+    repo: string,
+    opts?: ListOptions & { state?: 'open' | 'closed' | 'all'; labels?: string }
+  ): Promise<PaginatedResponse<GitHubIssue>> {
+    const params = new URLSearchParams();
+    if (opts?.state) params.set('state', opts.state);
+    if (opts?.labels) params.set('labels', opts.labels);
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.pageSize) params.set('per_page', String(opts.pageSize));
+    if (opts?.sort) params.set('sort', opts.sort);
+    if (opts?.order) params.set('order', opts.order);
+    const qs = params.toString();
+    return this.request(`/github/repos/${owner}/${repo}/issues${qs ? `?${qs}` : ''}`);
+  }
+
+  // Work sessions
+  async startSession(issueId: string): Promise<WorkSession> {
+    return this.request(`/github/issues/${issueId}/start-session`, { method: 'POST' });
+  }
+
+  async createPR(sessionId: string): Promise<PullRequest> {
+    return this.request(`/github/sessions/${sessionId}/create-pr`, { method: 'POST' });
+  }
+
+  async syncPR(owner: string, repo: string, prNumber: number): Promise<PullRequest> {
+    return this.request(`/github/prs/${prNumber}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ owner, repo }),
+    });
+  }
+
+  // Private helpers
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const token = await this.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers as Record<string, string> || {}),
+    };
+    const res = await globalThis.fetch(url, { ...init, headers });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`GitHub API error ${res.status}: ${body}`);
+    }
+    return res.json();
+  }
+}
