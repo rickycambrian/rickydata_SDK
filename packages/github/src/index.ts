@@ -2,7 +2,7 @@
 export { GitHubProvider, useGitHubClients, type GitHubProviderProps } from './provider.js';
 
 // Services
-export { GitHubApi, type GitHubApiConfig } from './services/github-api.js';
+export { GitHubApi, type GitHubApiConfig, type CreateReviewRunInput } from './services/github-api.js';
 export { PipelineApi, type PipelineApiConfig } from './services/pipeline-api.js';
 export { FeedbackApi, type FeedbackApiConfig } from './services/feedback-api.js';
 
@@ -27,6 +27,14 @@ export { useReportOutcome } from './hooks/useReportOutcome.js';
 export { useRateExecution } from './hooks/useRateExecution.js';
 export { useROIMetrics } from './hooks/useROIMetrics.js';
 export { answerSheetKeys } from './hooks/useAnswerSheets.js';
+export {
+  useReviewRuns,
+  useCreateReviewRun,
+  useGenerateReviewDraft,
+  usePostReviewRun,
+  useReviewRunEventsMap,
+  reviewRunKeys,
+} from './hooks/useReviewRuns.js';
 
 // Components
 export { ConfidenceBadge } from './components/ConfidenceBadge.js';

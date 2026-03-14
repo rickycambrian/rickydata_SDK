@@ -9,3 +9,11 @@ export { useReportOutcome } from './useReportOutcome.js';
 export { useRateExecution } from './useRateExecution.js';
 export { useROIMetrics } from './useROIMetrics.js';
 export { answerSheetKeys } from './useAnswerSheets.js';
+export {
+  useReviewRuns,
+  useCreateReviewRun,
+  useGenerateReviewDraft,
+  usePostReviewRun,
+  useReviewRunEventsMap,
+  reviewRunKeys,
+} from './useReviewRuns.js';

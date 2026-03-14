@@ -231,6 +231,120 @@ export interface AnswerSheetMatch {
   matchType: 'regex' | 'semantic' | 'hybrid';
 }
 
+// === Review Queue Types ===
+
+export type VerificationStatus = 'not_checked' | 'user_confirmed' | 'agent_verified' | 'regression_found';
+export type ReviewRunStatus = 'queued' | 'running' | 'completed' | 'blocked_missing_secrets' | 'failed' | 'posted';
+export type ReviewDecision = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
+
+export interface ReviewIssue {
+  severity: 'critical' | 'major' | 'minor' | 'info' | 'error' | 'warning';
+  message: string;
+  file?: string;
+  line?: number;
+}
+
+export interface ReviewRunError {
+  error: string;
+  code:
+    | 'missing_secrets'
+    | 'budget_exceeded'
+    | 'invalid_model_output'
+    | 'github_access_denied'
+    | 'installation_not_found'
+    | 'auth_required';
+  message: string;
+  retryable: boolean;
+  diagnostics?: Record<string, unknown>;
+  missingSecrets?: Array<{
+    serverId?: string;
+    serverName?: string;
+    secretKeys: string[];
+  }>;
+}
+
+export interface ReviewRunEvent {
+  seq: number;
+  runId: string;
+  correlationId?: string;
+  timestamp: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  phase?: string;
+  status?: ReviewRunStatus;
+  data?: Record<string, unknown>;
+}
+
+export interface ReviewRun {
+  runId: string;
+  correlationId?: string;
+  repo: string;
+  prNumber: number;
+  model: string;
+  status: ReviewRunStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  phase?: string;
+  phaseUpdatedAt?: string;
+  review?: {
+    reviewId: string;
+    score: number;
+    confidence: number;
+    summary: string;
+    model: string;
+    issues: ReviewIssue[];
+    suggestions: string[];
+    timestamp: string;
+  };
+  evidence?: {
+    syncedAt: string;
+    checks: {
+      allPassed?: boolean;
+      anyFailed?: boolean;
+      pending?: boolean;
+      totalCount?: number;
+      checkRuns?: Array<{
+        name: string;
+        status: string;
+        conclusion: string | null;
+      }>;
+    } | null;
+  };
+  humanVerification: {
+    status: VerificationStatus;
+    note?: string;
+    updatedAt: string;
+  };
+  recommendation?: {
+    decision: ReviewDecision;
+    rationale: string;
+    score: number;
+    confidence: number;
+    hasMajorIssues: boolean;
+    hasFailingChecks: boolean;
+    verificationStatus: VerificationStatus;
+  };
+  generatedReviewBody?: string;
+  githubReview?: {
+    id: number;
+    htmlUrl: string;
+    state: string;
+    submittedAt?: string;
+    event: ReviewDecision;
+  };
+  error?: ReviewRunError;
+  events?: ReviewRunEvent[];
+  plannedLikelihood?: {
+    expectedSuccess?: number;
+    expectedCost?: number;
+    confidenceLower?: number;
+    confidenceUpper?: number;
+    model?: string;
+  };
+}
+
 // === Common ===
 
 export interface PaginatedResponse<T> {
