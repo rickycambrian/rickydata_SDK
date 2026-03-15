@@ -136,6 +136,85 @@ export class AuthManager {
     if (existingToken) this.token = existingToken;
   }
 
+  /**
+   * Authenticate via GitHub Actions OIDC token exchange.
+   *
+   * When running in a GitHub Actions workflow, the runner can generate an OIDC
+   * token that proves the workflow is executing for a specific repository. The
+   * Agent Gateway verifies this token against GitHub's JWKS, checks that the
+   * repository has an active rickydata GitHub App installation, and returns a
+   * short-lived session token.
+   *
+   * Requires `permissions: id-token: write` in the workflow.
+   *
+   * @param repository - GitHub repository in "owner/repo" format
+   * @param audience - Optional OIDC audience (defaults to the Agent Gateway URL)
+   */
+  async authenticateWithGitHubOIDC(
+    repository: string,
+    audience?: string,
+  ): Promise<AuthSession> {
+    this.signerClient = null;
+
+    const oidcToken = await AuthManager.getGitHubOIDCToken(audience ?? this.baseUrl);
+
+    const res = await fetch(`${this.baseUrl}/auth/github/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: oidcToken, repository }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(
+        `GitHub OIDC auth failed: ${res.status} ${body}. ` +
+        'Ensure the rickydata GitHub App is installed on this repository.',
+      );
+    }
+
+    const data = await res.json();
+    this.token = data.token;
+    this.address = data.walletAddress ?? null;
+    this.expiresAt = this.parseExpiresAt(data.expiresAt);
+    this._authMode = null; // OIDC tokens are single-use, re-auth by calling again
+    return { token: data.token, address: data.walletAddress ?? '', expiresAt: data.expiresAt ?? '' };
+  }
+
+  /**
+   * Request an OIDC token from the GitHub Actions runtime.
+   * Only works inside a GitHub Actions workflow with `id-token: write` permission.
+   */
+  static async getGitHubOIDCToken(audience: string): Promise<string> {
+    const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+    const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+
+    if (!requestUrl || !requestToken) {
+      throw new Error(
+        'GitHub OIDC not available. This method only works inside GitHub Actions ' +
+        'with `permissions: id-token: write`. ' +
+        'Env vars ACTIONS_ID_TOKEN_REQUEST_URL and ACTIONS_ID_TOKEN_REQUEST_TOKEN are required.',
+      );
+    }
+
+    const url = `${requestUrl}&audience=${encodeURIComponent(audience)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `bearer ${requestToken}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get GitHub OIDC token: ${res.status} ${body}`);
+    }
+
+    const data = await res.json();
+    return data.value;
+  }
+
+  /** Check if running inside GitHub Actions with OIDC available. */
+  static get isGitHubActions(): boolean {
+    return !!(process.env.GITHUB_ACTIONS && process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  }
+
   setRuntimeScopeId(runtimeScopeId?: string | null): void {
     this.runtimeScopeId = runtimeScopeId?.trim() || null;
   }

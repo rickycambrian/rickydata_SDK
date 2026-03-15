@@ -196,6 +196,16 @@ export type {
   CanvasExecutionResult,
 } from './canvas/index.js';
 
+// Canvas PR Review
+export { buildPRReviewWorkflow, parseCanvasReviewResult, formatGitHubReview } from './canvas/index.js';
+export type {
+  PRReviewWorkflowInput,
+  ReviewFinding,
+  ParsedReviewResult,
+  GitHubReviewPayload,
+  GitHubReviewComment,
+} from './canvas/index.js';
+
 // Pixel Office Client
 export { PixelClient, buildGitHubWorktreeWorkflow } from './pixel/index.js';
 export type {

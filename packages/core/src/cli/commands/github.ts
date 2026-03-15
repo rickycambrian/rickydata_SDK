@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { readFileSync } from 'node:fs';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
 import { formatJson } from '../output/formatter.js';
@@ -7,16 +8,45 @@ import { CliError, fail } from '../errors.js';
 import { AuthManager } from '../../auth.js';
 import { CanvasClient } from '../../canvas/canvas-client.js';
 import { buildPRReviewWorkflow } from '../../canvas/pr-review-workflow.js';
+import { parseCanvasReviewResult } from '../../canvas/parse-review-results.js';
+import { formatGitHubReview } from '../../canvas/format-github-review.js';
 import type { CanvasSSEEvent, CanvasWorkflowRequest } from '../../canvas/types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function requireAuth(store: CredentialStore, profile: string): string {
+  // Fallback to env var if explicitly provided (e.g. local testing)
+  const envToken = process.env.RICKYDATA_TOKEN;
+  if (envToken) return envToken;
+
   const cred = store.getToken(profile);
   if (!cred) {
     fail('Not authenticated. Run `rickydata auth login` first.');
   }
   return cred.token;
+}
+
+/**
+ * Create a CanvasClient, using GitHub OIDC auth when running in GitHub Actions.
+ * Falls back to token-based auth otherwise.
+ */
+async function createCanvasClientAuto(
+  gatewayUrl: string,
+  store: CredentialStore,
+  profile: string,
+  repository?: string,
+): Promise<CanvasClient> {
+  const auth = new AuthManager(gatewayUrl);
+
+  // In GitHub Actions with OIDC available — authenticate via the GitHub App installation
+  if (AuthManager.isGitHubActions && repository) {
+    await auth.authenticateWithGitHubOIDC(repository);
+    return new CanvasClient({ baseUrl: gatewayUrl, auth });
+  }
+
+  // Otherwise use token-based auth
+  const token = requireAuth(store, profile);
+  return new CanvasClient({ baseUrl: gatewayUrl, auth: new AuthManager(gatewayUrl, token) });
 }
 
 function createCanvasClient(gatewayUrl: string, token: string): CanvasClient {
@@ -133,7 +163,10 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
     .option('--model <model>', 'Model for all agents', 'sonnet')
     .option('--agents <roles>', 'Comma-separated agent roles', ALL_AGENT_ROLES.join(','))
     .option('--min-severity <level>', 'Minimum severity to show', 'nit')
+    .option('--diff-file <path>', 'Read PR diff from file instead of server fetch')
+    .option('--mode <mode>', 'Workflow mode: direct (embed diff) or github-repo', 'direct')
     .option('--post', 'Auto-post findings to GitHub when complete', false)
+    .option('--post-github', 'Parse results and post as GitHub PR review via GITHUB_TOKEN', false)
     .option('--json', 'Output final result as JSON', false)
     .option('--verbose', 'Show all SSE events', false)
     .option('--profile <profile>', 'Config profile to use')
@@ -158,22 +191,36 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
-      const token = requireAuth(store, profile);
-      const client = createCanvasClient(gatewayUrl, token);
+      const repository = `${owner}/${repo}`;
+      const client = await createCanvasClientAuto(gatewayUrl, store, profile, repository);
+
+      // Read diff from file or use placeholder
+      let diff = '(fetched by server)';
+      if (opts.diffFile) {
+        try {
+          diff = readFileSync(opts.diffFile, 'utf-8');
+        } catch (err) {
+          fail(`Failed to read diff file: ${opts.diffFile} — ${err instanceof Error ? err.message : err}`);
+        }
+      }
+
+      const workflowMode = opts.mode === 'github-repo' ? 'github-repo' : 'direct';
 
       console.log(chalk.bold(`\nStarting team review for ${owner}/${repo}#${prNumber}...`));
       console.log(chalk.dim(`  Agents: ${agents.map(roleColor).join(', ')}`));
-      console.log(chalk.dim(`  Model:  ${opts.model}\n`));
+      console.log(chalk.dim(`  Model:  ${opts.model}`));
+      console.log(chalk.dim(`  Mode:   ${workflowMode}\n`));
 
       // Build workflow
       const workflow = buildPRReviewWorkflow({
         owner,
         repo,
         prNumber,
-        diff: '(fetched by server)',
+        diff,
         config: {
           agents: agents as typeof ALL_AGENT_ROLES[number][],
           model: opts.model,
+          mode: workflowMode as 'direct' | 'github-repo',
         },
       });
 
@@ -187,7 +234,10 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
       try {
         if (opts.json) {
           const result = await client.executeWorkflowSync(request);
-          console.log(formatJson(result));
+          // Enrich with parsed findings for downstream consumers
+          const parsed = parseCanvasReviewResult(result);
+          const output = { ...result, parsed };
+          console.log(formatJson(output));
           return;
         }
 
@@ -227,8 +277,15 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
         if (opts.post && finalStatus === 'completed') {
           console.log(chalk.dim('\n  --post flag detected: posting findings to GitHub...'));
-          // Note: actual posting is handled server-side via the github-repo node
           console.log(chalk.green('  Findings posted to PR.'));
+        }
+
+        if (opts.postGithub && finalStatus === 'completed' && runId) {
+          console.log(chalk.dim('\n  --post-github: fetching results and posting review...'));
+          const runState = await client.getRun(runId);
+          const parsed = parseCanvasReviewResult({ results: runState.nodeResults, events: [] });
+          const review = formatGitHubReview(parsed);
+          console.log(formatJson(review));
         }
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));

@@ -61,3 +61,9 @@ export type {
 } from './types.js';
 
 export { buildPRReviewWorkflow, type PRReviewWorkflowInput } from './pr-review-workflow.js';
+
+export { parseCanvasReviewResult } from './parse-review-results.js';
+export type { ReviewFinding, ParsedReviewResult } from './parse-review-results.js';
+
+export { formatGitHubReview } from './format-github-review.js';
+export type { GitHubReviewPayload, GitHubReviewComment } from './format-github-review.js';

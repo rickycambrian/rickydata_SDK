@@ -28,6 +28,8 @@ export interface PRReviewWorkflowInput {
     model?: string;
     perAgentModel?: Partial<Record<string, string>>;
     maxFindingsPerAgent?: number;
+    /** 'direct' embeds the diff in text-input (no GitHub installation needed). 'github-repo' uses the github-repo node. */
+    mode?: 'direct' | 'github-repo';
   };
 }
 
@@ -58,7 +60,13 @@ const ROLE_PROMPTS: Record<PRReviewRole, string> = {
 const ORCHESTRATOR_PROMPT =
   'You are coordinating a team of specialized code reviewers analyzing a GitHub PR. ' +
   'Aggregate findings from all agents, deduplicate overlapping issues, and produce a final prioritized list of findings. ' +
-  'Each finding must include: severity (critical/major/minor/nit/praise), category, file, line number, title, body, and optional code suggestion.';
+  'Each finding must include: severity, category, file, line, title, body, suggestion. ' +
+  '\n\nOUTPUT FORMAT: Return a JSON object: ' +
+  '{"summary":"one-paragraph summary of review","findings":[{"severity":"critical|major|minor|nit|praise",' +
+  '"category":"bug|security|performance|style|test|docs|architecture|other",' +
+  '"file":"path/to/file","line":42,"title":"Short title","body":"Detailed explanation",' +
+  '"suggestion":"optional code fix"}]}' +
+  '\n\nReturn ONLY the JSON object with no other text.';
 
 /**
  * Build a canvas workflow payload for multi-agent PR review.
@@ -69,6 +77,7 @@ export function buildPRReviewWorkflow(input: PRReviewWorkflowInput): Record<stri
   const model = config?.model ?? 'sonnet';
   const perAgentModel = config?.perAgentModel ?? {};
   const maxFindings = config?.maxFindingsPerAgent;
+  const mode = config?.mode ?? 'direct';
 
   // ── Nodes ────────────────────────────────────────────────────────────────
 
@@ -86,7 +95,6 @@ export function buildPRReviewWorkflow(input: PRReviewWorkflowInput): Record<stri
 
   const nodes: { id: string; type: string; data: Record<string, unknown> }[] = [
     { id: textInputId, type: 'text-input', data: { value: inputValue } },
-    { id: githubRepoId, type: 'github-repo', data: { owner, repo } },
     {
       id: orchestratorId,
       type: 'agent-team-orchestrator',
@@ -94,6 +102,11 @@ export function buildPRReviewWorkflow(input: PRReviewWorkflowInput): Record<stri
     },
     { id: resultsId, type: 'results', data: {} },
   ];
+
+  // Only include github-repo node when mode is 'github-repo'
+  if (mode === 'github-repo') {
+    nodes.splice(1, 0, { id: githubRepoId, type: 'github-repo', data: { owner, repo } });
+  }
 
   const teammates: {
     nodeId: string;
@@ -120,13 +133,16 @@ export function buildPRReviewWorkflow(input: PRReviewWorkflowInput): Record<stri
   }
 
   // ── Connections ──────────────────────────────────────────────────────────
-  // text-input & github-repo feed into orchestrator; orchestrator feeds results
+  // text-input feeds into orchestrator; github-repo also feeds in when enabled
 
   const connections = [
     { source: textInputId, target: orchestratorId },
-    { source: githubRepoId, target: orchestratorId },
     { source: orchestratorId, target: resultsId },
   ];
+
+  if (mode === 'github-repo') {
+    connections.splice(1, 0, { source: githubRepoId, target: orchestratorId });
+  }
 
   // ── Payload ──────────────────────────────────────────────────────────────
   // Teammate nodes are NOT in the nodes array — the server creates them from teamRuntime

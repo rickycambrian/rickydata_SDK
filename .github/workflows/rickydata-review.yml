@@ -1,0 +1,56 @@
+name: rickydata Team Review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write  # Required for GitHub OIDC → rickydata auth (no secrets needed)
+
+concurrency:
+  group: rickydata-review-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@rickydata review')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Acknowledge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content="eyes" --method POST || true
+          gh pr comment "${{ github.event.issue.number }}" \
+            --body "**rickydata review** starting — 6 agents analyzing this PR..."
+
+      - name: Get PR diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr diff "${{ github.event.issue.number }}" > /tmp/pr.diff
+
+      - name: Install dependencies and build
+        run: npm ci && npm run build:core
+
+      - name: Run team review
+        run: |
+          node packages/core/bin/rickydata.js github review \
+            "${{ github.repository }}#${{ github.event.issue.number }}" \
+            --diff-file /tmp/pr.diff --json > /tmp/review-result.json
+
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/post-review.mjs "${{ github.repository }}" "${{ github.event.issue.number }}"
