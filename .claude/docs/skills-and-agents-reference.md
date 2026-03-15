@@ -99,6 +99,8 @@ Same-name conflicts: higher priority wins (enterprise > personal > project). Plu
 | `mcp-search` | Reference/Task | Yes | Search MCP marketplace |
 | `research-improve` | Task | Yes | Full research-improve pipeline |
 | `research-improve-team` | Task | No (manual only) | Team-mode research pipeline |
+| `review-pr` | Task | Yes | Multi-agent PR review via canvas workflow engine |
+| `verify-deployment` | Task | Yes | Post-deployment verification setup and execution |
 
 ### Agents
 | Name | Model | Tools | Purpose |
