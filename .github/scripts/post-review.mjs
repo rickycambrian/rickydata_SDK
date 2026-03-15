@@ -34,11 +34,65 @@ try {
   process.exit(1);
 }
 
+// ── Debug: log result structure ──────────────────────────────────────────────
+
+console.log('Result keys:', Object.keys(resultJson));
+console.log('Results keys:', Object.keys(resultJson.results ?? {}));
+if (resultJson.parsed) {
+  console.log('Parsed findings count:', resultJson.parsed.findings?.length ?? 0);
+  console.log('Parsed summary:', resultJson.parsed.summary?.slice(0, 200));
+} else {
+  console.log('No parsed field — will attempt extraction from raw results');
+}
+
+// Log a preview of each result node value
+for (const [key, val] of Object.entries(resultJson.results ?? {})) {
+  const preview = typeof val === 'string' ? val.slice(0, 300) : JSON.stringify(val).slice(0, 300);
+  console.log(`Result[${key}]:`, preview);
+}
+
 // ── Extract findings ────────────────────────────────────────────────────────
 
-const parsed = resultJson.parsed ?? {};
-const findings = parsed.findings ?? [];
-const summary = parsed.summary ?? '';
+let parsed = resultJson.parsed ?? {};
+let findings = parsed.findings ?? [];
+let summary = parsed.summary ?? '';
+
+// If the CLI's parser didn't find structured findings, try extracting from raw results
+if (findings.length === 0 && resultJson.results) {
+  const allStrings = collectStrings(resultJson.results);
+  allStrings.sort((a, b) => b.length - a.length);
+
+  for (const candidate of allStrings) {
+    const extracted = extractJSON(candidate);
+    if (extracted && typeof extracted === 'object' && Array.isArray(extracted.findings)) {
+      findings = extracted.findings;
+      summary = extracted.summary ?? summary;
+      console.log(`Extracted ${findings.length} findings from raw results`);
+      break;
+    }
+  }
+}
+
+function collectStrings(val) {
+  if (typeof val === 'string') return [val];
+  if (Array.isArray(val)) return val.flatMap(collectStrings);
+  if (val && typeof val === 'object') return Object.values(val).flatMap(collectStrings);
+  return [];
+}
+
+function extractJSON(text) {
+  // Try markdown code block
+  const codeBlockMatch = /```(?:json)?\s*\n?([\s\S]*?)```/.exec(text);
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1].trim()); } catch {}
+  }
+  // Try raw JSON object
+  const jsonMatch = /(\{[\s\S]*\})/.exec(text);
+  if (jsonMatch) {
+    try { return JSON.parse(jsonMatch[1]); } catch {}
+  }
+  return null;
+}
 
 const SEVERITY_EMOJI = {
   critical: '\u{1F534}',

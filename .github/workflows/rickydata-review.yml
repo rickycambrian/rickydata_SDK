@@ -50,6 +50,14 @@ jobs:
             "${{ github.repository }}#${{ github.event.issue.number }}" \
             --diff-file /tmp/pr.diff --json > /tmp/review-result.json
 
+      - name: Debug result
+        if: always()
+        run: |
+          echo "=== Result file size ==="
+          wc -c /tmp/review-result.json || true
+          echo "=== Result keys ==="
+          node -e "const r=JSON.parse(require('fs').readFileSync('/tmp/review-result.json','utf-8')); console.log('Top keys:', Object.keys(r)); console.log('Status:', r.status); console.log('Results keys:', Object.keys(r.results||{})); for(const [k,v] of Object.entries(r.results||{})){const s=typeof v==='string'?v:JSON.stringify(v); console.log(k+' ('+s.length+' chars):', s.slice(0,500))}" || true
+
       - name: Post review
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

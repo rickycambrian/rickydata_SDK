@@ -46,10 +46,20 @@ function extractJSON(text: string): unknown | null {
 }
 
 /**
+ * Recursively collect all string values from an object/array.
+ */
+function collectStrings(val: unknown): string[] {
+  if (typeof val === 'string') return [val];
+  if (Array.isArray(val)) return val.flatMap(collectStrings);
+  if (val && typeof val === 'object') return Object.values(val).flatMap(collectStrings);
+  return [];
+}
+
+/**
  * Parse canvas execution result into structured findings.
  *
- * Looks for the results node output (typically keyed as 'results-1') and
- * extracts the orchestrator's JSON findings from it.
+ * Searches the results object for the orchestrator's JSON output.
+ * Tries known keys first, then searches all string values recursively.
  */
 export function parseCanvasReviewResult(executionResult: {
   results: Record<string, unknown>;
@@ -57,45 +67,50 @@ export function parseCanvasReviewResult(executionResult: {
 }): ParsedReviewResult {
   const { results } = executionResult;
 
-  // Find the results node output — try common keys
-  let rawOutput = '';
-  for (const key of ['results-1', 'results']) {
+  // Collect candidate strings — try known keys first, then all values
+  const candidates: string[] = [];
+
+  // Priority keys
+  for (const key of ['results-1', 'results', 'agent-team-orchestrator-1']) {
     if (results[key] != null) {
-      rawOutput = typeof results[key] === 'string'
-        ? results[key]
-        : JSON.stringify(results[key]);
-      break;
-    }
-  }
-
-  // Fallback: use the first string result
-  if (!rawOutput) {
-    for (const val of Object.values(results)) {
-      if (typeof val === 'string' && val.length > 0) {
-        rawOutput = val;
-        break;
-      }
-      if (typeof val === 'object' && val !== null) {
-        rawOutput = JSON.stringify(val);
-        break;
+      const val = results[key];
+      if (typeof val === 'string') {
+        candidates.push(val);
+      } else {
+        candidates.push(JSON.stringify(val));
+        // Also collect nested strings (e.g. { result: "..." })
+        candidates.push(...collectStrings(val));
       }
     }
   }
 
-  if (!rawOutput) {
-    return { findings: [], summary: 'No results found in canvas execution output.', rawOutput: '' };
+  // Fallback: all values
+  if (candidates.length === 0) {
+    candidates.push(...collectStrings(results));
   }
 
-  // Try to extract structured JSON
-  const parsed = extractJSON(rawOutput);
+  // Try to extract structured JSON from each candidate (longest first — most likely to contain full output)
+  candidates.sort((a, b) => b.length - a.length);
 
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const obj = parsed as Record<string, unknown>;
-    const findings = Array.isArray(obj.findings) ? obj.findings as ReviewFinding[] : [];
-    const summary = typeof obj.summary === 'string' ? obj.summary : '';
-    return { findings, summary, rawOutput };
+  for (const candidate of candidates) {
+    if (!candidate || candidate.length < 10) continue;
+
+    const parsed = extractJSON(candidate);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      if (Array.isArray(obj.findings)) {
+        const findings = obj.findings as ReviewFinding[];
+        const summary = typeof obj.summary === 'string' ? obj.summary : '';
+        return { findings, summary, rawOutput: candidate };
+      }
+    }
   }
 
-  // Fallback: return raw output as summary with no structured findings
-  return { findings: [], summary: rawOutput.slice(0, 2000), rawOutput };
+  // No structured findings found — use the longest string as raw output
+  const rawOutput = candidates[0] ?? JSON.stringify(results);
+  return {
+    findings: [],
+    summary: rawOutput.slice(0, 2000),
+    rawOutput,
+  };
 }
