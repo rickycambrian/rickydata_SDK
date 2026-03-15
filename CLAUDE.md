@@ -100,6 +100,22 @@ rickydata mcp agent list                              # Show enabled agents
 
 Architecture: single stdio proxy registered once with Claude Code. It watches `~/.rickydata/mcp-agents.json` and sends `notifications/tools/list_changed` to hot-swap tools.
 
+## Research-Driven Improvement
+
+| Skill | When to Use | Invocation |
+|-------|-------------|------------|
+| `research-improve` | Find research-backed codebase improvements | `/research-improve [focus]` |
+| `research-improve-team` | Parallel team mode for larger efforts | `/research-improve-team [focus]` |
+
+| Agent | Purpose |
+|-------|---------|
+| `codebase-explorer` | Deep repo exploration for gaps and architecture |
+| `paper-discoverer` | Find relevant academic papers via MCP research agent |
+| `research-synthesizer` | Cross-reference research with codebase gaps |
+| `docs-expert` | Record verified working patterns as skills |
+
+**Prerequisite**: `rickydata-proxy` MCP server must be connected (`rickydata mcp proxy-connect`).
+
 ## Conventions
 
 - All HTTP clients use native `fetch` (Node 18+)
