@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 
 Create or run automated post-deployment verification for services. This pattern has been verified working across 4 repos: knowledgeflow_db (GKE), rickydata_docs (Cloud Run), KF-serverless (Cloud Run), and canvas-workflows (Cloud Run).
 
-**Provenance:** Verified working 2026-03-15. Deployed and validated via `workflow_dispatch` on all 4 repos. Concurrency guard validated on rickydata_docs (cancel-in-progress confirmed). Auto-close mechanism validated on knowledgeflow_db (issue #27 auto-closed on successful run). Run IDs: knowledgeflow_db/23112445668, rickydata_docs/23112446229, KF-serverless/23112452922, canvas-workflows/23112453446.
+**Provenance:** Verified working 2026-03-15. Deployed and validated via `workflow_dispatch` on all 4 repos. Concurrency guard validated on rickydata_docs (cancel-in-progress confirmed). Auto-close mechanism validated on knowledgeflow_db (issue #27 auto-closed on successful run). Maintenance mode validated on rickydata_docs (SKIP_VERIFICATION=true → job skipped, then unset → job ran normally). End-to-end lifecycle validated on knowledgeflow_db: forced failure (commit 414a666, threshold=1ms) → issue #28 created → fix (commit b8b22cb, threshold=500ms) → issue #28 auto-closed. Run IDs: knowledgeflow_db/23112445668, rickydata_docs/23112446229, KF-serverless/23112452922, canvas-workflows/23112453446. Maintenance mode run IDs: rickydata_docs/23112707623 (skipped), rickydata_docs/23112714505 (success after unset). Lifecycle run IDs: knowledgeflow_db/23112741606 (failure, issue #28 created), knowledgeflow_db/23112763852 (success, issue #28 auto-closed).
 
 ## Verified Architecture
 
@@ -33,9 +33,9 @@ concurrency:
 
 1. **Concurrency guard**: `concurrency: group: verify-deployment-${{ head_sha }}` with `cancel-in-progress: true` — prevents duplicate verification runs for the same commit. Validated: rapid double-trigger on rickydata_docs correctly cancelled the first run.
 2. **[skip-verify] suppression**: Add `if: !contains(github.event.workflow_run.head_commit.message, '[skip-verify]')` to the job — allows skipping verification for documentation-only changes.
-3. **Maintenance mode**: Add `if: vars.SKIP_VERIFICATION != 'true'` to the job — set the `SKIP_VERIFICATION` repo variable to `true` during planned maintenance windows.
+3. **Maintenance mode**: Add `if: vars.SKIP_VERIFICATION != 'true'` to the job — set the `SKIP_VERIFICATION` repo variable to `true` during planned maintenance windows. Validated: rickydata_docs with `SKIP_VERIFICATION=true` → run 23112707623 skipped; after variable deletion → run 23112714505 succeeded normally.
 4. **Standardized timeouts**: Use env vars `HEALTH_POLL_ATTEMPTS: 36` and `HEALTH_POLL_INTERVAL: 5` (3 minutes total) instead of hardcoded values.
-5. **Auto-close on recovery**: A `github-script` step in `report-success` that closes open `deploy-verification` issues when verification passes. Validated: knowledgeflow_db issue #27 was auto-closed on successful run.
+5. **Auto-close on recovery**: A `github-script` step in `report-success` that closes open `deploy-verification` issues when verification passes. Validated: knowledgeflow_db issue #27 auto-closed on successful run. Full lifecycle validated: forced failure (run 23112741606) created issue #28, then fix + re-run (run 23112763852) auto-closed issue #28.
 
 Key steps:
 1. **Gate on success**: `if: github.event.workflow_run.conclusion == 'success'`

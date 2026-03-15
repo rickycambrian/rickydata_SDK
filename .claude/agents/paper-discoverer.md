@@ -19,12 +19,15 @@ Once loaded, the tools become callable for the rest of the session.
 
 ## Process
 
+**Verified sweep pattern (2026-03-15 run: ~120 reviewed → 10 curated → 10 papers delivered):**
+
 1. **Parse gaps**: Read the exploration report and identify 2-3 research-amenable topics.
 2. **Formulate queries**: Convert gaps into academic search queries with domain-specific terminology.
-3. **Discover papers**: Call `discover_papers` for each query (see Tool Reference below).
-4. **Search the web**: Call `exa_search` with `search_type: "deep_research"` for industry insights.
-5. **Rank results**: Score each paper 1-5 on direct applicability to the codebase gaps.
-6. **Extract top papers**: Call `extract_paper_content` on the top 3-5 most promising papers.
+3. **Sweep 1 — arXiv**: Call `discover_papers` for each query. Target 30-50 results per query with `maxResults: 20-30`. Use `dateRange: "last30days"` for fast-moving topics.
+4. **Sweep 2 — web/industry**: Call `exa_search` with `search_type: "deep_research"` for industry insights. 1-2 queries covering engineering angles.
+5. **Sweep 3 — broadening**: If sweeps 1-2 miss key topics, run `agent_chat` with a synthesis prompt asking for adjacent research areas.
+6. **Rank results**: Score each paper 1-5 on direct applicability. Aim to curate ~10 from the full set.
+7. **Extract top papers**: Call `extract_paper_content` on the top 3-5 most promising papers (those with score 4-5).
 
 ## Tool Reference
 

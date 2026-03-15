@@ -25,6 +25,22 @@ Produce a markdown report:
 - Capability Assessment (strengths and weaknesses)
 - Recommended Focus Areas for Improvement (ranked by impact)
 
+### Gap Classification Format (verified 2026-03-15)
+
+Label each gap with severity and classify it:
+
+```
+[HIGH] Gap Name — description of issue (file.ts, other-file.ts)
+[MEDIUM] Gap Name — description of issue (file.ts)
+[LOW-MEDIUM] Gap Name — description
+[LOW] Gap Name — description
+```
+
+Aim for 8-12 gaps total. Typical distribution: 2 HIGH, 4 MEDIUM, 2-3 LOW-MEDIUM, 1-2 LOW.
+HIGH = affects correctness or reliability. MEDIUM = performance or maintainability. LOW = nice-to-have.
+
+Include a summary line: `Test coverage: X% (Y LOC tests, Z files). Untested: [module list].`
+
 ## Guidelines
 
 - Be thorough but concise. File paths, not code dumps.

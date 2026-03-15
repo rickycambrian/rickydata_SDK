@@ -154,6 +154,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 |-------|-------------|------------|
 | `research-improve` | Find research-backed codebase improvements | `/research-improve [focus]` |
 | `research-improve-team` | Parallel team mode for larger efforts | `/research-improve-team [focus]` |
+| `implement-research-plan` | Execute top items from a synthesized research plan | `/implement-research-plan [item#]` |
 
 | Agent | Purpose |
 |-------|---------|
