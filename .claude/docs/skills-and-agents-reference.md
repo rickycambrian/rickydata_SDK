@@ -112,3 +112,11 @@ Same-name conflicts: higher priority wins (enterprise > personal > project). Plu
 | `paper-discoverer` | sonnet | Read/Grep/Glob/MCP tools | Paper discovery (Phase 2) |
 | `research-synthesizer` | sonnet | Read/Grep/Glob | Research-to-implementation (Phase 3) |
 | `docs-expert` | sonnet | Read/Write/Edit/Bash/Glob/Grep | Pattern recording specialist |
+
+## Key Reference Docs
+
+| Doc | Purpose |
+|-----|---------|
+| `.claude/docs/research-improve-guide.md` | Complete usage guide for `/research-improve` pipeline |
+| `.claude/docs/agent-teams-reference.md` | Agent teammates vs sub-agents — API reference for plans |
+| `.claude/docs/ecosystem-architecture.md` | Cross-repo architecture overview |

@@ -102,13 +102,21 @@ For larger improvement efforts, team mode spawns 4 coordinated agents that work 
 
 **Requires**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `.claude/settings.json` (already configured in all 4 repos).
 
-Team mode spawns:
-- `explorer` (codebase-explorer agent) — explores the repo
-- `researcher` (paper-discoverer agent) — discovers and extracts papers
-- `synthesizer` (research-synthesizer agent) — produces implementation plan
-- `documenter` (docs-expert agent) — records verified patterns as new skills
+**IMPORTANT**: Team mode uses `TeamCreate` + `Agent(name: "X", team_name: "T")` to create persistent teammates, NOT `Agent(subagent_type: "X")` sub-agents. Teammates communicate via `SendMessage` and share a `TaskList`. See `.claude/docs/agent-teams-reference.md` for the full API.
 
-The team lead coordinates handoffs between teammates via `SendMessage`.
+Team mode spawns 4 named teammates:
+- `explorer` (codebase-explorer) — explores the repo, sends gap report to team lead
+- `researcher` (paper-discoverer) — discovers and extracts papers, sends analyses to team lead
+- `synthesizer` (research-synthesizer) — produces implementation plan, sends to team lead
+- `documenter` (docs-expert) — records verified patterns as new skills
+
+The team lead:
+1. Creates the team with `TeamCreate(team_name: "research-improve-team")`
+2. Creates 4 tasks with `TaskCreate` and sets dependencies with `TaskUpdate(addBlockedBy: [...])`
+3. Spawns teammates with `Agent(name: "X", team_name: "research-improve-team", ...)`
+4. Assigns tasks via `TaskUpdate(taskId: "1", owner: "explorer")`
+5. Relays full output between teammates via `SendMessage(to: "researcher", message: "...")`
+6. Sends `shutdown_request` to all teammates when done, then calls `TeamDelete()`
 
 ---
 

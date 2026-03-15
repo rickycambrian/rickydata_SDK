@@ -154,7 +154,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | Skill | When to Use | Invocation |
 |-------|-------------|------------|
 | `research-improve` | Find research-backed codebase improvements | `/research-improve [focus]` |
-| `research-improve-team` | Parallel team mode for larger efforts | `/research-improve-team [focus]` |
+| `research-improve-team` | Agent team mode (uses TeamCreate/SendMessage, NOT sub-agents) | `/research-improve-team [focus]` |
 | `implement-research-plan` | Execute top items from a synthesized research plan | `/implement-research-plan [item#]` |
 
 | Agent | Purpose |
@@ -165,6 +165,8 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `docs-expert` | Record verified working patterns as skills |
 
 **Prerequisite**: `rickydata-proxy` MCP server must be connected (`rickydata mcp proxy-connect`).
+
+**Agent Teams Note**: `/research-improve-team` uses `TeamCreate` + `Agent(name: "X", team_name: "T")` to create persistent teammates that communicate via `SendMessage`. Do NOT use `Agent(subagent_type: "X")` for team mode — that creates disposable sub-agents. See `.claude/docs/agent-teams-reference.md` for the full API.
 
 ## Conventions
 
