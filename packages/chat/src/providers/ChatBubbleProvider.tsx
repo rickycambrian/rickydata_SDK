@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useRef, type ReactNode } from 'reac
 import { AgentClient, type AgentClientConfig } from 'rickydata/agent';
 import type { WalletAdapter } from '../types/wallet.js';
 import type { ThemeConfig } from '../types/theme.js';
-import type { ChatContext, ChatMessage } from '../types/chat.js';
+import type { ChatContext, ChatMessage, ChatEngine } from '../types/chat.js';
 import type { ActionProposal } from '../types/actions.js';
 import type { ChatBubbleEvent } from '../types/events.js';
 import { darkTokens, lightTokens } from '../theme/tokens.js';
@@ -40,6 +40,8 @@ export interface ChatBubbleConfig {
   modes?: ('chat' | 'voice' | 'threads')[];
   /** Callbacks. */
   callbacks?: ChatBubbleCallbacks;
+  /** External chat engine — bypasses built-in useChatBubbleEngine when provided. */
+  engine?: ChatEngine;
 }
 
 interface ChatBubbleContextValue {

@@ -7,6 +7,13 @@ import { ChatWindowHeader } from './ChatWindowHeader.js';
 import { ChatMessageList } from './ChatMessageList.js';
 import { ChatInputBar } from './ChatInputBar.js';
 import { ThreadDrawer } from './ThreadDrawer.js';
+import type { ChatEngine } from '../types/chat.js';
+
+/** Use external engine from config if provided, otherwise fall back to built-in engine. */
+function useResolvedEngine(config: { engine?: ChatEngine }, builtInEngine: ReturnType<typeof useChatBubbleEngine>): ChatEngine {
+  if (config.engine) return config.engine;
+  return builtInEngine;
+}
 
 export function ChatBubbleWindow() {
   const { mode, isMinimized, restore } = useChatBubble();
@@ -18,7 +25,8 @@ export function ChatBubbleWindow() {
 
   const chatContext = config.callbacks?.getPageContext?.() ?? null;
 
-  const engine = useChatBubbleEngine({ context: chatContext, gatewayToken });
+  const builtInEngine = useChatBubbleEngine({ context: chatContext, gatewayToken });
+  const engine = useResolvedEngine(config, builtInEngine);
 
   const handleRevalidate = useCallback((keys: string[]) => {
     config.callbacks?.onRevalidate?.(keys);
@@ -180,7 +188,7 @@ export function ChatBubbleWindow() {
           threads={[]}
           activeThreadId={null}
           onSelectThread={async () => {}}
-          onNewThread={async () => { engine.clearChat(); }}
+          onNewThread={async () => { builtInEngine.clearChat(); }}
         />
       ) : (
         <>

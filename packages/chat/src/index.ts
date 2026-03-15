@@ -41,7 +41,7 @@ export { injectThemeTokens } from './theme/inject.js';
 
 // Types
 export type { WalletAdapter } from './types/wallet.js';
-export type { ChatMessage, ToolExecution, ChatContext } from './types/chat.js';
+export type { ChatMessage, ToolExecution, ChatContext, ChatEngine } from './types/chat.js';
 export type { Thread, ThreadListItem } from './types/thread.js';
 export type { ActionProposal, HighlightTarget } from './types/actions.js';
 export type { ChatBubbleEvent } from './types/events.js';

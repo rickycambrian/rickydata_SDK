@@ -31,3 +31,21 @@ export interface ChatContext {
   label?: string;
   metadata?: Record<string, unknown>;
 }
+
+/** External engine interface — apps provide their own chat state machine. */
+export interface ChatEngine {
+  messages: ChatMessage[];
+  input: string;
+  setInput: (value: string) => void;
+  streaming: boolean;
+  loading: boolean;
+  error: string | null;
+  clearError: () => void;
+  sendMessage: () => Promise<void>;
+  isContextual: boolean;
+  // Optional features
+  sessionId?: string | null;
+  streamingPhase?: 'idle' | 'tools' | 'streaming';
+  activeTools?: string[];
+  abort?: () => void;
+}
