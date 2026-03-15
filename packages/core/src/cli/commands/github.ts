@@ -281,6 +281,11 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
           // Enrich with parsed findings for downstream consumers
           const parsed = parseCanvasReviewResult(result);
+          if (parsed.parseWarning) {
+            process.stderr.write(
+              `[rickydata] parse warning (${parsed.parseWarning.reason}): ${parsed.parseWarning.message}\n`,
+            );
+          }
           const output = { ...result, parsed };
           console.log(formatJson(output));
           return;
@@ -352,7 +357,7 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
       try {
         const client = createCanvasClient(gatewayUrl, token);
-        const run = await client.getRun(runId);
+        const run = await client.getRunWithRetry(runId);
 
         if (opts.json) {
           console.log(formatJson(run));

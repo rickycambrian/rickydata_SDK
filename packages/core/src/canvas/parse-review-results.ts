@@ -12,10 +12,24 @@ export interface ReviewFinding {
   suggestion?: string;
 }
 
+export type ParseFailureReason =
+  | 'no_agent_events'
+  | 'events_but_no_json'
+  | 'json_but_no_findings_key'
+  | 'findings_empty_array';
+
+export interface ParseWarning {
+  reason: ParseFailureReason;
+  message: string;
+  candidatesInspected: number;
+  longestCandidateLength: number;
+}
+
 export interface ParsedReviewResult {
   findings: ReviewFinding[];
   summary: string;
   rawOutput: string;
+  parseWarning?: ParseWarning;
 }
 
 /**
@@ -166,13 +180,56 @@ export function parseCanvasReviewResult(executionResult: {
     }
   }
 
-  // ── 3. Fallback: use the longest text as raw output ───────────────────
+  // ── 3. Fallback: diagnose why no findings were extracted ──────────────
   const allCandidates = [...resultCandidates, ...agentCompletedMessages, ...allAgentMessages];
   allCandidates.sort((a, b) => b.length - a.length);
   const rawOutput = allCandidates[0] ?? JSON.stringify(results);
+
+  const hadAgentEvents = events.some(isTeamAgentEvent);
+  const longestCandidate = allCandidates[0] ?? '';
+
+  let reason: ParseFailureReason;
+  let message: string;
+
+  if (!hadAgentEvents && resultCandidates.length === 0) {
+    reason = 'no_agent_events';
+    message = 'SSE stream had zero team_agent_event entries and no result node outputs';
+  } else {
+    // Check if any candidate contained parseable JSON with a findings key
+    let hadJson = false;
+    let hadFindingsKey = false;
+    for (const candidate of allCandidates) {
+      const parsed = extractJSON(candidate);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        hadJson = true;
+        if (Array.isArray((parsed as Record<string, unknown>).findings)) {
+          hadFindingsKey = true;
+          break;
+        }
+      }
+    }
+
+    if (!hadJson) {
+      reason = 'events_but_no_json';
+      message = `${allCandidates.length} candidate(s) inspected but none contained parseable JSON`;
+    } else if (!hadFindingsKey) {
+      reason = 'json_but_no_findings_key';
+      message = 'JSON parsed successfully but no "findings" array key found';
+    } else {
+      reason = 'findings_empty_array';
+      message = 'findings key present but array was empty';
+    }
+  }
+
   return {
     findings: [],
     summary: rawOutput.slice(0, 2000),
     rawOutput,
+    parseWarning: {
+      reason,
+      message: `parseCanvasReviewResult: ${message}`,
+      candidatesInspected: allCandidates.length,
+      longestCandidateLength: longestCandidate.length,
+    },
   };
 }

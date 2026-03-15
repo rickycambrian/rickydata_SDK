@@ -44,6 +44,11 @@ export type {
 
 // Agent Client (high-level chat helper)
 export { AgentClient } from './agent/index.js';
+export { SessionStore } from './agent/index.js';
+
+// Agent Error Taxonomy
+export { AgentError, AgentErrorCode } from './agent/index.js';
+export type { AgentErrorContext } from './agent/index.js';
 
 // Standalone SSE parsers & helpers
 export {
@@ -83,6 +88,7 @@ export type {
   TeamWorkflowConnection,
   TeamWorkflowTeammate,
   TeamWorkflowPayload,
+  TeamWorkflowOptions,
   TeamSSEEventType,
   TeamSSEEvent,
   // SSE Events
@@ -151,6 +157,7 @@ export type { EnabledAgent, AgentRegistryFile } from './mcp/index.js';
 export { CanvasClient } from './canvas/index.js';
 export type {
   CanvasClientConfig,
+  ExecuteWorkflowOptions,
   CanvasWorkflowJSON,
   CanvasNodeDefinition,
   CanvasEdgeDefinition,
@@ -202,6 +209,8 @@ export type {
   PRReviewWorkflowInput,
   ReviewFinding,
   ParsedReviewResult,
+  ParseFailureReason,
+  ParseWarning,
   GitHubReviewPayload,
   GitHubReviewComment,
 } from './canvas/index.js';

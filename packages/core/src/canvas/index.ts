@@ -1,5 +1,5 @@
 export { CanvasClient } from './canvas-client.js';
-export type { CanvasClientConfig } from './canvas-client.js';
+export type { CanvasClientConfig, ExecuteWorkflowOptions } from './canvas-client.js';
 
 export type {
   // Workflow JSON format
@@ -63,7 +63,7 @@ export type {
 export { buildPRReviewWorkflow, type PRReviewWorkflowInput } from './pr-review-workflow.js';
 
 export { parseCanvasReviewResult } from './parse-review-results.js';
-export type { ReviewFinding, ParsedReviewResult } from './parse-review-results.js';
+export type { ReviewFinding, ParsedReviewResult, ParseFailureReason, ParseWarning } from './parse-review-results.js';
 
 export { formatGitHubReview } from './format-github-review.js';
 export type { GitHubReviewPayload, GitHubReviewComment } from './format-github-review.js';
