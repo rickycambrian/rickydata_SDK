@@ -206,10 +206,12 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
       const workflowMode = opts.mode === 'github-repo' ? 'github-repo' : 'direct';
 
-      console.log(chalk.bold(`\nStarting team review for ${owner}/${repo}#${prNumber}...`));
-      console.log(chalk.dim(`  Agents: ${agents.map(roleColor).join(', ')}`));
-      console.log(chalk.dim(`  Model:  ${opts.model}`));
-      console.log(chalk.dim(`  Mode:   ${workflowMode}\n`));
+      if (!opts.json) {
+        console.log(chalk.bold(`\nStarting team review for ${owner}/${repo}#${prNumber}...`));
+        console.log(chalk.dim(`  Agents: ${agents.map(roleColor).join(', ')}`));
+        console.log(chalk.dim(`  Model:  ${opts.model}`));
+        console.log(chalk.dim(`  Mode:   ${workflowMode}\n`));
+      }
 
       // Build workflow
       const workflow = buildPRReviewWorkflow({
