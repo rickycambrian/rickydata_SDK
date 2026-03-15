@@ -230,6 +230,8 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `canvas-client-patterns` | Canvas SSE timeout/heartbeat, CanvasHttpError, getRunWithRetry, ParseFailureReason | (manual reference) |
 | `wallet-adapter-pattern` | Building wallet-agnostic auth adapters bridging Privy/MetaMask to WalletAdapter interface | (manual reference) |
 | `external-engine-pattern` | Decoupling SDK UI from SDK networking by accepting an external chat engine from the host app | (manual reference) |
+| `execution-trace-recording` | Dual-env trace recording (Node.js JSONL files + browser in-memory), TracedAgentClient wrapper, SSE event mapping | (manual reference) |
+| `trace-viewer-component` | TraceViewer scrollable event list, TraceTimeline SVG visualization, useTraceRecorder hook, CSS custom property theming | (manual reference) |
 
 | Agent | Purpose |
 |-------|---------|
