@@ -369,9 +369,7 @@ export class AgentClient {
       const msg = (errBody as { message?: string; error?: string }).message
         || (errBody as { error?: string }).error
         || `Chat failed: ${res.status}`;
-      const err = new Error(msg);
-      (err as Error & { status: number }).status = res.status;
-      throw err;
+      throw AgentError.fromHttpStatus(res.status, msg, { agentId, sessionId, operation: 'chatRaw' });
     }
     return res;
   }

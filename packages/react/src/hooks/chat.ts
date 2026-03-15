@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { streamSSEEvents, type SSEEvent } from 'rickydata/agent';
+import { streamSSEEvents, AgentError, AgentErrorCode, type SSEEvent } from 'rickydata/agent';
 import { useRickyData } from '../providers/RickyDataProvider.js';
 import type { ChatMessage, ToolExecution } from '../types.js';
 
@@ -204,43 +204,40 @@ export function useAgentChat({
         }];
       });
     } catch (err: unknown) {
-      const errStatus = typeof err === 'object' && err !== null && 'status' in err
-        ? (err as { status: number }).status : 0;
-      const errMessage = err instanceof Error ? err.message : String(err);
+      const addError = (content: string) => {
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now()}-error`, role: 'agent' as const,
+          content,
+          timestamp: new Date().toISOString(),
+        }]);
+      };
 
-      if (errStatus === 402 || /\b402\b/.test(errMessage)) {
-        setMessages(prev => [...prev, {
-          id: `msg-${Date.now()}-error`, role: 'agent',
-          content: 'Insufficient balance. Please deposit funds to continue.',
-          timestamp: new Date().toISOString(),
-        }]);
-      } else if (errStatus === 404 || /session not found|not found/i.test(errMessage)) {
-        setSessionId(null);
-        setMessages(prev => [...prev, {
-          id: `msg-${Date.now()}-error`, role: 'agent',
-          content: 'Session expired. Starting a new conversation...',
-          timestamp: new Date().toISOString(),
-        }]);
-      } else if (errStatus === 401 || /unauthorized|authentication|invalid.*token|expired.*token/i.test(errMessage)) {
-        setSessionId(null);
-        setMessages(prev => [...prev, {
-          id: `msg-${Date.now()}-error`, role: 'agent',
-          content: 'Re-authenticating... please send again.',
-          timestamp: new Date().toISOString(),
-        }]);
-      } else if (errStatus === 400 && /anthropic api key|required/i.test(errMessage)) {
-        setApiKeyConfigured(false);
-        setMessages(prev => [...prev, {
-          id: `msg-${Date.now()}-error`, role: 'agent',
-          content: errMessage,
-          timestamp: new Date().toISOString(),
-        }]);
+      if (err instanceof AgentError) {
+        switch (err.code) {
+          case AgentErrorCode.RATE_LIMITED:
+            addError('Insufficient balance. Please deposit funds to continue.');
+            break;
+          case AgentErrorCode.NOT_FOUND:
+            setSessionId(null);
+            addError('Session expired. Starting a new conversation...');
+            break;
+          case AgentErrorCode.AUTH_EXPIRED:
+          case AgentErrorCode.AUTH_REQUIRED:
+            setSessionId(null);
+            addError('Re-authenticating... please send again.');
+            break;
+          case AgentErrorCode.VALIDATION_ERROR:
+            if (/anthropic api key|required/i.test(err.message)) {
+              setApiKeyConfigured(false);
+            }
+            addError(err.message);
+            break;
+          default:
+            addError(`Error: ${err.message}`);
+        }
       } else {
-        setMessages(prev => [...prev, {
-          id: `msg-${Date.now()}-error`, role: 'agent',
-          content: `Error: ${errMessage}`,
-          timestamp: new Date().toISOString(),
-        }]);
+        const errMessage = err instanceof Error ? err.message : String(err);
+        addError(`Error: ${errMessage}`);
       }
     } finally {
       setSending(false);

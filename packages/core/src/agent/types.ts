@@ -438,6 +438,13 @@ export class AgentError extends Error {
     if (status === 401) {
       return new AgentError(AgentErrorCode.AUTH_EXPIRED, body || 'Authentication expired', { ...context, statusCode: status });
     }
+    if (status === 402) {
+      // 402 = insufficient balance — same error code as 429 for client handling,
+      // but NOT retryable (requires user to deposit funds, unlike transient 429)
+      const err = new AgentError(AgentErrorCode.RATE_LIMITED, body || 'Insufficient balance', { ...context, statusCode: status });
+      (err as { isRetryable: boolean }).isRetryable = false;
+      return err;
+    }
     if (status === 404) {
       return new AgentError(AgentErrorCode.NOT_FOUND, body || 'Not found', { ...context, statusCode: status });
     }

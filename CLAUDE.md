@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-This is the rickydata SDK — a Turborepo monorepo with two packages:
+This is the rickydata SDK — a Turborepo monorepo with packages:
 - `packages/core` (`rickydata`) — TypeScript SDK and CLI for the MCP Gateway, Agent Gateway, and Canvas Workflow runtime
 - `packages/react` (`@rickydata/react`) — React hooks, providers, and inline-styled components
+- `packages/chat` (`@rickydata/chat`) — Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming
 
 ## Monorepo structure
 
@@ -49,6 +50,42 @@ packages/
         SecretOrchestrator.tsx # Discovers + renders missing secrets
         WalletChip.tsx       # Compact wallet identity pill
       types.ts              # ChatMessage, ToolExecution, SecretSection
+  chat/                     # npm: @rickydata/chat
+    src/
+      index.ts              # All public exports
+      providers/
+        ChatBubbleProvider.tsx # Config context + AgentClient + theme injection
+      hooks/
+        useChatBubbleEngine.ts # Core SSE chat state machine (uses AgentClient directly)
+        useWalletAuth.ts     # Wallet-agnostic gateway auth (challenge/sign/verify)
+        useBubble.ts         # Convenience wrapper on bubble store
+      stores/
+        bubble.ts            # Zustand: isOpen, isMinimized, mode, unreadCount
+        actions.ts           # Zustand: pendingActions Map, highlights Map
+      adapters/
+        custom.ts            # createCustomAdapter(opts)
+        privy.ts             # createPrivyAdapter(wallets, auth)
+        window-ethereum.ts   # createMetaMaskAdapter()
+      components/
+        ChatBubble.tsx       # Root: renders Button or Window + HighlightOverlay
+        ChatBubbleButton.tsx # FAB with unread badge
+        ChatBubbleWindow.tsx # Main window (auth-gated, mode-switched)
+        ChatWindowHeader.tsx # Header with mode tabs
+        ChatInputBar.tsx     # Textarea + send button
+        ChatMessageList.tsx  # Messages + tool badges + action cards
+        ActionConfirmationCard.tsx # Confirm/reject agent actions
+        ThreadDrawer.tsx     # Thread list
+        HighlightOverlay.tsx # Portal-based UI highlight
+      theme/
+        tokens.ts            # Dark + light CSS variable presets
+        inject.ts            # CSS variable injection utility
+      types/
+        wallet.ts            # WalletAdapter interface
+        chat.ts              # ChatMessage, ToolExecution, ChatContext
+        thread.ts            # Thread, ThreadListItem
+        actions.ts           # ActionProposal, HighlightTarget
+        events.ts            # ChatBubbleEvent discriminated union
+        theme.ts             # ThemeConfig, ThemeTokens
 ```
 
 ## Build and test
@@ -86,6 +123,36 @@ import { RickyDataProvider, useAgentChat, useWalletBalance } from '@rickydata/re
   </RickyDataProvider>
 </QueryClientProvider>
 ```
+
+## Chat package usage
+
+```tsx
+import { ChatBubble, ChatBubbleProvider, createCustomAdapter } from '@rickydata/chat';
+
+const wallet = createCustomAdapter({
+  getAddress: () => connectedAddress,
+  signMessage: (msg) => signer.signMessage(msg),
+});
+
+<ChatBubbleProvider config={{
+  agentId: 'my-agent',
+  wallet,
+  title: 'My Assistant',
+  theme: { preset: 'dark' },
+  callbacks: {
+    onAction: async (proposal) => ({ confirmed: true }),
+    onNavigate: (path) => router.push(path),
+  },
+}}>
+  <ChatBubble />
+</ChatBubbleProvider>
+```
+
+Key design decisions:
+- **WalletAdapter pattern**: Plain object interface, not hooks. Decouples from Privy/MetaMask/etc.
+- **AgentClient direct**: Uses `AgentClient.createSession()` + `chatRaw()` + `streamSSEEvents()` — no backend proxy needed
+- **CSS custom properties**: Components use `var(--chat-*)` tokens. No Tailwind dependency.
+- **Zustand stores**: `useChatBubble` and `useAgentActions` accessible via `.getState()` outside React
 
 ## Dynamic Agent Proxy
 
