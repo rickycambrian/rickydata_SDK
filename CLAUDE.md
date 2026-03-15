@@ -134,6 +134,20 @@ rickydata github review-status <run-id>                  # Check async run statu
 - `cli/commands/github.ts` — CLI commands (`review`, `review-status`)
 - `auth.ts` — `authenticateWithGitHubOIDC()`, `isGitHubActions`, `getGitHubOIDCToken()`
 
+## Skills & Sub-agents
+
+| Skill | When to Use | Invocation |
+|-------|-------------|------------|
+| `review-pr` | Run multi-agent PR review | `/review-pr owner/repo#N` |
+| `verify-deployment` | Create/run post-deploy verification | `/verify-deployment [repo-or-url]` |
+| `canvas-execute` | Execute a canvas workflow | `/canvas-execute <file-or-id>` |
+| `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
+
+| Agent | Purpose |
+|-------|---------|
+| `canvas-workflow-helper` | Create/inspect/debug canvas workflows (incl. PR review workflow pattern) |
+| `sdk-explorer` | Explore SDK architecture and find API methods |
+
 ## Research-Driven Improvement
 
 | Skill | When to Use | Invocation |
