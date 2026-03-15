@@ -4,6 +4,7 @@ This is the rickydata SDK — a Turborepo monorepo with packages:
 - `packages/core` (`rickydata`) — TypeScript SDK and CLI for the MCP Gateway, Agent Gateway, and Canvas Workflow runtime
 - `packages/react` (`@rickydata/react`) — React hooks, providers, and inline-styled components
 - `packages/chat` (`@rickydata/chat`) — Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming
+- `packages/trace` (`@rickydata/trace`) — Trace recorder, viewer, and timeline for agent interactions (Node.js file output + browser memory buffer)
 
 ## Monorepo structure
 
@@ -86,6 +87,19 @@ packages/
         actions.ts           # ActionProposal, HighlightTarget
         events.ts            # ChatBubbleEvent discriminated union
         theme.ts             # ThemeConfig, ThemeTokens
+  trace/                    # npm: @rickydata/trace
+    src/
+      index.ts              # All public exports
+      recorder.ts           # TraceRecorder (Node.js file + browser memory)
+      traced-client.ts      # TracedAgentClient (AgentClient wrapper with auto-recording)
+      types.ts              # TraceEvent, TraceSession, TraceRecorderConfig
+      utils.ts              # generateId, formatTimestamp, isNode
+      theme.ts              # Dark theme tokens (CSS custom properties)
+      hooks/
+        useTraceRecorder.ts # React hook: live-updating events array
+      components/
+        TraceViewer.tsx     # Scrollable event list with type badges + collapsible detail
+        TraceTimeline.tsx   # Compact horizontal timeline with dots/bars
 ```
 
 ## Build and test
