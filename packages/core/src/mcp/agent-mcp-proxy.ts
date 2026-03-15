@@ -15,6 +15,7 @@
 import * as readline from 'readline';
 import * as fs from 'fs';
 import { AgentRegistry } from './agent-registry.js';
+import { AgentError, AgentErrorCode } from '../agent/types.js';
 
 const SERVER_NAME = 'rickydata-agent-proxy';
 const SERVER_VERSION = '1.0.0';
@@ -82,8 +83,13 @@ export class AgentMCPProxy {
   private registry: AgentRegistry;
   private watcher: fs.FSWatcher | null = null;
   private toolCache: Map<string, MCPToolDef[]> = new Map(); // agentId → tools
+  private initCache: Map<string, number> = new Map(); // agentId → initializedAt timestamp
+  private toolCacheTimestamps: Map<string, number> = new Map(); // agentId → tools fetched at timestamp
   private initialized = false;
   private nextId = 1;
+
+  private static readonly INIT_TTL = 600_000; // 10 minutes
+  private static readonly TOOL_CACHE_TTL = 300_000; // 5 minutes
 
   constructor(
     private readonly gatewayUrl: string,
@@ -91,6 +97,22 @@ export class AgentMCPProxy {
     registry?: AgentRegistry,
   ) {
     this.registry = registry ?? new AgentRegistry();
+  }
+
+  // ── Connection pool ─────────────────────────────────────────────────
+
+  /** Ensure an agent is initialized, reusing cached init if still valid. */
+  private async ensureInitialized(agentId: string): Promise<void> {
+    const cachedAt = this.initCache.get(agentId);
+    if (cachedAt && Date.now() - cachedAt < AgentMCPProxy.INIT_TTL) {
+      return;
+    }
+    await this.sendAgentJsonRpc(agentId, 'initialize', {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      clientInfo: CLIENT_INFO,
+      capabilities: {},
+    });
+    this.initCache.set(agentId, Date.now());
   }
 
   // ── Tool fetching ───────────────────────────────────────────────────
@@ -119,7 +141,7 @@ export class AgentMCPProxy {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`MCP request failed: ${res.status} ${text}`);
+      throw AgentError.fromHttpStatus(res.status, text, { agentId, operation: method });
     }
 
     const contentType = res.headers.get('content-type') ?? '';
@@ -128,14 +150,14 @@ export class AgentMCPProxy {
       const jsonRpc = parseSSEJsonRpc(responseText);
       if (jsonRpc.error) {
         const err = jsonRpc.error as { code: number; message: string };
-        throw new Error(`MCP error ${err.code}: ${err.message}`);
+        throw new AgentError(AgentErrorCode.TOOL_ERROR, `MCP error ${err.code}: ${err.message}`, { agentId, operation: method });
       }
       return jsonRpc.result;
     }
 
     const json = await res.json();
     if (json.error) {
-      throw new Error(`MCP error ${json.error.code}: ${json.error.message}`);
+      throw new AgentError(AgentErrorCode.TOOL_ERROR, `MCP error ${json.error.code}: ${json.error.message}`, { agentId, operation: method });
     }
     return json.result;
   }
@@ -143,12 +165,15 @@ export class AgentMCPProxy {
   /** Fetch tools for a single agent, returning them with namespaced names. */
   private async fetchAgentTools(agentId: string): Promise<MCPToolDef[]> {
     try {
-      // Initialize the agent's MCP endpoint
-      await this.sendAgentJsonRpc(agentId, 'initialize', {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        clientInfo: CLIENT_INFO,
-        capabilities: {},
-      });
+      // Return cached tools if still within TTL
+      const cachedAt = this.toolCacheTimestamps.get(agentId);
+      const cachedTools = this.toolCache.get(agentId);
+      if (cachedAt && cachedTools && Date.now() - cachedAt < AgentMCPProxy.TOOL_CACHE_TTL) {
+        return cachedTools;
+      }
+
+      // Ensure the agent's MCP endpoint is initialized (connection pool)
+      await this.ensureInitialized(agentId);
 
       // List tools
       const result = (await this.sendAgentJsonRpc(agentId, 'tools/list', {})) as {
@@ -157,22 +182,33 @@ export class AgentMCPProxy {
 
       // Namespace tools: {agent-slug}__{tool_name}
       const slug = agentId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      return (result.tools ?? []).map((t) => ({
+      const namespacedTools = (result.tools ?? []).map((t) => ({
         ...t,
         name: `${slug}__${t.name}`,
         description: t.description
           ? `[${agentId}] ${t.description}`
           : `[${agentId}]`,
       }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
 
-      if (message.includes('401') || message.includes('Unauthorized')) {
-        console.error(`[proxy] Auth expired for agent "${agentId}": ${message}`);
-      } else if (message.includes('404') || message.includes('not found')) {
-        console.error(`[proxy] Agent "${agentId}" not found, removing from cache`);
-        this.toolCache.delete(agentId);
+      // Record fetch timestamp for TTL
+      this.toolCacheTimestamps.set(agentId, Date.now());
+
+      return namespacedTools;
+    } catch (err) {
+      if (err instanceof AgentError) {
+        switch (err.code) {
+          case AgentErrorCode.AUTH_EXPIRED:
+            console.error(`[proxy] Auth expired for agent "${agentId}": ${err.message}`);
+            break;
+          case AgentErrorCode.NOT_FOUND:
+            console.error(`[proxy] Agent "${agentId}" not found, removing from cache`);
+            this.toolCache.delete(agentId);
+            break;
+          default:
+            console.error(`[proxy] Failed to fetch tools for agent "${agentId}" [${err.code}]: ${err.message}`);
+        }
       } else {
+        const message = err instanceof Error ? err.message : String(err);
         console.error(`[proxy] Failed to fetch tools for agent "${agentId}": ${message}`);
       }
       return [];
@@ -260,12 +296,8 @@ export class AgentMCPProxy {
     }
 
     try {
-      // Initialize first, then call
-      await this.sendAgentJsonRpc(parsed.agentId, 'initialize', {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        clientInfo: CLIENT_INFO,
-        capabilities: {},
-      });
+      // Ensure initialized (connection pool), then call
+      await this.ensureInitialized(parsed.agentId);
 
       const result = await this.sendAgentJsonRpc(parsed.agentId, 'tools/call', {
         name: parsed.toolName,
@@ -371,6 +403,9 @@ export class AgentMCPProxy {
     try {
       this.watcher = this.registry.watch(async () => {
         console.error('[proxy] Registry changed, refreshing tools...');
+        // Invalidate connection pool and tool cache so refreshAllTools() re-fetches everything
+        this.initCache.clear();
+        this.toolCacheTimestamps.clear();
         try {
           const changed = await this.refreshAllTools();
           if (changed) {

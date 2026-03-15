@@ -1,6 +1,10 @@
 export { AgentClient } from './agent-client.js';
 export { AgentMCPClient } from './agent-mcp-client.js';
 export { AgentSession } from './agent-session.js';
+export { SessionStore } from './session-store.js';
+
+// Error taxonomy
+export { AgentError, AgentErrorCode } from './types.js';
 
 // Standalone SSE parsers & helpers
 export {
@@ -70,6 +74,12 @@ export type {
   MCPTool,
   MCPToolResult,
   MCPServerInfo,
+
+  // Team Workflow Options
+  TeamWorkflowOptions,
+
+  // Error Taxonomy
+  AgentErrorContext,
 } from './types.js';
 
 export type { AgentSessionConfig, Message } from './agent-session.js';

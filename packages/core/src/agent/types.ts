@@ -15,6 +15,8 @@ export interface AgentClientConfig {
   tokenGetter?: () => Promise<string | undefined>;
   /** Agent Gateway URL. Defaults to https://agents.rickydata.org */
   gatewayUrl?: string;
+  /** Path for session store file. Pass `null` for in-memory only (useful in tests). */
+  sessionStorePath?: string | null;
 }
 
 // ─── Agent ──────────────────────────────────────────────────
@@ -54,6 +56,8 @@ export interface ChatOptions {
   model?: 'haiku' | 'sonnet' | 'opus';
   /** Reuse an existing session. Auto-creates one if omitted. */
   sessionId?: string;
+  /** Maximum number of retries on transport/network errors. Defaults to 3. */
+  maxRetries?: number;
   /** Called for each text chunk streamed from the agent. */
   onText?: (text: string) => void;
   /** Called when the agent invokes a tool. */
@@ -363,4 +367,86 @@ export type TeamSSEEventType =
 export interface TeamSSEEvent {
   type: TeamSSEEventType;
   data: Record<string, unknown>;
+}
+
+export interface TeamWorkflowOptions {
+  /** Timeout in milliseconds. Defaults to 300_000 (5 minutes). */
+  timeoutMs?: number;
+  /** Optional external AbortSignal. */
+  signal?: AbortSignal;
+}
+
+// ─── Error Taxonomy ─────────────────────────────────────────
+
+export enum AgentErrorCode {
+  // Authentication
+  AUTH_REQUIRED = 'AUTH_REQUIRED',
+  AUTH_EXPIRED = 'AUTH_EXPIRED',
+  AUTH_FAILED = 'AUTH_FAILED',
+
+  // Network / Transport
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
+  CONNECTION_INTERRUPTED = 'CONNECTION_INTERRUPTED',
+
+  // Server
+  SERVER_ERROR = 'SERVER_ERROR',
+  RATE_LIMITED = 'RATE_LIMITED',
+  NOT_FOUND = 'NOT_FOUND',
+
+  // Client / Validation
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+
+  // Agent / Tool
+  AGENT_ERROR = 'AGENT_ERROR',
+  TOOL_ERROR = 'TOOL_ERROR',
+
+  // Parse
+  PARSE_ERROR = 'PARSE_ERROR',
+}
+
+export interface AgentErrorContext {
+  agentId?: string;
+  sessionId?: string;
+  operation?: string;
+  statusCode?: number;
+}
+
+const RETRYABLE_CODES = new Set<AgentErrorCode>([
+  AgentErrorCode.AUTH_EXPIRED,
+  AgentErrorCode.NETWORK_ERROR,
+  AgentErrorCode.NETWORK_TIMEOUT,
+  AgentErrorCode.CONNECTION_INTERRUPTED,
+  AgentErrorCode.SERVER_ERROR,
+  AgentErrorCode.RATE_LIMITED,
+]);
+
+export class AgentError extends Error {
+  readonly code: AgentErrorCode;
+  readonly isRetryable: boolean;
+  readonly context?: AgentErrorContext;
+
+  constructor(code: AgentErrorCode, message: string, context?: AgentErrorContext) {
+    super(message);
+    this.name = 'AgentError';
+    this.code = code;
+    this.isRetryable = RETRYABLE_CODES.has(code);
+    this.context = context;
+  }
+
+  static fromHttpStatus(status: number, body: string, context?: AgentErrorContext): AgentError {
+    if (status === 401) {
+      return new AgentError(AgentErrorCode.AUTH_EXPIRED, body || 'Authentication expired', { ...context, statusCode: status });
+    }
+    if (status === 404) {
+      return new AgentError(AgentErrorCode.NOT_FOUND, body || 'Not found', { ...context, statusCode: status });
+    }
+    if (status === 429) {
+      return new AgentError(AgentErrorCode.RATE_LIMITED, body || 'Rate limited', { ...context, statusCode: status });
+    }
+    if (status >= 500) {
+      return new AgentError(AgentErrorCode.SERVER_ERROR, body || `Server error ${status}`, { ...context, statusCode: status });
+    }
+    return new AgentError(AgentErrorCode.VALIDATION_ERROR, body || `Request failed: ${status}`, { ...context, statusCode: status });
+  }
 }

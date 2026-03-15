@@ -5,8 +5,17 @@
  * autonomous resolution, checks service health, and reports outcomes back
  * to improve the ROI-based routing engine.
  *
- * Uses native fetch (Node 18+) -- no external dependencies.
+ * Supports two modes:
+ * - 'remote' (default): Calls the gateway API over HTTP.
+ * - 'local': Runs resolve_issue.py as a subprocess.
+ *
+ * Uses native fetch (Node 18+) for remote mode, node:child_process for local.
  */
+
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 import type {
   PipelineClientConfig,
@@ -21,10 +30,26 @@ import type {
 export class PipelineClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly mode: 'remote' | 'local';
+  private readonly resolveScriptPath: string;
+  private readonly pythonPath: string;
+  private readonly localTimeout: number;
 
   constructor(config: PipelineClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, '');
-    this.apiKey = config.apiKey;
+    this.mode = config.mode ?? 'remote';
+    this.baseUrl = config.baseUrl?.replace(/\/$/, '') ?? '';
+    this.apiKey = config.apiKey ?? '';
+    this.pythonPath = config.pythonPath ?? 'python3';
+    this.localTimeout = config.localTimeout ?? 1_800_000; // 30 min
+
+    if (this.mode === 'local') {
+      this.resolveScriptPath = config.resolveScriptPath ?? this._detectResolveScript();
+    } else {
+      this.resolveScriptPath = config.resolveScriptPath ?? '';
+      // Validate remote config
+      if (!this.baseUrl) throw new Error('baseUrl is required for remote mode');
+      if (!this.apiKey) throw new Error('apiKey is required for remote mode');
+    }
   }
 
   // ── Resolve ───────────────────────────────────────────────────────────────
@@ -35,13 +60,15 @@ export class PipelineClient {
    * The pipeline will:
    * 1. Scan the issue and classify difficulty/type
    * 2. Route to the optimal model using benchmark ROI data
-   *    - Simple issues (<=30 lines, 1 file) → haiku ($0.009/run, ROI 40.6)
-   *    - Complex issues (3+ files, architectural) → sonnet ($0.082/run, ROI 5.3)
+   *    - Simple issues (<=30 lines, 1 file) -> haiku ($0.009/run, ROI 40.6)
+   *    - Complex issues (3+ files, architectural) -> sonnet ($0.082/run, ROI 5.3)
    * 3. Execute via resolve_issue.py (local) or Claude agent runner (remote)
    * 4. Create a PR if confidence >= 0.70, queue for review if 0.40-0.70
    *
-   * Returns immediately with a run_id. Poll getStatus() or subscribe to
-   * webhooks for completion events.
+   * In remote mode, returns immediately with a run_id. Poll getStatus() or
+   * subscribe to webhooks for completion events.
+   *
+   * In local mode, blocks until resolve_issue.py completes (up to localTimeout).
    */
   async resolve(
     repo: string,
@@ -50,6 +77,10 @@ export class PipelineClient {
   ): Promise<PipelineResolveResponse> {
     if (!repo) throw new Error('repo is required');
     if (!issueNumber || issueNumber <= 0) throw new Error('issueNumber must be a positive integer');
+
+    if (this.mode === 'local') {
+      return this._resolveLocal(repo, issueNumber, opts);
+    }
 
     const body: PipelineResolveRequest = {
       repo,
@@ -75,10 +106,21 @@ export class PipelineClient {
   /**
    * Get pipeline service health and aggregate statistics.
    *
-   * Useful for checking whether the pipeline is available before submitting
-   * issues, and for monitoring overall throughput and success rates.
+   * In local mode, returns a synthetic healthy status (local execution is
+   * always "available" if the script exists).
    */
   async getStatus(): Promise<PipelineStatusResponse> {
+    if (this.mode === 'local') {
+      return {
+        healthy: true,
+        checked_at: new Date().toISOString(),
+        active_runs: 0,
+        total_runs: 0,
+        success_rate: 0,
+        roi_data: { loaded: false },
+      };
+    }
+
     const res = await this.request('/api/v1/pipeline/status');
 
     if (!res.ok) {
@@ -93,21 +135,16 @@ export class PipelineClient {
   /**
    * Report the outcome of a completed resolution run.
    *
-   * This closes the self-improvement loop: outcome data feeds back into the
-   * ROI engine so future routing recommendations improve over time.
-   *
-   * Call this when:
-   * - A PR gets merged (outcome: "merged")
-   * - A PR is closed without merge (outcome: "closed")
-   * - The resolution timed out (outcome: "timeout")
-   * - An unexpected error occurred (outcome: "error")
-   *
-   * Including actual_cost_usd and actual_quality_score enables the ROI engine
-   * to produce better-calibrated recommendations.
+   * In local mode, outcomes are tracked by resolve_issue.py's PredictionTracker
+   * so this is a no-op that returns { recorded: true }.
    */
   async reportOutcome(outcome: PipelineOutcomeReport): Promise<PipelineOutcomeResponse> {
     if (!outcome.run_id) throw new Error('run_id is required');
     if (!outcome.outcome) throw new Error('outcome type is required');
+
+    if (this.mode === 'local') {
+      return { recorded: true, message: 'Local mode: outcome tracked by PredictionTracker' };
+    }
 
     const res = await this.request('/api/feedback/outcome', {
       method: 'POST',
@@ -120,6 +157,139 @@ export class PipelineClient {
     }
 
     return res.json();
+  }
+
+  // ── Local Mode ────────────────────────────────────────────────────────────
+
+  private _resolveLocal(
+    repo: string,
+    issueNumber: number,
+    opts?: PipelineResolveOptions,
+  ): PipelineResolveResponse {
+    const runId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const args = [
+      this.resolveScriptPath,
+      `${repo}#${issueNumber}`,
+      '--execute', '--generate',
+      '--agentic', '--auto-pr',
+      '--force', '--json',
+    ];
+
+    if (opts?.budget_usd) {
+      args.push('--budget', String(opts.budget_usd));
+    }
+    if (opts?.timeout_seconds) {
+      args.push('--timeout', String(opts.timeout_seconds));
+    }
+    if (opts?.model) {
+      args.push('--model', opts.model);
+    }
+
+    try {
+      const stdout = execFileSync(this.pythonPath, args, {
+        timeout: this.localTimeout,
+        encoding: 'utf-8',
+        maxBuffer: 50 * 1024 * 1024, // 50 MB
+      });
+
+      const result = this._parseLocalOutput(stdout);
+
+      return {
+        run_id: runId,
+        repo,
+        issue_number: issueNumber,
+        accepted: true,
+        routing: {
+          model: result.model ?? 'claude-sonnet',
+          expected_success_rate: result.confidence ?? 0.5,
+          expected_cost_usd: result.cost ?? 0,
+          roi: 0,
+          reasoning: 'local execution via resolve_issue.py',
+        },
+        pr_url: result.pr_url,
+        status: result.pr_url ? 'completed' : (result.error ? 'failed' : 'completed'),
+        created_at: new Date().toISOString(),
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        run_id: runId,
+        repo,
+        issue_number: issueNumber,
+        accepted: true,
+        routing: {
+          model: 'unknown',
+          expected_success_rate: 0,
+          expected_cost_usd: 0,
+          roi: 0,
+          reasoning: `local execution failed: ${message.slice(0, 200)}`,
+        },
+        status: 'failed',
+        created_at: new Date().toISOString(),
+      };
+    }
+  }
+
+  /** Parse JSON output from resolve_issue.py --json */
+  private _parseLocalOutput(stdout: string): {
+    pr_url?: string;
+    model?: string;
+    confidence?: number;
+    cost?: number;
+    error?: string;
+  } {
+    // resolve_issue.py --json outputs a JSON object.
+    // Try parsing the last JSON object in the output (stdout may have log lines before it).
+    const lines = stdout.trim().split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (line.startsWith('{')) {
+        try {
+          const data = JSON.parse(line);
+          return {
+            pr_url: data.pr_url ?? data.pull_request_url,
+            model: data.model,
+            confidence: data.confidence ?? data.predicted_confidence,
+            cost: data.cost ?? data.total_cost,
+            error: data.error,
+          };
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    // Try full output as JSON
+    try {
+      const data = JSON.parse(stdout);
+      return {
+        pr_url: data.pr_url ?? data.pull_request_url,
+        model: data.model,
+        confidence: data.confidence ?? data.predicted_confidence,
+        cost: data.cost ?? data.total_cost,
+        error: data.error,
+      };
+    } catch {
+      return { error: 'Failed to parse resolve_issue.py output' };
+    }
+  }
+
+  /** Auto-detect the resolve_issue.py script path by checking common locations. */
+  private _detectResolveScript(): string {
+    const candidates = [
+      join(homedir(), 'Documents', 'github', 'ai_research', 'scripts', 'resolve_issue.py'),
+      join(process.cwd(), 'scripts', 'resolve_issue.py'),
+      join(process.cwd(), '..', 'ai_research', 'scripts', 'resolve_issue.py'),
+    ];
+
+    for (const p of candidates) {
+      if (existsSync(p)) return p;
+    }
+
+    throw new Error(
+      'resolve_issue.py not found. Set resolveScriptPath in PipelineClientConfig. ' +
+      `Searched: ${candidates.join(', ')}`,
+    );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

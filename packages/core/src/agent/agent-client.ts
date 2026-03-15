@@ -7,6 +7,11 @@
  * Uses viem for wallet signing (consistent with the rest of the SDK).
  */
 
+import { SessionStore } from './session-store.js';
+import {
+  AgentError,
+  AgentErrorCode,
+} from './types.js';
 import type {
   AgentClientConfig,
   AgentInfo,
@@ -33,6 +38,7 @@ import type {
   VoiceEndResponse,
   TeamWorkflowPayload,
   TeamSSEEvent,
+  TeamWorkflowOptions,
 } from './types.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
@@ -43,11 +49,11 @@ export class AgentClient {
   private readonly privateKey: `0x${string}` | null;
   private readonly tokenGetter: (() => Promise<string | undefined>) | null;
   private token: string | null = null;
-  private sessions: Map<string, string> = new Map(); // agentId -> sessionId
+  private sessions: SessionStore;
 
   constructor(options: AgentClientConfig) {
     if (!options.privateKey && !options.token && !options.tokenGetter) {
-      throw new Error('Either privateKey, token, or tokenGetter is required');
+      throw new AgentError(AgentErrorCode.VALIDATION_ERROR, 'Either privateKey, token, or tokenGetter is required');
     }
     if (options.privateKey) {
       const key = options.privateKey.startsWith('0x')
@@ -62,6 +68,7 @@ export class AgentClient {
     if (options.token) {
       this.token = options.token;
     }
+    this.sessions = new SessionStore(options.sessionStorePath);
   }
 
   // ─── BYOK API Key Management ─────────────────────────────
@@ -284,8 +291,8 @@ export class AgentClient {
    * Use callbacks (onText, onToolCall, onToolResult) for real-time streaming.
    */
   async chat(agentId: string, message: string, options?: ChatOptions): Promise<ChatResult> {
-    if (!agentId) throw new Error('agentId is required');
-    if (!message) throw new Error('message is required');
+    if (!agentId) throw new AgentError(AgentErrorCode.VALIDATION_ERROR, 'agentId is required');
+    if (!message) throw new AgentError(AgentErrorCode.VALIDATION_ERROR, 'message is required');
 
     await this.ensureAuthenticated();
 
@@ -313,30 +320,34 @@ export class AgentClient {
       }
     };
 
-    // Send chat request (retry once on 401 with re-auth)
-    let res = await sendChatRequest();
+    // Retry the entire request+parse cycle on transport/network errors
+    const maxRetries = options?.maxRetries ?? 3;
+    let authRetried = false;
+    return await this.retryWithBackoff(async () => {
+      let res = await sendChatRequest();
 
-    if (res.status === 401 && this.privateKey) {
-      // Token expired — re-authenticate and retry
-      this.token = null;
-      await this.ensureAuthenticated();
-      res = await sendChatRequest();
-    }
-
-    if (!res.ok) {
-      const body = await res.text();
-      if (res.status === 401) {
-        throw new Error(`Authentication expired. Run \`rickydata auth login\` to re-authenticate.`);
+      // Retry once on 401 with re-auth (only on first occurrence)
+      if (res.status === 401 && this.privateKey && !authRetried) {
+        authRetried = true;
+        this.token = null;
+        await this.ensureAuthenticated();
+        res = await sendChatRequest();
       }
-      throw new Error(`Chat failed: ${res.status} ${body}`);
-    }
 
-    // Parse SSE stream
-    try {
-      return await this.parseSSEResponse(res, sessionId, options);
-    } catch (err) {
-      throw this.wrapTransportError(err, sessionId);
-    }
+      if (!res.ok) {
+        const body = await res.text();
+        if (res.status === 401) {
+          throw new AgentError(AgentErrorCode.AUTH_EXPIRED, 'Authentication expired. Run `rickydata auth login` to re-authenticate.', { agentId, sessionId });
+        }
+        throw AgentError.fromHttpStatus(res.status, body, { agentId, sessionId, operation: 'chat' });
+      }
+
+      try {
+        return await this.parseSSEResponse(res, sessionId, options);
+      } catch (err) {
+        throw this.wrapTransportError(err, sessionId);
+      }
+    }, maxRetries);
   }
 
   /**
@@ -656,21 +667,41 @@ export class AgentClient {
   // ─── Team Workflow ────────────────────────────────────────
 
   /** Execute a team workflow and return the Response for SSE streaming. */
-  async executeTeamWorkflow(payload: TeamWorkflowPayload): Promise<Response> {
+  async executeTeamWorkflow(payload: TeamWorkflowPayload, options?: TeamWorkflowOptions): Promise<Response> {
     await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/canvas/workflows/execute/stream`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const msg = (err as { message?: string; error?: string }).message
-        || (err as { error?: string }).error
-        || `Team workflow failed: ${res.status}`;
-      throw new Error(msg);
+
+    const timeoutMs = options?.timeoutMs ?? 300_000;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const signal = options?.signal
+      ? AbortSignal.any([controller.signal, options.signal])
+      : controller.signal;
+
+    try {
+      const res = await fetch(`${this.gatewayUrl}/canvas/workflows/execute/stream`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        const msg = (err as { message?: string; error?: string }).message
+          || (err as { error?: string }).error
+          || `Team workflow failed: ${res.status}`;
+        throw AgentError.fromHttpStatus(res.status, msg, { operation: 'executeTeamWorkflow' });
+      }
+      return res;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Team workflow timed out', { operation: 'executeTeamWorkflow' });
+      }
+      if (err instanceof AgentError) throw err;
+      throw new AgentError(AgentErrorCode.NETWORK_ERROR, String(err), { operation: 'executeTeamWorkflow' });
+    } finally {
+      clearTimeout(timeout);
     }
-    return res;
   }
 
   // ─── Internal: Auth ──────────────────────────────────────
@@ -681,13 +712,13 @@ export class AgentClient {
     // Try tokenGetter first (for browser/React use)
     if (this.tokenGetter) {
       const t = await this.tokenGetter();
-      if (!t) throw new Error('Token getter returned no token');
+      if (!t) throw new AgentError(AgentErrorCode.AUTH_FAILED, 'Token getter returned no token');
       this.token = t;
       return;
     }
 
     if (!this.privateKey) {
-      throw new Error('Cannot authenticate: no privateKey, token, or tokenGetter configured');
+      throw new AgentError(AgentErrorCode.AUTH_REQUIRED, 'Cannot authenticate: no privateKey, token, or tokenGetter configured');
     }
 
     const { privateKeyToAccount } = await import('viem/accounts');
@@ -696,7 +727,7 @@ export class AgentClient {
     // 1. Get challenge
     const challengeRes = await fetch(`${this.gatewayUrl}/auth/challenge`);
     if (!challengeRes.ok) {
-      throw new Error(`Auth challenge failed: ${challengeRes.status}`);
+      throw new AgentError(AgentErrorCode.AUTH_FAILED, `Auth challenge failed: ${challengeRes.status}`, { statusCode: challengeRes.status });
     }
     const { nonce, message: challengeMessage } = await challengeRes.json();
 
@@ -715,7 +746,7 @@ export class AgentClient {
     });
     if (!verifyRes.ok) {
       const body = await verifyRes.text();
-      throw new Error(`Auth verification failed: ${verifyRes.status} ${body}`);
+      throw new AgentError(AgentErrorCode.AUTH_FAILED, `Auth verification failed: ${verifyRes.status} ${body}`, { statusCode: verifyRes.status });
     }
     const { token } = await verifyRes.json();
     this.token = token;
@@ -745,9 +776,9 @@ export class AgentClient {
     if (!res.ok) {
       const body = await res.text();
       if (res.status === 401) {
-        throw new Error(`Authentication expired. Run \`rickydata auth login\` to re-authenticate.`);
+        throw new AgentError(AgentErrorCode.AUTH_EXPIRED, 'Authentication expired. Run `rickydata auth login` to re-authenticate.', { agentId });
       }
-      throw new Error(`Failed to create session: ${res.status} ${body}`);
+      throw AgentError.fromHttpStatus(res.status, body, { agentId, operation: 'createSession' });
     }
     const data = await res.json();
     this.sessions.set(agentId, data.id);
@@ -761,30 +792,64 @@ export class AgentClient {
     };
   }
 
+  // ─── Internal: Retry ────────────────────────────────────
+
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number,
+    delays: number[] = [100, 500, 2000],
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err;
+        const isRetryable =
+          (err instanceof AgentError && err.isRetryable) ||
+          (err instanceof Error &&
+            (/timed out|timeout|terminated|abort|network|socket|fetch failed/i.test(err.message)));
+        if (!isRetryable || attempt >= maxRetries) {
+          throw err;
+        }
+        const delay = delays[Math.min(attempt, delays.length - 1)];
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    throw lastError; // unreachable, but satisfies TypeScript
+  }
+
   // ─── Internal: SSE Parsing ───────────────────────────────
 
-  private wrapTransportError(error: unknown, sessionId: string): Error {
+  private wrapTransportError(error: unknown, sessionId: string): AgentError | Error {
+    if (error instanceof AgentError) return error;
     if (error instanceof Error) {
       if (error.message.startsWith('Agent error:')) {
         return error;
       }
       const msg = error.message.toLowerCase();
-      const interrupted = msg.includes('terminated')
+      const isTimeout = msg.includes('timed out') || msg.includes('timeout');
+      const interrupted = isTimeout
+        || msg.includes('terminated')
         || msg.includes('abort')
         || msg.includes('network')
         || msg.includes('socket')
         || msg.includes('fetch failed');
       if (interrupted) {
-        return new Error(
-          `Connection interrupted while streaming response (sessionId: ${sessionId}). ` +
-          'The session may still be active; retry the message or resume this session.'
+        return new AgentError(
+          isTimeout ? AgentErrorCode.NETWORK_TIMEOUT : AgentErrorCode.CONNECTION_INTERRUPTED,
+          `Connection interrupted while streaming response. ` +
+          'The session may still be active; retry the message or resume this session.',
+          { sessionId },
         );
       }
       return error;
     }
-    return new Error(
-      `Connection interrupted while streaming response (sessionId: ${sessionId}). ` +
-      'The session may still be active; retry the message or resume this session.'
+    return new AgentError(
+      AgentErrorCode.CONNECTION_INTERRUPTED,
+      `Connection interrupted while streaming response. ` +
+      'The session may still be active; retry the message or resume this session.',
+      { sessionId },
     );
   }
 
@@ -816,9 +881,11 @@ export class AgentClient {
             // We already got some text — return what we have rather than throwing
             break;
           }
-          throw new Error(
-            `Connection interrupted while streaming response (sessionId: ${sessionId}). ` +
+          throw new AgentError(
+            AgentErrorCode.CONNECTION_INTERRUPTED,
+            'Connection interrupted while streaming response. ' +
             'The session may still be active; retry the message or resume this session.',
+            { sessionId },
           );
         }
         const { done, value } = readResult;
@@ -860,10 +927,10 @@ export class AgentClient {
                   usage = event.data.usage;
                   break;
                 case 'error':
-                  throw new Error(`Agent error: ${event.data.message ?? JSON.stringify(event.data)}`);
+                  throw new AgentError(AgentErrorCode.AGENT_ERROR, event.data.message ?? JSON.stringify(event.data), { sessionId });
               }
             } catch (e) {
-              if (e instanceof Error && e.message.startsWith('Agent error:')) throw e;
+              if (e instanceof AgentError) throw e;
               // Skip malformed JSON
             }
           }
@@ -928,7 +995,7 @@ export async function streamSSEEvents(
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
   const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
+  if (!reader) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
 
   const decoder = new TextDecoder();
   let buffer = '';
@@ -938,7 +1005,7 @@ export async function streamSSEEvents(
     clearTimeout(timeoutId);
     return new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
-        () => reject(new Error('Connection timed out — no response for 60s')),
+        () => reject(new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s')),
         SSE_READ_TIMEOUT_MS,
       );
     });
@@ -991,7 +1058,7 @@ export async function streamTeamSSEEvents(
   onEvent: (event: TeamSSEEvent) => void,
 ): Promise<void> {
   const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
+  if (!reader) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
 
   const decoder = new TextDecoder();
   let buffer = '';
@@ -1001,7 +1068,7 @@ export async function streamTeamSSEEvents(
     clearTimeout(timeoutId);
     return new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
-        () => reject(new Error('Connection timed out — no response for 60s')),
+        () => reject(new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s')),
         SSE_READ_TIMEOUT_MS,
       );
     });

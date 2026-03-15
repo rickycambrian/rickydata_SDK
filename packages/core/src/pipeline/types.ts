@@ -139,8 +139,16 @@ export interface PipelineROIUpdate {
 // ── Client Config ─────────────────────────────────────────────────────────────
 
 export interface PipelineClientConfig {
-  /** Gateway API base URL */
-  baseUrl: string;
-  /** API key for authentication (X-KF-API-Key header) */
-  apiKey: string;
+  /** Gateway API base URL (required for remote mode) */
+  baseUrl?: string;
+  /** API key for authentication (X-KF-API-Key header, required for remote mode) */
+  apiKey?: string;
+  /** Execution mode: 'remote' (default) calls gateway API, 'local' runs resolve_issue.py */
+  mode?: 'remote' | 'local';
+  /** Path to resolve_issue.py script (auto-detected if not set) */
+  resolveScriptPath?: string;
+  /** Path to Python interpreter (default: 'python3') */
+  pythonPath?: string;
+  /** Subprocess timeout in ms for local mode (default: 1800000 = 30min) */
+  localTimeout?: number;
 }

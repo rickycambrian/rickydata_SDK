@@ -15,10 +15,11 @@ packages/
       auth.ts               # AuthManager
       constants.ts          # Chain IDs, USDC, spending defaults
       agent/
-        agent-client.ts     # AgentClient (BYOK chat, SSE, secrets, voice, wallet, team)
+        agent-client.ts     # AgentClient (BYOK chat, SSE, secrets, voice, wallet, team, retry)
         agent-mcp-client.ts # AgentMCPClient (agent-as-MCP-server)
         agent-session.ts    # AgentSession facade
-        types.ts            # All agent types
+        session-store.ts    # File-backed session store (~/.rickydata/sessions.json, 24h TTL)
+        types.ts            # All agent types + AgentError taxonomy + TeamWorkflowOptions
       a2a/                  # A2A protocol client
       canvas/               # Canvas workflow client + PR review pipeline
       wallet/               # Spending wallet + policy
@@ -143,6 +144,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `verification-analysis` | Predict, remediate, dashboard for verification system | `/verification-analysis [predict\|remediate\|dashboard\|full]` |
 | `canvas-execute` | Execute a canvas workflow | `/canvas-execute <file-or-id>` |
 | `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
+| `sdk-resilience-patterns` | Reference for error taxonomy, retry, persistence, timeout patterns | (manual reference) |
 
 | Agent | Purpose |
 |-------|---------|
@@ -176,3 +178,6 @@ rickydata github review-status <run-id>                  # Check async run statu
 - Exports organized by subpath: `rickydata`, `rickydata/agent`, `rickydata/a2a`, etc.
 - React hooks use React Query for data fetching, useState for SSE streaming
 - Components use inline styles (no CSS framework dependency)
+- Errors use `AgentError` with typed `AgentErrorCode` — use `AgentError.fromHttpStatus()` at HTTP boundaries
+- Retry logic via `retryWithBackoff()` — only retries `isRetryable` errors; pass `maxRetries: 0` in tests
+- File-backed stores accept `null` path for in-memory test mode (e.g., `sessionStorePath: null`)
