@@ -20,7 +20,7 @@ packages/
         agent-session.ts    # AgentSession facade
         types.ts            # All agent types
       a2a/                  # A2A protocol client
-      canvas/               # Canvas workflow client
+      canvas/               # Canvas workflow client + PR review pipeline
       wallet/               # Spending wallet + policy
       pixel/                # Pixel office client
       mcp/
@@ -99,6 +99,40 @@ rickydata mcp agent list                              # Show enabled agents
 ```
 
 Architecture: single stdio proxy registered once with Claude Code. It watches `~/.rickydata/mcp-agents.json` and sends `notifications/tools/list_changed` to hot-swap tools.
+
+## PR Review System (`@rickydata review`)
+
+Comment `@rickydata review` on any PR to trigger a multi-agent team review via GitHub Actions.
+
+**How it works:**
+1. `.github/workflows/rickydata-review.yml` fires on `issue_comment` events containing `@rickydata review`
+2. The workflow fetches the PR diff, then runs `rickydata github review owner/repo#N --diff-file /tmp/pr.diff --json`
+3. A canvas workflow (`buildPRReviewWorkflow`) orchestrates 6 specialist agents: security, correctness, performance, test_coverage, style, architecture
+4. Results are parsed and posted as inline PR review comments with severity indicators
+
+**Auth:** GitHub OIDC — the workflow requests an Actions OIDC token (`permissions: id-token: write`), which `AuthManager.authenticateWithGitHubOIDC()` exchanges at `/auth/github/exchange` for a session token. No stored secrets needed beyond `GITHUB_TOKEN`.
+
+**Workflow modes:**
+- `direct` (default) — embeds the diff in the canvas text-input node; no GitHub App installation required on the target repo
+- `github-repo` — adds a `github-repo` node so the server fetches repo context itself
+
+**Pipeline:** `buildPRReviewWorkflow` (build) → `parseCanvasReviewResult` (extract JSON findings from SSE/results) → `formatGitHubReview` (produce `GitHubReviewPayload` with inline comments)
+
+**CLI:**
+```bash
+rickydata github review owner/repo#42                    # Stream review to terminal
+rickydata github review owner/repo#42 --json             # JSON output (used by CI)
+rickydata github review owner/repo#42 --diff-file f.diff # Use local diff (direct mode)
+rickydata github review owner/repo#42 --post-github      # Parse + format as GitHub review
+rickydata github review-status <run-id>                  # Check async run status
+```
+
+**Key files:**
+- `canvas/pr-review-workflow.ts` — workflow builder (nodes, connections, team runtime)
+- `canvas/parse-review-results.ts` — extracts `ReviewFinding[]` from canvas results/SSE events
+- `canvas/format-github-review.ts` — converts findings to `GitHubReviewPayload` (inline comments + summary)
+- `cli/commands/github.ts` — CLI commands (`review`, `review-status`)
+- `auth.ts` — `authenticateWithGitHubOIDC()`, `isGitHubActions`, `getGitHubOIDCToken()`
 
 ## Research-Driven Improvement
 
