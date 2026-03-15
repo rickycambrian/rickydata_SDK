@@ -387,7 +387,7 @@ export function useAgentVoiceChat({
       setConnectionState('error');
       if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; }
     }
-  }, [client, agentId, model, voice, onError, isSpeakerMuted]);
+  }, [client, agentId, model, voice, gatewayUrl, onError, isSpeakerMuted]);
 
   const disconnect = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
