@@ -143,6 +143,10 @@ export type {
 export { CanvasMCPServer, startCanvasMCPServer, createCanvasTools } from './mcp/index.js';
 export type { CanvasMCPTool, MCPToolResponse } from './mcp/index.js';
 
+// Agent MCP Proxy
+export { AgentRegistry, AgentMCPProxy, startAgentMCPProxy } from './mcp/index.js';
+export type { EnabledAgent, AgentRegistryFile } from './mcp/index.js';
+
 // Canvas Workflow Client
 export { CanvasClient } from './canvas/index.js';
 export type {

@@ -807,7 +807,175 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       }
     });
 
+  // ── mcp agent enable <agent-id> ──────────────────────────────────────
+  agent
+    .command('enable <agent-id>')
+    .description('Enable an agent for the dynamic MCP proxy (no restart required)')
+    .option('--profile <profile>', 'Config profile to use')
+    .option('--gateway <url>', 'Override agent gateway URL')
+    .action(async (agentId: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
+      const auth = requireAuth(profile);
+
+      const spinner = ora(`Verifying agent "${agentId}"...`).start();
+      try {
+        // Verify the agent exists by listing its tools
+        const tools = await listAgentMcpTools(gatewayUrl, auth, agentId);
+
+        const { AgentRegistry } = await import('../../mcp/agent-registry.js');
+        const registry = new AgentRegistry();
+        registry.enableAgent(agentId);
+
+        spinner.succeed(chalk.green(`Agent "${agentId}" enabled (${tools.length} tools)`));
+        console.log(chalk.dim('  Tools will appear in Claude Code automatically via the proxy'));
+      } catch (err) {
+        spinner.fail(chalk.red(`Failed to enable agent "${agentId}"`));
+        throw new CliError(classifyMcpError(err, 'enable'));
+      }
+    });
+
+  // ── mcp agent disable <agent-id> ─────────────────────────────────────
+  agent
+    .command('disable <agent-id>')
+    .description('Disable an agent from the dynamic MCP proxy')
+    .option('--profile <profile>', 'Config profile to use')
+    .action(async (agentId: string, opts) => {
+      try {
+        const { AgentRegistry } = await import('../../mcp/agent-registry.js');
+        const registry = new AgentRegistry();
+
+        if (!registry.isEnabled(agentId)) {
+          console.log(chalk.yellow(`Agent "${agentId}" is not currently enabled`));
+          return;
+        }
+
+        registry.disableAgent(agentId);
+        console.log(chalk.green(`✓ Agent "${agentId}" disabled`));
+        console.log(chalk.dim('  Tools will be removed from Claude Code automatically via the proxy'));
+      } catch (err) {
+        throw new CliError(classifyMcpError(err, 'disable'));
+      }
+    });
+
+  // ── mcp agent list ───────────────────────────────────────────────────
+  agent
+    .command('list')
+    .description('List agents enabled for the dynamic MCP proxy')
+    .option('--format <format>', 'Output format (table|json)', 'table')
+    .option('--profile <profile>', 'Config profile to use')
+    .option('--gateway <url>', 'Override agent gateway URL')
+    .action(async (opts) => {
+      const format = opts.format as OutputFormat;
+
+      try {
+        const { AgentRegistry } = await import('../../mcp/agent-registry.js');
+        const registry = new AgentRegistry();
+        const agents = registry.listAgents();
+
+        if (format === 'json') {
+          console.log(formatJson(agents));
+          return;
+        }
+
+        if (agents.length === 0) {
+          console.log(chalk.yellow('No agents enabled. Use `rickydata mcp agent enable <id>` to add one.'));
+          return;
+        }
+
+        const rows = agents.map((a) => ({
+          agentId: a.agentId,
+          enabledAt: a.enabledAt,
+        }));
+
+        console.log(
+          formatOutput(rows, [
+            { header: 'Agent ID', key: 'agentId', width: 45 },
+            { header: 'Enabled At', key: 'enabledAt', width: 30 },
+          ], format)
+        );
+        console.log(chalk.dim(`\n${agents.length} agent(s) enabled`));
+      } catch (err) {
+        throw new CliError(classifyMcpError(err, 'tools'));
+      }
+    });
+
   mcp.addCommand(agent);
+
+  // ── mcp proxy-server ────────────────────────────────────────────────
+  mcp
+    .command('proxy-server')
+    .description('Start the dynamic agent MCP proxy server (stdio transport)')
+    .option('--profile <profile>', 'Config profile')
+    .option('--gateway <url>', 'Override agent gateway URL')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
+      const cred = store.getToken(profile);
+
+      if (!cred?.token) {
+        fail('Not authenticated. Run `rickydata auth login` first.');
+      }
+
+      const { startAgentMCPProxy } = await import('../../mcp/agent-mcp-proxy.js');
+
+      // Log to stderr so it doesn't interfere with JSON-RPC on stdout
+      console.error(`Agent MCP proxy starting (gateway: ${gatewayUrl})`);
+
+      await startAgentMCPProxy(gatewayUrl, cred.token);
+    });
+
+  // ── mcp proxy-connect ───────────────────────────────────────────────
+  mcp
+    .command('proxy-connect')
+    .description('Register the dynamic agent proxy with Claude Code (one-time setup)')
+    .option('--profile <profile>', 'Config profile')
+    .option('--dry-run', 'Print the command without executing it')
+    .action(async (opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+
+      // Verify auth
+      const cred = store.getToken(profile);
+      if (!cred?.token) {
+        fail('Not authenticated. Run `rickydata auth login` first.');
+      }
+
+      const args = [
+        'mcp', 'add', '--transport', 'stdio',
+        'rickydata-proxy',
+        '--',
+        'rickydata', 'mcp', 'proxy-server',
+        ...(opts.profile ? ['--profile', opts.profile] : []),
+      ];
+
+      const cmdStr = `claude ${args.join(' ')}`;
+
+      if (opts.dryRun) {
+        console.log(chalk.cyan('Command (not executed):\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+        return;
+      }
+
+      const { execFileSync } = await import('child_process');
+      try {
+        // Remove existing rickydata-proxy first (ignore errors if not present)
+        try {
+          execFileSync('claude', ['mcp', 'remove', 'rickydata-proxy'], { stdio: 'pipe' });
+        } catch {
+          // Not present — fine
+        }
+
+        execFileSync('claude', args, { stdio: 'inherit' });
+        console.log(chalk.green('\n✓ Agent MCP proxy registered with Claude Code'));
+        console.log(chalk.dim('  Enable agents: rickydata mcp agent enable <agent-id>'));
+        console.log(chalk.dim('  Tools appear/disappear without restarting Claude Code'));
+      } catch {
+        console.log(chalk.yellow('Could not run `claude` CLI automatically. Run this manually:\n'));
+        console.log(`  ${cmdStr}`);
+        console.log();
+      }
+    });
 
   // ── mcp connect-server ──────────────────────────────────────────────
   mcp

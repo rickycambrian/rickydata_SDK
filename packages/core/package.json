@@ -37,7 +37,8 @@
   },
   "bin": {
     "rickydata": "./bin/rickydata.js",
-    "mcpg": "./bin/mcpg.js"
+    "mcpg": "./bin/mcpg.js",
+    "rickydata-agent-proxy": "./bin/agent-proxy.js"
   },
   "files": [
     "dist",
