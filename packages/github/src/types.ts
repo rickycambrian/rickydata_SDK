@@ -345,6 +345,101 @@ export interface ReviewRun {
   };
 }
 
+// === Team Review Types ===
+
+export type TeamReviewAgentRole =
+  | 'security' | 'correctness' | 'performance'
+  | 'test_coverage' | 'style' | 'architecture';
+
+export type FindingSeverity = 'critical' | 'major' | 'minor' | 'nit' | 'praise';
+export type FindingCategory = 'bug' | 'security' | 'performance' | 'style' | 'test' | 'docs' | 'architecture' | 'other';
+export type FindingContext = 'normal' | 'nit' | 'pre_existing';
+
+export interface TeamReviewFinding {
+  id: string;
+  agentRole: TeamReviewAgentRole;
+  severity: FindingSeverity;
+  category: FindingCategory;
+  context: FindingContext;
+  file: string;
+  line?: number;
+  endLine?: number;
+  title: string;
+  body: string;
+  suggestion?: string;
+  confidence: number;
+}
+
+export interface TeamReviewAgentResult {
+  agentRole: TeamReviewAgentRole;
+  model: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  startedAt?: string;
+  completedAt?: string;
+  findings: TeamReviewFinding[];
+  summary?: string;
+  error?: string;
+  tokenUsage?: { inputTokens: number; outputTokens: number };
+  cost?: string;
+}
+
+export interface TeamReviewConfig {
+  agents?: TeamReviewAgentRole[];
+  model?: string;
+  perAgentModel?: Partial<Record<TeamReviewAgentRole, string>>;
+  maxFindingsPerAgent?: number;
+  reviewMdContent?: string;
+  focusFiles?: string[];
+  ignorePatterns?: string[];
+  severity?: {
+    minSeverity?: FindingSeverity;
+    includeNits?: boolean;
+    includePraise?: boolean;
+  };
+}
+
+export interface TeamReviewData {
+  config: TeamReviewConfig;
+  agents: TeamReviewAgentResult[];
+  aggregatedFindings: TeamReviewFinding[];
+  stats: {
+    totalFindings: number;
+    bySeverity: Partial<Record<FindingSeverity, number>>;
+    byCategory: Partial<Record<FindingCategory, number>>;
+    byAgent: Partial<Record<TeamReviewAgentRole, number>>;
+  };
+  reviewMdUsed: boolean;
+  startedAt?: string;
+  completedAt?: string;
+  totalCost?: string;
+}
+
+export interface TeamReviewRun extends ReviewRun {
+  teamReview?: TeamReviewData;
+}
+
+export interface TeamReviewRunEvent extends ReviewRunEvent {
+  agentRole?: TeamReviewAgentRole;
+  eventKind?:
+    | 'team_started' | 'agent_started' | 'agent_finding'
+    | 'agent_completed' | 'agent_failed'
+    | 'aggregation_started' | 'aggregation_completed'
+    | 'team_completed' | 'team_failed';
+  finding?: TeamReviewFinding;
+}
+
+export interface ReviewTriggerComment {
+  command: 'review';
+  options?: {
+    model?: string;
+    agents?: TeamReviewAgentRole[];
+    focus?: string[];
+  };
+  rawComment: string;
+  commentId: number;
+  commentAuthor: string;
+}
+
 // === Common ===
 
 export interface PaginatedResponse<T> {

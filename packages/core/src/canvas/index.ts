@@ -59,3 +59,5 @@ export type {
   // Execution result
   CanvasExecutionResult,
 } from './types.js';
+
+export { buildPRReviewWorkflow, type PRReviewWorkflowInput } from './pr-review-workflow.js';

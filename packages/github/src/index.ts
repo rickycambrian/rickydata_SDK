@@ -2,7 +2,7 @@
 export { GitHubProvider, useGitHubClients, type GitHubProviderProps } from './provider.js';
 
 // Services
-export { GitHubApi, type GitHubApiConfig, type CreateReviewRunInput } from './services/github-api.js';
+export { GitHubApi, type GitHubApiConfig, type CreateReviewRunInput, type CreateTeamReviewRunInput } from './services/github-api.js';
 export { PipelineApi, type PipelineApiConfig } from './services/pipeline-api.js';
 export { FeedbackApi, type FeedbackApiConfig } from './services/feedback-api.js';
 
@@ -35,6 +35,13 @@ export {
   useReviewRunEventsMap,
   reviewRunKeys,
 } from './hooks/useReviewRuns.js';
+export {
+  useCreateTeamReview,
+  useTeamReviewRun,
+  useTeamReviewEvents,
+  useTeamReview,
+  teamReviewKeys,
+} from './hooks/useTeamReview.js';
 
 // Components
 export { ConfidenceBadge } from './components/ConfidenceBadge.js';
@@ -46,6 +53,9 @@ export { PipelineStatusBar } from './components/PipelineStatusBar.js';
 export { ReviewActions } from './components/ReviewActions.js';
 export { ROIChart } from './components/ROIChart.js';
 export { InstallationCard } from './components/InstallationCard.js';
+export { TeamReviewProgress } from './components/TeamReviewProgress.js';
+export { TeamReviewFindings } from './components/TeamReviewFindings.js';
+export { TeamReviewSummary } from './components/TeamReviewSummary.js';
 
 // Types
 export type * from './types.js';

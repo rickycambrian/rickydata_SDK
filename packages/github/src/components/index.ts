@@ -7,3 +7,6 @@ export { PipelineStatusBar } from './PipelineStatusBar.js';
 export { ReviewActions } from './ReviewActions.js';
 export { ROIChart } from './ROIChart.js';
 export { InstallationCard } from './InstallationCard.js';
+export { TeamReviewProgress } from './TeamReviewProgress.js';
+export { TeamReviewFindings } from './TeamReviewFindings.js';
+export { TeamReviewSummary } from './TeamReviewSummary.js';

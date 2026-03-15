@@ -10,6 +10,9 @@ import type {
   ReviewRun,
   ReviewRunEvent,
   VerificationStatus,
+  TeamReviewRun,
+  TeamReviewRunEvent,
+  TeamReviewConfig,
 } from '../types.js';
 
 export interface GitHubApiConfig {
@@ -31,6 +34,11 @@ export interface CreateReviewRunInput {
     confidenceUpper?: number;
     model?: string;
   };
+}
+
+export interface CreateTeamReviewRunInput extends CreateReviewRunInput {
+  teamReview: true;
+  teamConfig?: TeamReviewConfig;
 }
 
 export class GitHubApi {
@@ -243,6 +251,88 @@ export class GitHubApi {
           dataLines.push(line.slice('data:'.length).trimStart());
         }
       }
+    }
+  }
+
+  // Team review lifecycle
+  async createTeamReviewRun(input: CreateTeamReviewRunInput): Promise<TeamReviewRun> {
+    const payload = await this.request<{ run: TeamReviewRun }>('/api/v1/reviews/runs', {
+      method: 'POST',
+      body: JSON.stringify({ ...input, async: true, teamReview: true }),
+    });
+    return payload.run;
+  }
+
+  async getTeamReviewRun(runId: string): Promise<TeamReviewRun> {
+    const payload = await this.request<{ run: TeamReviewRun }>(
+      `/api/v1/reviews/runs/${encodeURIComponent(runId)}`,
+    );
+    return payload.run;
+  }
+
+  async *streamTeamReviewEvents(
+    runId: string,
+    options?: { after?: number; signal?: AbortSignal },
+  ): AsyncGenerator<TeamReviewRunEvent> {
+    const token = await this.getToken();
+    const params = new URLSearchParams();
+    if (options?.after) params.set('after', String(options.after));
+    const qs = params.toString();
+    const url = `${this.baseUrl}/api/v1/reviews/runs/${encodeURIComponent(runId)}/events${qs ? `?${qs}` : ''}`;
+    const res = await globalThis.fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: options?.signal,
+    });
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`GitHub API error ${res.status}: ${body}`);
+    }
+
+    const decoder = new TextDecoder();
+    const reader = res.body.getReader();
+    let buffer = '';
+    let dataLines: string[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const lineRaw of lines) {
+        const line = lineRaw.trimEnd();
+        if (!line) {
+          if (dataLines.length > 0) {
+            const payload = dataLines.join('\n');
+            dataLines = [];
+            try {
+              yield JSON.parse(payload) as TeamReviewRunEvent;
+            } catch {
+              // Skip malformed frames.
+            }
+          }
+          continue;
+        }
+        if (line.startsWith(':')) continue;
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trimStart());
+        }
+      }
+    }
+  }
+
+  async getReviewMd(owner: string, repo: string): Promise<string | null> {
+    try {
+      const payload = await this.request<{ content: string }>(
+        `/github/repos/${owner}/${repo}/review-md`,
+      );
+      return payload.content;
+    } catch {
+      return null;
     }
   }
 
