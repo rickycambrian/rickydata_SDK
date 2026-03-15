@@ -155,18 +155,13 @@ describe('AgentMCPProxy', () => {
       // Initialize the proxy
       await proxy.handleRequest({ jsonrpc: '2.0', method: 'notifications/initialized' });
 
-      // Now mock the tool call: init + tools/call
-      const callInitResult = {
-        jsonrpc: '2.0', id: 3,
-        result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'r', version: '1' } },
-      };
+      // Now mock the tool call (init is cached from the initial refresh)
       const callResult = {
-        jsonrpc: '2.0', id: 4,
+        jsonrpc: '2.0', id: 3,
         result: { content: [{ type: 'text', text: 'Search results for MCP' }] },
       };
 
       fetchSpy
-        .mockResolvedValueOnce(mockFetchResponse(sseResponse(callInitResult)))
         .mockResolvedValueOnce(mockFetchResponse(sseResponse(callResult)));
 
       const response = await proxy.handleRequest({

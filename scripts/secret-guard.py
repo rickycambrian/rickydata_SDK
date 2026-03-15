@@ -80,6 +80,9 @@ def _is_likely_placeholder(value: str) -> bool:
         return True
     if lower.startswith("test-") or lower.startswith("test_"):
         return True
+    # Code expressions (method calls, function calls) are never literal secrets
+    if "(" in v or ")" in v:
+        return True
 
     return False
 

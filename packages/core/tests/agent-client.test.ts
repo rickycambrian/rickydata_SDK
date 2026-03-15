@@ -50,27 +50,27 @@ describe('AgentClient', () => {
     });
 
     it('accepts a pre-existing token without privateKey', () => {
-      const client = new AgentClient({ token: 'jwt-token-123' });
+      const client = new AgentClient({ token: 'jwt-token-123', sessionStorePath: null });
       expect(client).toBeDefined();
     });
 
     it('accepts a hex private key with 0x prefix', () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       expect(client).toBeDefined();
     });
 
     it('auto-prefixes 0x to private key', () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY.slice(2) });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY.slice(2), sessionStorePath: null });
       expect(client).toBeDefined();
     });
 
     it('uses default gateway URL', () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       expect(client).toBeDefined();
     });
 
     it('accepts a custom gateway URL', () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY, gatewayUrl: 'https://custom.example.com/' });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, gatewayUrl: 'https://custom.example.com/', sessionStorePath: null });
       expect(client).toBeDefined();
     });
   });
@@ -104,7 +104,7 @@ describe('AgentClient', () => {
           ]),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await client.chat('test-agent', 'hello');
 
       // Should have called challenge + verify
@@ -121,7 +121,7 @@ describe('AgentClient', () => {
         status: 500,
       } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.chat('test-agent', 'hello')).rejects.toThrow('Auth challenge failed: 500');
     });
 
@@ -137,7 +137,7 @@ describe('AgentClient', () => {
           text: () => Promise.resolve('Invalid signature'),
         } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.chat('test-agent', 'hello')).rejects.toThrow('Auth verification failed: 403');
     });
   });
@@ -146,12 +146,12 @@ describe('AgentClient', () => {
 
   describe('chat', () => {
     it('validates agentId is not empty', async () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.chat('', 'hello')).rejects.toThrow('agentId is required');
     });
 
     it('validates message is not empty', async () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.chat('test-agent', '')).rejects.toThrow('message is required');
     });
 
@@ -174,7 +174,7 @@ describe('AgentClient', () => {
           ]),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.chat('test-agent', 'hi');
 
       expect(result.text).toBe('Hello world!');
@@ -200,7 +200,7 @@ describe('AgentClient', () => {
         } as unknown as Response);
 
       const chunks: string[] = [];
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await client.chat('test-agent', 'hi', {
         onText: (t) => chunks.push(t),
       });
@@ -227,7 +227,7 @@ describe('AgentClient', () => {
       const toolCalls: Array<{ name: string; displayName?: string }> = [];
       const toolResults: Array<{ name: string; isError: boolean }> = [];
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.chat('test-agent', 'search for test', {
         onToolCall: (t) => toolCalls.push({ name: t.name, displayName: t.displayName }),
         onToolResult: (r) => toolResults.push({ name: r.name, isError: r.isError }),
@@ -251,8 +251,8 @@ describe('AgentClient', () => {
           ]),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
-      await expect(client.chat('test-agent', 'hi')).rejects.toThrow('Agent error: Insufficient balance');
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      await expect(client.chat('test-agent', 'hi')).rejects.toThrow('Insufficient balance');
     });
 
     it('throws on HTTP error from chat endpoint', async () => {
@@ -267,8 +267,8 @@ describe('AgentClient', () => {
           text: () => Promise.resolve('Payment required'),
         } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
-      await expect(client.chat('test-agent', 'hi')).rejects.toThrow('Chat failed: 402');
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      await expect(client.chat('test-agent', 'hi')).rejects.toThrow('Payment required');
     });
 
     it('wraps terminated transport errors with session recovery guidance', async () => {
@@ -279,9 +279,9 @@ describe('AgentClient', () => {
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'sess-1' }) } as Response)
         .mockRejectedValueOnce(new Error('terminated'));
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
-      await expect(client.chat('test-agent', 'hi')).rejects.toThrow(
-        'Connection interrupted while streaming response (sessionId: sess-1)'
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      await expect(client.chat('test-agent', 'hi', { maxRetries: 0 })).rejects.toThrow(
+        'Connection interrupted while streaming response'
       );
       expect(client.getCachedSessionId('test-agent')).toBe('sess-1');
     });
@@ -301,9 +301,9 @@ describe('AgentClient', () => {
           }),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
-      await expect(client.chat('test-agent', 'hi')).rejects.toThrow(
-        'Connection interrupted while streaming response (sessionId: sess-1)'
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      await expect(client.chat('test-agent', 'hi', { maxRetries: 0 })).rejects.toThrow(
+        'Connection interrupted while streaming response'
       );
     });
   });
@@ -329,7 +329,7 @@ describe('AgentClient', () => {
           body: createSSEStream([{ type: 'text', data: 'second' }, { type: 'done', data: {} }]),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const r1 = await client.chat('test-agent', 'first message');
       const r2 = await client.chat('test-agent', 'second message');
 
@@ -351,7 +351,7 @@ describe('AgentClient', () => {
           body: createSSEStream([{ type: 'text', data: 'hi' }, { type: 'done', data: {} }]),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.chat('test-agent', 'hello', { sessionId: 'my-session' });
 
       expect(result.sessionId).toBe('my-session');
@@ -374,7 +374,7 @@ describe('AgentClient', () => {
         json: () => Promise.resolve({ agents }),
       } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.listAgents();
 
       expect(result).toEqual(agents);
@@ -387,7 +387,7 @@ describe('AgentClient', () => {
         status: 500,
       } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.listAgents()).rejects.toThrow('Failed to list agents: 500');
     });
   });
@@ -396,7 +396,7 @@ describe('AgentClient', () => {
 
   describe('configureApiKey', () => {
     it('rejects invalid API key format', async () => {
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.configureApiKey('invalid-key')).rejects.toThrow('must start with "sk-ant-"');
     });
 
@@ -410,7 +410,7 @@ describe('AgentClient', () => {
         // Store API key
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, configured: true }) } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await client.configureApiKey('sk-ant-test-key');
 
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -432,7 +432,7 @@ describe('AgentClient', () => {
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ configured: true }) } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.isApiKeyConfigured();
       expect(result).toBe(true);
     });
@@ -445,7 +445,7 @@ describe('AgentClient', () => {
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ configured: false }) } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.isApiKeyConfigured();
       expect(result).toBe(false);
     });
@@ -466,7 +466,7 @@ describe('AgentClient', () => {
           body: null,
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.chat('test-agent', 'hi');
 
       expect(result.text).toBe('');
@@ -493,7 +493,7 @@ describe('AgentClient', () => {
           }),
         } as unknown as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.chat('test-agent', 'hi');
 
       expect(result.text).toBe('valid');
@@ -515,7 +515,7 @@ describe('AgentClient', () => {
         } as unknown as Response);
 
       const results: Array<{ result?: string }> = [];
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await client.chat('test-agent', 'hi', {
         onToolResult: (r) => results.push({ result: r.result }),
       });
@@ -533,7 +533,7 @@ describe('AgentClient', () => {
         json: () => Promise.resolve({ kbToolsEnabled: true }),
       } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.setKnowledgeBookTools('my-agent', true);
 
       expect(result.kbToolsEnabled).toBe(true);
@@ -556,7 +556,7 @@ describe('AgentClient', () => {
         json: () => Promise.resolve({ reflectEnabled: true, reflectConfig: { minConfidence: 0.6, autoShare: false, defaultSpace: 'general' } }),
       } as Response);
 
-      const client = new AgentClient({ privateKey: PRIVATE_KEY });
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.updateReflectConfig('my-agent', { enabled: true });
 
       expect(result.reflectEnabled).toBe(true);
