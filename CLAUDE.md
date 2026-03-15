@@ -23,7 +23,10 @@ packages/
       canvas/               # Canvas workflow client
       wallet/               # Spending wallet + policy
       pixel/                # Pixel office client
-      mcp/                  # MCP server tools
+      mcp/
+        agent-registry.ts   # Registry CRUD + file watch (~/.rickydata/mcp-agents.json)
+        agent-mcp-proxy.ts  # Stdio MCP proxy: dynamic tool aggregation + listChanged
+        canvas-server.ts    # Canvas workflow MCP server
       cli/                  # CLI commands
     tests/                  # vitest tests
     bin/                    # CLI entry points
@@ -82,6 +85,20 @@ import { RickyDataProvider, useAgentChat, useWalletBalance } from '@rickydata/re
   </RickyDataProvider>
 </QueryClientProvider>
 ```
+
+## Dynamic Agent Proxy
+
+The agent proxy lets users enable/disable agents as MCP tool providers in Claude Code without restart:
+
+```bash
+rickydata init                                        # Full setup (includes proxy registration)
+rickydata mcp proxy-connect                           # Register proxy with Claude Code (one-time)
+rickydata mcp agent enable <agent-id>                 # Tools appear instantly
+rickydata mcp agent disable <agent-id>                # Tools vanish instantly
+rickydata mcp agent list                              # Show enabled agents
+```
+
+Architecture: single stdio proxy registered once with Claude Code. It watches `~/.rickydata/mcp-agents.json` and sends `notifications/tools/list_changed` to hot-swap tools.
 
 ## Conventions
 

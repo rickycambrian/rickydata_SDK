@@ -2,15 +2,21 @@
 
 Zero-restart agent management for Claude Code. Enable or disable agents as MCP tool providers without restarting your session.
 
-## One-time Setup
+## Setup
 
-Register the dynamic agent proxy with Claude Code:
+The easiest way to set up the proxy is via `rickydata init`, which handles authentication, MCP server registration, and proxy setup in one guided flow:
+
+```bash
+rickydata init
+```
+
+Or register the proxy standalone:
 
 ```bash
 rickydata mcp proxy-connect
 ```
 
-This registers a single persistent stdio MCP server (`rickydata-proxy`) that aggregates tools from all enabled agents. Restart Claude Code once after running this command.
+Both register a persistent stdio MCP server (`rickydata-proxy`) with Claude Code. Restart Claude Code once after the initial setup.
 
 ## Usage
 

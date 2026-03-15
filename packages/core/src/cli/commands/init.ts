@@ -117,7 +117,7 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log();
 
       // ─── Step 1: Authentication ──────────────────────────────────
-      console.log(chalk.bold('Step 1/4: Authentication'));
+      console.log(chalk.bold('Step 1/5: Authentication'));
       console.log(chalk.dim('────────────────────────'));
 
       const existingCred = store.getToken(profile);
@@ -150,7 +150,7 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log();
 
       // ─── Step 2: rickydata MCP Server ─────────────────────────
-      console.log(chalk.bold('Step 2/4: rickydata MCP Server'));
+      console.log(chalk.bold('Step 2/5: rickydata MCP Server'));
       console.log(chalk.dim('──────────────────────────────'));
 
       const rickyServerUrl = 'https://rickydata-mcp-server-2dbp4scmrq-uc.a.run.app';
@@ -218,8 +218,56 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
-      // ─── Step 3: Verification ────────────────────────────────────
-      console.log(chalk.bold('Step 3/4: Verification'));
+      // ─── Step 3: Agent Proxy ──────────────────────────────────────
+      console.log(chalk.bold('Step 3/5: Agent Proxy'));
+      console.log(chalk.dim('─────────────────────'));
+
+      if (claudeInstalled) {
+        const { execFileSync } = await import('child_process');
+
+        // Check if proxy already configured
+        let proxyConfigured = false;
+        try {
+          const listOut = execFileSync('claude', ['mcp', 'list'], { stdio: 'pipe', encoding: 'utf-8' });
+          proxyConfigured = listOut.includes('rickydata-proxy');
+        } catch {
+          // mcp list failed
+        }
+
+        let shouldConfigureProxy = true;
+        if (proxyConfigured && !autoYes) {
+          console.log(chalk.dim('Agent proxy is already configured in Claude Code.'));
+          shouldConfigureProxy = await promptYesNo('  Reconfigure?', false);
+        }
+
+        if (shouldConfigureProxy) {
+          const spinner = ora('Setting up agent proxy...').start();
+          try {
+            try { execFileSync('claude', ['mcp', 'remove', 'rickydata-proxy'], { stdio: 'pipe' }); } catch { /* not present */ }
+
+            execFileSync('claude', [
+              'mcp', 'add', '--transport', 'stdio',
+              'rickydata-proxy', '--',
+              'rickydata', 'mcp', 'proxy-server',
+            ], { stdio: 'pipe' });
+            spinner.succeed('Agent proxy added to Claude Code');
+            console.log(chalk.dim('  Enable agents with: rickydata mcp agent enable <agent-id>'));
+          } catch {
+            spinner.fail('Could not configure agent proxy automatically');
+            console.log(chalk.dim('  Run `rickydata mcp proxy-connect` to set it up manually'));
+          }
+        } else {
+          console.log(chalk.dim('  Skipped — keeping existing configuration'));
+        }
+      } else {
+        console.log(chalk.dim('Claude Code not installed — skipping agent proxy setup.'));
+        console.log(chalk.dim('After installing Claude Code, run: rickydata mcp proxy-connect'));
+      }
+
+      console.log();
+
+      // ─── Step 4: Verification ────────────────────────────────────
+      console.log(chalk.bold('Step 4/5: Verification'));
       console.log(chalk.dim('──────────────────────'));
 
       if (opts.skipVerify) {
@@ -311,8 +359,8 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
-      // ─── Step 4: Ready ───────────────────────────────────────────
-      console.log(chalk.bold('Step 4/4: Ready!'));
+      // ─── Step 5: Ready ───────────────────────────────────────────
+      console.log(chalk.bold('Step 5/5: Ready!'));
       console.log(chalk.dim('────────────────'));
 
       if (claudeInstalled) {
@@ -328,13 +376,16 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
       console.log(chalk.dim('Useful commands:'));
-      console.log(chalk.dim('  rickydata auth status     Check your auth and balance'));
-      console.log(chalk.dim('  rickydata mcp search      Find MCP servers'));
-      console.log(chalk.dim('  rickydata mcp tools       List your enabled tools'));
+      console.log(chalk.dim('  rickydata auth status          Check your auth and balance'));
+      console.log(chalk.dim('  rickydata mcp search           Find MCP servers'));
+      console.log(chalk.dim('  rickydata mcp tools            List your enabled tools'));
+      console.log(chalk.dim('  rickydata mcp agent enable     Enable an agent as MCP tools'));
+      console.log(chalk.dim('  rickydata mcp agent disable    Remove agent tools'));
+      console.log(chalk.dim('  rickydata mcp agent list       Show enabled agents'));
       console.log();
       console.log(chalk.dim('Optional next steps:'));
-      console.log(chalk.dim('  rickydata apikey set      Enable agent chat (requires Anthropic API key)'));
-      console.log(chalk.dim('  rickydata wallet balance  Check your USDC balance'));
+      console.log(chalk.dim('  rickydata apikey set           Enable agent chat (requires Anthropic API key)'));
+      console.log(chalk.dim('  rickydata wallet balance       Check your USDC balance'));
       console.log();
     });
 }
