@@ -25,3 +25,27 @@ export interface SecretSection {
   configuredKeys: string[];
   save: (secrets: Record<string, string>) => Promise<void>;
 }
+
+// ─── Voice Types ─────────────────────────────────────────
+
+export type VoiceConnectionState = 'idle' | 'connecting' | 'connected' | 'error' | 'disconnected';
+
+export type VoicePhase = 'idle' | 'connecting' | 'listening' | 'thinking' | 'using_tools' | 'speaking';
+
+export interface VoiceTranscript {
+  id: string;
+  role: 'user' | 'agent';
+  text: string;
+  timestamp: string;
+  isFinal: boolean;
+  isNarration?: boolean;
+}
+
+export interface VoiceToolCallInfo {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string;
+  status: 'pending' | 'executing' | 'completed' | 'error' | 'timed_out';
+  timestamp?: number;
+}

@@ -302,6 +302,13 @@ export interface VoiceTokenResponse {
   voice: string;
 }
 
+export interface VoiceLivekitTokenResponse {
+  token: string;
+  url: string;
+  roomName: string;
+  sessionId: string;
+}
+
 export interface VoiceToolCallRequest {
   toolName: string;
   arguments: Record<string, unknown>;

@@ -57,6 +57,7 @@ export type {
 
   // Voice
   VoiceTokenResponse,
+  VoiceLivekitTokenResponse,
   VoiceToolCallRequest,
   VoiceToolCallResponse,
   VoiceEndResponse,

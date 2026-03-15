@@ -33,6 +33,7 @@ import type {
   WalletBalanceResponse,
   WalletTransactionsResponse,
   VoiceTokenResponse,
+  VoiceLivekitTokenResponse,
   VoiceToolCallRequest,
   VoiceToolCallResponse,
   VoiceEndResponse,
@@ -615,6 +616,26 @@ export class AgentClient {
       const msg = (body as { message?: string; error?: string }).message
         || (body as { error?: string }).error
         || `Failed to get voice token: ${res.status}`;
+      const err = new Error(msg);
+      (err as Error & { status: number }).status = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
+  /** Get a LiveKit token for voice chat (returns url, roomName, sessionId for LiveKit Room.connect). */
+  async getVoiceLivekitToken(agentId: string, config: { voice?: string }): Promise<VoiceLivekitTokenResponse> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/voice/livekit-token`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      const msg = (body as { message?: string; error?: string }).message
+        || (body as { error?: string }).error
+        || `Failed to get LiveKit voice token: ${res.status}`;
       const err = new Error(msg);
       (err as Error & { status: number }).status = res.status;
       throw err;

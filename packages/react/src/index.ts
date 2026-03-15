@@ -28,6 +28,18 @@ export { useSecrets } from './hooks/secrets.js';
 export { useAgentChat } from './hooks/chat.js';
 export type { UseAgentChatOptions, UseAgentChatResult } from './hooks/chat.js';
 
+// Hooks — Voice (LiveKit)
+export {
+  useAgentVoiceChat,
+  speakNarration,
+  humanizeToolName,
+  createNarration,
+  computeVoicePhase,
+  NARRATION_VOICE_RATE,
+  NARRATION_VOICE_VOLUME,
+} from './hooks/voice.js';
+export type { UseAgentVoiceChatOptions, UseAgentVoiceChatResult, NarrationEvent } from './hooks/voice.js';
+
 // Components
 export { SecretForm } from './components/SecretForm.js';
 export type { SecretFormProps } from './components/SecretForm.js';
@@ -42,7 +54,10 @@ export { DepositPanel } from './components/DepositPanel.js';
 export type { DepositPanelProps, DepositStatus } from './components/DepositPanel.js';
 
 // Types
-export type { ChatMessage, ToolExecution, SecretSection } from './types.js';
+export type {
+  ChatMessage, ToolExecution, SecretSection,
+  VoiceConnectionState, VoicePhase, VoiceTranscript, VoiceToolCallInfo,
+} from './types.js';
 
 // Re-export key types from core for convenience
 export type {
