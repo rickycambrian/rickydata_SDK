@@ -57,17 +57,45 @@ let parsed = resultJson.parsed ?? {};
 let findings = parsed.findings ?? [];
 let summary = parsed.summary ?? '';
 
-// If the CLI's parser didn't find structured findings, try extracting from raw results
-if (findings.length === 0 && resultJson.results) {
-  const allStrings = collectStrings(resultJson.results);
-  allStrings.sort((a, b) => b.length - a.length);
+// If the CLI's parser didn't find structured findings, search everywhere
+if (findings.length === 0) {
+  console.log('No findings from CLI parser, searching results and events...');
 
-  for (const candidate of allStrings) {
+  // 1. Search result node values
+  const resultStrings = collectStrings(resultJson.results ?? {});
+
+  // 2. Search SSE events — team_agent_event messages contain the actual review
+  const events = resultJson.events ?? [];
+  const agentCompletedStrings = [];
+  const allAgentStrings = [];
+
+  for (const event of events) {
+    if (event?.type !== 'team_agent_event') continue;
+    const { eventKind, message, detail } = event.data ?? {};
+    if (message) allAgentStrings.push(message);
+    if (detail) allAgentStrings.push(...collectStrings(detail));
+    if (eventKind === 'agent_completed') {
+      if (message) agentCompletedStrings.push(message);
+      if (detail) agentCompletedStrings.push(...collectStrings(detail));
+    }
+  }
+
+  console.log(`Found ${agentCompletedStrings.length} agent_completed strings, ${allAgentStrings.length} total agent strings`);
+
+  // Try in priority order: completed agents → all agents → results
+  const searchOrder = [
+    ...agentCompletedStrings,
+    ...allAgentStrings,
+    ...resultStrings,
+  ];
+  searchOrder.sort((a, b) => b.length - a.length);
+
+  for (const candidate of searchOrder) {
     const extracted = extractJSON(candidate);
-    if (extracted && typeof extracted === 'object' && Array.isArray(extracted.findings)) {
+    if (extracted && typeof extracted === 'object' && Array.isArray(extracted.findings) && extracted.findings.length > 0) {
       findings = extracted.findings;
       summary = extracted.summary ?? summary;
-      console.log(`Extracted ${findings.length} findings from raw results`);
+      console.log(`Extracted ${findings.length} findings from events/results`);
       break;
     }
   }
