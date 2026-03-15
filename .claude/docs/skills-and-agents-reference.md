@@ -96,10 +96,12 @@ Same-name conflicts: higher priority wins (enterprise > personal > project). Plu
 | Name | Type | Model-invocable | Description |
 |------|------|-----------------|-------------|
 | `canvas-execute` | Task | No (manual only) | Execute canvas workflows via CLI |
+| `canvas-client-patterns` | Reference | No (manual only) | SSE timeout/heartbeat, CanvasHttpError, getRunWithRetry, ParseFailureReason |
 | `mcp-search` | Reference/Task | Yes | Search MCP marketplace |
 | `research-improve` | Task | Yes | Full research-improve pipeline |
 | `research-improve-team` | Task | No (manual only) | Team-mode research pipeline |
 | `review-pr` | Task | Yes | Multi-agent PR review via canvas workflow engine |
+| `sdk-resilience-patterns` | Reference | No (manual only) | Agent client error taxonomy, retry, persistence, timeout patterns |
 | `verify-deployment` | Task | Yes | Post-deployment verification setup and execution |
 | `verification-analysis` | Task | Yes | Predict, remediate, and dashboard for verification system |
 

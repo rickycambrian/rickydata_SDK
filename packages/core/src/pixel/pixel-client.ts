@@ -12,24 +12,9 @@ import type {
   StreamPixelAgentSessionRequest,
   CanvasRunState,
 } from './types.js';
+import { extractSSEData } from '../agent/index.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
-
-function extractSSEData(chunk: string): string | null {
-  const lines = chunk.split('\n');
-  const dataLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      dataLines.push(line.slice(6));
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5));
-    }
-  }
-
-  if (dataLines.length === 0) return null;
-  return dataLines.join('\n');
-}
 
 function slugifyBranchPart(value: string): string {
   const collapsed = value

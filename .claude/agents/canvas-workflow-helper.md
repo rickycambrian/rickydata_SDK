@@ -80,7 +80,19 @@ The server creates teammate nodes from `teamRuntime.teammates`. The payload stru
 2. `formatGitHubReview(parsed)` — Converts findings to `GitHubReviewPayload` with inline comments (file + line) and summary. Uses `REQUEST_CHANGES` for critical/major, `COMMENT` otherwise.
 
 ### SSE stream recovery:
-The CLI captures `runId` from `run_started` event. If the SSE stream drops, it falls back to polling `getRun(runId)` for up to 5 minutes.
+The CLI captures `runId` from `run_started` event. If the SSE stream drops, it falls back to `getRunWithRetry(runId)` — exponential backoff (200ms → 400ms → 800ms → 1600ms → 5000ms cap) retrying only on 404 (handles DB replication lag). Uses typed `CanvasHttpError.status` for 404 detection — NOT string-matching.
+
+### Timeout and heartbeat:
+`executeWorkflow` accepts `ExecuteWorkflowOptions` with `timeoutMs` (hard wall-clock limit) and `heartbeatTimeoutMs` (idle detection — aborts if no data arrives within the window). Both are optional and compose with an optional caller `AbortSignal`. Backward-compatible: bare `AbortSignal` still accepted as second arg.
+
+### Silent-failure diagnostics:
+When `parseCanvasReviewResult` returns `findings: []`, check `result.parseWarning`:
+- `reason: 'no_agent_events'` — SSE stream had zero `team_agent_event` entries
+- `reason: 'events_but_no_json'` — events found but no parseable JSON in any candidate
+- `reason: 'json_but_no_findings_key'` — JSON parsed but no `findings` array key
+- `reason: 'findings_empty_array'` — `findings` key present but array was empty
+
+Also check `parseWarning.candidatesInspected` and `longestCandidateLength` for further context.
 
 ## When helping users
 
@@ -90,4 +102,5 @@ The CLI captures `runId` from `run_started` event. If the SSE stream drops, it f
 4. Use `rickydata canvas execute <file> --verbose` to test workflows
 5. Use `rickydata canvas runs` and `rickydata canvas run <id>` to debug failures
 6. For PR review workflows, check `src/canvas/pr-review-workflow.ts` for the builder pattern
-7. For parsing review results, check `src/canvas/parse-review-results.ts` — note the multi-source search strategy
+7. For parsing review results, check `src/canvas/parse-review-results.ts` — note the multi-source search strategy and `ParseFailureReason` diagnostics
+8. For timeout/retry patterns, see `.claude/skills/canvas-client-patterns/SKILL.md`

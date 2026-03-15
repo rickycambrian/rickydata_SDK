@@ -146,6 +146,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
 | `improvement-cycle` | Run 8-stage verification improvement pipeline | `/improvement-cycle` |
 | `sdk-resilience-patterns` | Reference for error taxonomy, retry, persistence, timeout patterns | (manual reference) |
+| `canvas-client-patterns` | Canvas SSE timeout/heartbeat, CanvasHttpError, getRunWithRetry, ParseFailureReason | (manual reference) |
 
 | Agent | Purpose |
 |-------|---------|
@@ -182,3 +183,6 @@ rickydata github review-status <run-id>                  # Check async run statu
 - Errors use `AgentError` with typed `AgentErrorCode` — use `AgentError.fromHttpStatus()` at HTTP boundaries
 - Retry logic via `retryWithBackoff()` — only retries `isRetryable` errors; pass `maxRetries: 0` in tests
 - File-backed stores accept `null` path for in-memory test mode (e.g., `sessionStorePath: null`)
+- Canvas HTTP errors use `CanvasHttpError(status, message)` — enables typed status-code checks (e.g., 404 in `getRunWithRetry`)
+- Canvas SSE streams accept `ExecuteWorkflowOptions` with `timeoutMs` + `heartbeatTimeoutMs` — both optional, compose with caller `AbortSignal`
+- `parseCanvasReviewResult` returns `parseWarning?.reason: ParseFailureReason` on empty findings — check it before assuming no issues found

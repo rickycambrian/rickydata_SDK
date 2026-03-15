@@ -17,6 +17,7 @@ import type {
   JsonRpcResponse,
   JsonRpcError,
 } from './types.js';
+import { extractSSEData } from '../agent/index.js';
 
 const A2A_VERSION = '0.3';
 const A2A_VERSION_HEADER = 'A2A-Version';
@@ -370,23 +371,4 @@ export class A2AClient {
 
     throw new Error(`A2A request failed: ${res.status} ${errorBody}`);
   }
-}
-
-/**
- * Extract the data payload from an SSE chunk.
- * Handles single and multi-line `data:` fields.
- */
-function extractSSEData(chunk: string): string | null {
-  const lines = chunk.split('\n');
-  const dataLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      dataLines.push(line.slice(6));
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5));
-    }
-  }
-
-  return dataLines.length > 0 ? dataLines.join('\n') : null;
 }

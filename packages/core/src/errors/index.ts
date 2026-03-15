@@ -61,3 +61,13 @@ export class PaymentSigningError extends MCPGatewayError {
     this.name = 'PaymentSigningError';
   }
 }
+
+/** Thrown on non-OK HTTP responses from the Canvas API */
+export class CanvasHttpError extends MCPGatewayError {
+  public readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'CanvasHttpError';
+    this.status = status;
+  }
+}

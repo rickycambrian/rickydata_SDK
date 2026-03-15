@@ -8,6 +8,7 @@
  */
 
 import type { AuthManager } from '../auth.js';
+import { CanvasHttpError } from '../errors/index.js';
 import type {
   CanvasWorkflowRequest,
   CanvasSSEEvent,
@@ -15,6 +16,7 @@ import type {
   CanvasExecutionResult,
   GeoWorkflow,
 } from './types.js';
+import { extractSSEData } from '../agent/index.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
 
@@ -132,7 +134,7 @@ export class CanvasClient {
     if (!res.ok) {
       clearTimers();
       const body = await res.text();
-      throw new Error(`Canvas workflow execution failed: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Canvas workflow execution failed: ${res.status} ${body.slice(0, 200)}`);
     }
 
     const reader = res.body?.getReader();
@@ -271,7 +273,7 @@ export class CanvasClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to list canvas runs: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Failed to list canvas runs: ${res.status} ${body.slice(0, 200)}`);
     }
 
     const data = await res.json();
@@ -288,7 +290,7 @@ export class CanvasClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to get canvas run: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Failed to get canvas run: ${res.status} ${body.slice(0, 200)}`);
     }
 
     return res.json();
@@ -310,7 +312,7 @@ export class CanvasClient {
       try {
         return await this.getRun(runId);
       } catch (err: unknown) {
-        const is404 = err instanceof Error && err.message.includes('404');
+        const is404 = err instanceof CanvasHttpError && err.status === 404;
         const isLast = attempt === maxAttempts;
         if (!is404 || isLast) throw err;
         if (options?.signal?.aborted) throw err;
@@ -341,7 +343,7 @@ export class CanvasClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to ${decision} gate: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Failed to ${decision} gate: ${res.status} ${body.slice(0, 200)}`);
     }
   }
 
@@ -365,7 +367,7 @@ export class CanvasClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to save workflow: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Failed to save workflow: ${res.status} ${body.slice(0, 200)}`);
     }
 
     return res.json();
@@ -380,28 +382,10 @@ export class CanvasClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to list workflows: ${res.status} ${body}`);
+      throw new CanvasHttpError(res.status, `Failed to list workflows: ${res.status} ${body.slice(0, 200)}`);
     }
 
     const data = await res.json();
     return data.workflows ?? [];
   }
-}
-
-/**
- * Extract the data payload from an SSE chunk.
- */
-function extractSSEData(chunk: string): string | null {
-  const lines = chunk.split('\n');
-  const dataLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      dataLines.push(line.slice(6));
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5));
-    }
-  }
-
-  return dataLines.length > 0 ? dataLines.join('\n') : null;
 }

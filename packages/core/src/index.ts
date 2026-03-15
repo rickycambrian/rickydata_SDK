@@ -18,6 +18,7 @@ export {
   DuplicatePaymentError,
   CircuitBreakerTrippedError,
   PaymentSigningError,
+  CanvasHttpError,
 } from './errors/index.js';
 
 // Types

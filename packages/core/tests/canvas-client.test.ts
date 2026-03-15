@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CanvasClient } from '../src/canvas/canvas-client.js';
+import { CanvasHttpError } from '../src/errors/index.js';
 import type { CanvasSSEEvent, CanvasWorkflowRequest } from '../src/canvas/types.js';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -101,7 +102,7 @@ describe('CanvasClient', () => {
       expect(received[1].type).toBe('run_completed');
     });
 
-    it('throws on non-OK response', async () => {
+    it('throws CanvasHttpError on non-OK response', async () => {
       vi.mocked(mockAuth.fetchWithAuth).mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -109,11 +110,15 @@ describe('CanvasClient', () => {
       } as unknown as Response);
 
       const client = makeClient();
-      await expect(async () => {
+      try {
         for await (const _event of client.executeWorkflow(SAMPLE_REQUEST)) {
           // consume
         }
-      }).rejects.toThrow('Canvas workflow execution failed: 500');
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CanvasHttpError);
+        expect((err as CanvasHttpError).status).toBe(500);
+      }
     });
 
     it('throws on missing response body', async () => {
@@ -417,7 +422,7 @@ describe('CanvasClient', () => {
       expect(mockAuth.fetchWithAuth).toHaveBeenCalledTimes(3);
     }, 5000);
 
-    it('throws immediately on non-404 errors', async () => {
+    it('throws CanvasHttpError immediately on non-404 errors', async () => {
       vi.mocked(mockAuth.fetchWithAuth).mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -425,11 +430,17 @@ describe('CanvasClient', () => {
       } as unknown as Response);
 
       const client = makeClient();
-      await expect(client.getRunWithRetry('r1', { initialDelayMs: 10 })).rejects.toThrow('500');
+      try {
+        await client.getRunWithRetry('r1', { initialDelayMs: 10 });
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CanvasHttpError);
+        expect((err as CanvasHttpError).status).toBe(500);
+      }
       expect(mockAuth.fetchWithAuth).toHaveBeenCalledTimes(1);
     });
 
-    it('throws after exhausting all attempts', async () => {
+    it('throws CanvasHttpError after exhausting all attempts', async () => {
       vi.mocked(mockAuth.fetchWithAuth).mockResolvedValue({
         ok: false,
         status: 404,
@@ -437,9 +448,13 @@ describe('CanvasClient', () => {
       } as unknown as Response);
 
       const client = makeClient();
-      await expect(
-        client.getRunWithRetry('r1', { maxAttempts: 3, initialDelayMs: 10 }),
-      ).rejects.toThrow('404');
+      try {
+        await client.getRunWithRetry('r1', { maxAttempts: 3, initialDelayMs: 10 });
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CanvasHttpError);
+        expect((err as CanvasHttpError).status).toBe(404);
+      }
       expect(mockAuth.fetchWithAuth).toHaveBeenCalledTimes(3);
     }, 5000);
 
@@ -454,9 +469,13 @@ describe('CanvasClient', () => {
       } as unknown as Response);
 
       const client = makeClient();
-      await expect(
-        client.getRunWithRetry('r1', { initialDelayMs: 10, signal: controller.signal }),
-      ).rejects.toThrow('404');
+      try {
+        await client.getRunWithRetry('r1', { initialDelayMs: 10, signal: controller.signal });
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CanvasHttpError);
+        expect((err as CanvasHttpError).status).toBe(404);
+      }
       // Should not retry because signal is aborted
       expect(mockAuth.fetchWithAuth).toHaveBeenCalledTimes(1);
     });
