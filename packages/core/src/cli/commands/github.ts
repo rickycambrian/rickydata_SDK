@@ -235,7 +235,50 @@ export function createGitHubCommands(config: ConfigManager, store: CredentialSto
 
       try {
         if (opts.json) {
-          const result = await client.executeWorkflowSync(request);
+          // Capture runId during streaming so we can recover if the stream drops
+          let capturedRunId = '';
+          let result;
+
+          try {
+            result = await client.executeWorkflowSync(request, {
+              onEvent: (event) => {
+                if (event.type === 'run_started') {
+                  capturedRunId = event.data.runId;
+                }
+              },
+            });
+          } catch (streamErr) {
+            // SSE stream may terminate early — try fetching results via getRun()
+            const errMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+            process.stderr.write(`Stream error: ${errMsg}\n`);
+
+            if (!capturedRunId) {
+              throw streamErr;
+            }
+
+            process.stderr.write(`Recovering run ${capturedRunId} via API...\n`);
+            // Poll for completion (up to 5 minutes)
+            for (let attempt = 0; attempt < 30; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 10_000));
+              const run = await client.getRun(capturedRunId);
+              if (run.status === 'completed' || run.status === 'failed') {
+                result = {
+                  runId: run.runId,
+                  status: run.status,
+                  results: run.nodeResults,
+                  logs: run.logs,
+                  events: [],
+                };
+                break;
+              }
+              process.stderr.write(`  Run status: ${run.status} (attempt ${attempt + 1}/30)\n`);
+            }
+
+            if (!result) {
+              throw new Error(`Run ${capturedRunId} did not complete within timeout`);
+            }
+          }
+
           // Enrich with parsed findings for downstream consumers
           const parsed = parseCanvasReviewResult(result);
           const output = { ...result, parsed };
