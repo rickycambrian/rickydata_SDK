@@ -101,6 +101,7 @@ Same-name conflicts: higher priority wins (enterprise > personal > project). Plu
 | `research-improve-team` | Task | No (manual only) | Team-mode research pipeline |
 | `review-pr` | Task | Yes | Multi-agent PR review via canvas workflow engine |
 | `verify-deployment` | Task | Yes | Post-deployment verification setup and execution |
+| `verification-analysis` | Task | Yes | Predict, remediate, and dashboard for verification system |
 
 ### Agents
 | Name | Model | Tools | Purpose |

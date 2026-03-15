@@ -140,6 +140,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 |-------|-------------|------------|
 | `review-pr` | Run multi-agent PR review | `/review-pr owner/repo#N` |
 | `verify-deployment` | Create/run post-deploy verification | `/verify-deployment [repo-or-url]` |
+| `verification-analysis` | Predict, remediate, dashboard for verification system | `/verification-analysis [predict\|remediate\|dashboard\|full]` |
 | `canvas-execute` | Execute a canvas workflow | `/canvas-execute <file-or-id>` |
 | `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
 
