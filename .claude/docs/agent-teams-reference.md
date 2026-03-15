@@ -92,6 +92,35 @@ When writing plans that will be executed after a context reset, always include:
 6. **Shutdown protocol**: Show the shutdown_request message format
 7. **Task dependency setup**: Show `addBlockedBy` for sequential tasks
 
+## Verified Production Team Pattern
+
+**Provenance:** Verified 2026-03-15. `sdk-production-hardening` team ran 5 parallel teammates with 4 code tasks + 1 docs task. All tasks completed. 560 tests pass, zero type errors.
+
+### Working Composition (parallel code + docs)
+
+| Teammate | Role | Tasks |
+|----------|------|-------|
+| `canvas-engineer` | canvas-workflow-helper agent | Fix canvas-client.ts bugs (#1), Final verification (#7) |
+| `sse-consolidator` | general-purpose | Consolidate SSE parsing (#2) |
+| `github-fixer` | general-purpose | Fix useRef import (#3) |
+| `test-engineer` | general-purpose | Add PR review pipeline tests (#4) |
+| `docs-expert` | docs-expert agent | Study docs (#5), Record patterns (#6) |
+
+### Key Design: Parallel Execution with Blocked Docs Task
+
+Code tasks (#1–4) ran in parallel. Docs task (#6) was blocked on #1–4 completing (via `addBlockedBy`). This prevented docs from recording speculative patterns before code was verified.
+
+```
+TaskUpdate(taskId: "6", addBlockedBy: ["1", "2", "4"])
+```
+
+### What Made It Work
+
+1. **Specific subagent_type per role** — `canvas-workflow-helper` for canvas work, `docs-expert` for documentation. Specialized agents outperform general-purpose for domain work.
+2. **Task blocking for sequencing** — docs task blocked on code tasks; team lead waited for completion signals before unblocking
+3. **Owner assignment via TaskUpdate** — each teammate claimed tasks with `owner` + `status: "in_progress"` before starting
+4. **Idle is normal** — teammates went idle between turns; team lead sent `SendMessage` to wake them with context when needed
+
 ## Common Mistakes After Context Reset
 
 | Mistake | What happens | Fix |
