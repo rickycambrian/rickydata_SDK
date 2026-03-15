@@ -20,6 +20,8 @@ export interface UseAgentChatResult {
   sendMessage: (text: string) => Promise<void>;
   clearChat: () => void;
   refreshApiKeyStatus: () => void;
+  /** Create a session eagerly (without sending a message). Enables voice before first chat. */
+  ensureSession: () => Promise<string>;
 }
 
 /**
@@ -206,7 +208,7 @@ export function useAgentChat({
         ? (err as { status: number }).status : 0;
       const errMessage = err instanceof Error ? err.message : String(err);
 
-      if (errStatus === 402) {
+      if (errStatus === 402 || /\b402\b/.test(errMessage)) {
         setMessages(prev => [...prev, {
           id: `msg-${Date.now()}-error`, role: 'agent',
           content: 'Insufficient balance. Please deposit funds to continue.',
@@ -279,6 +281,18 @@ export function useAgentChat({
     setActiveTools([]);
   }, []);
 
+  /**
+   * Eagerly create a session without sending a message.
+   * Useful for enabling voice or other session-dependent features
+   * before the user types their first message.
+   */
+  const ensureSession = useCallback(async (): Promise<string> => {
+    if (sessionId) return sessionId;
+    const session = await client.createSession(agentId, modelRef.current);
+    setSessionId(session.id);
+    return session.id;
+  }, [client, agentId, sessionId]);
+
   return {
     messages,
     messagesLoading,
@@ -290,5 +304,6 @@ export function useAgentChat({
     sendMessage,
     clearChat,
     refreshApiKeyStatus,
+    ensureSession,
   };
 }

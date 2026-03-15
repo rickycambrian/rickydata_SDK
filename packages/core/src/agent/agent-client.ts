@@ -417,8 +417,13 @@ export class AgentClient {
       body: JSON.stringify({ model }),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error || `Failed to create session: ${res.status}`);
+      const errBody = await res.json().catch(() => ({ error: res.statusText }));
+      const msg = (errBody as { message?: string; error?: string }).message
+        || (errBody as { error?: string }).error
+        || `Failed to create session: ${res.status}`;
+      const err = new Error(msg);
+      (err as Error & { status: number }).status = res.status;
+      throw err;
     }
     const data: SessionCreateResponse = await res.json();
     this.sessions.set(agentId, data.id);
@@ -612,7 +617,9 @@ export class AgentClient {
       const msg = (body as { message?: string; error?: string }).message
         || (body as { error?: string }).error
         || `Failed to get voice token: ${res.status}`;
-      throw new Error(msg);
+      const err = new Error(msg);
+      (err as Error & { status: number }).status = res.status;
+      throw err;
     }
     return res.json();
   }
