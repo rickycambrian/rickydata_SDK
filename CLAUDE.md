@@ -214,6 +214,8 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `improvement-cycle` | Run 8-stage verification improvement pipeline | `/improvement-cycle` |
 | `sdk-resilience-patterns` | Reference for error taxonomy, retry, persistence, timeout patterns | (manual reference) |
 | `canvas-client-patterns` | Canvas SSE timeout/heartbeat, CanvasHttpError, getRunWithRetry, ParseFailureReason | (manual reference) |
+| `wallet-adapter-pattern` | Building wallet-agnostic auth adapters bridging Privy/MetaMask to WalletAdapter interface | (manual reference) |
+| `external-engine-pattern` | Decoupling SDK UI from SDK networking by accepting an external chat engine from the host app | (manual reference) |
 
 | Agent | Purpose |
 |-------|---------|
