@@ -144,6 +144,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `verification-analysis` | Predict, remediate, dashboard for verification system | `/verification-analysis [predict\|remediate\|dashboard\|full]` |
 | `canvas-execute` | Execute a canvas workflow | `/canvas-execute <file-or-id>` |
 | `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
+| `improvement-cycle` | Run 8-stage verification improvement pipeline | `/improvement-cycle` |
 | `sdk-resilience-patterns` | Reference for error taxonomy, retry, persistence, timeout patterns | (manual reference) |
 
 | Agent | Purpose |

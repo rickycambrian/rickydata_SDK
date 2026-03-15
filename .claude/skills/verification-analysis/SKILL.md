@@ -90,9 +90,35 @@ Data files in `ai_research/data/verification/`:
 | `rickycambrian/KF-serverless` | Cloud Run |
 | `rickycambrian/canvas-workflows` | Cloud Run |
 
+## Improvement Cycle (continuous self-improvement)
+
+**Provenance:** Verified working 2026-03-15. Ran `python scripts/run_improvement_cycle.py --skip-github` — 8/8 stages completed (Cycle #31), 359 tests pass. See `/improvement-cycle` skill for full documentation.
+
+Run the full 8-stage improvement pipeline:
+
+```bash
+cd ~/Documents/github/ai_research && python scripts/run_improvement_cycle.py --skip-github  # Local only
+cd ~/Documents/github/ai_research && python scripts/run_improvement_cycle.py --days 14      # 14-day lookback
+```
+
+Stages: aggregate, predict, reconcile, recalibrate, remediate, resolve, dashboard, track
+
+New modules added to the verification system:
+
+| Module | File | Purpose |
+|--------|------|---------|
+| Improvement Tracker | `src/verification/improvement_tracker.py` | KPI computation, cycle recording, trend analysis |
+| Remediation Tracker | `src/verification/remediation_tracker.py` | Suggestion lifecycle (suggested -> verified -> closed) |
+| Prediction Engine `recalibrate()` | `src/verification/prediction_engine.py` | Bayesian factor weight updates from accuracy data |
+
+Data files produced: `improvement_history.json` (cycle KPIs), `remediation_lifecycle.json` (suggestion lifecycle), `calibration.json` (factor weights).
+
 ## Known Limitations
 
 - Prediction accuracy is 50% at initial seeding (equal to trivial "always pass" baseline) — will improve as more data accumulates
+- Accuracy is honestly flagged when inflated by retrospective seeds vs real predictions
 - Remediation suggestions require human review — none are auto-fixable yet
 - Dashboard JSON output includes a "saved to" line on stderr before the JSON on stdout
-- All modules depend on `gh` CLI for GitHub API access
+- All modules depend on `gh` CLI for GitHub API access (use `--skip-github` for local-only)
+- File locking uses `fcntl.flock` — Unix/macOS only
+- Trend computation requires 3+ cycles of history
