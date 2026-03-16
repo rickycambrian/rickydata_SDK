@@ -110,7 +110,7 @@ export function useWalletAuth(wallet: WalletAdapter, gatewayUrl: string) {
   }, [walletAddress]);
 
   const refreshToken = useCallback(async (): Promise<void> => {
-    if (!walletAddress || !wallet.isReady()) return;
+    if (!walletAddress || !wallet.isReady() || !gatewayUrl) return;
     if (refreshingRef.current) return;
 
     // Check cached token first
@@ -179,11 +179,11 @@ export function useWalletAuth(wallet: WalletAdapter, gatewayUrl: string) {
 
   // Auto-refresh when wallet is ready and no valid token exists
   useEffect(() => {
-    if (!walletAddress || !wallet.isReady()) return;
+    if (!walletAddress || !wallet.isReady() || !gatewayUrl) return;
     if (tokenRef.current && isTokenStillValid(tokenRef.current, walletAddress)) return;
 
     refreshToken().catch(() => undefined);
-  }, [walletAddress, wallet, refreshToken]);
+  }, [walletAddress, wallet, gatewayUrl, refreshToken]);
 
   return { gatewayToken, refreshToken, isAuthenticated, status, error };
 }

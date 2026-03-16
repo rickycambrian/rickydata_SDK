@@ -19,6 +19,8 @@ export interface ChatBubbleCallbacks {
   onCustomEvent?: (event: ChatBubbleEvent) => void;
   /** Resolve the current page context for contextual chat. */
   getPageContext?: () => ChatContext | null;
+  /** Render content for custom mode tabs (e.g. 'traces'). */
+  renderCustomMode?: (mode: string) => React.ReactNode;
 }
 
 export interface ChatBubbleConfig {
@@ -37,7 +39,7 @@ export interface ChatBubbleConfig {
   /** Chat bubble title. */
   title?: string;
   /** Available mode tabs. */
-  modes?: ('chat' | 'voice' | 'threads')[];
+  modes?: ('chat' | 'voice' | 'threads' | 'traces')[];
   /** Callbacks. */
   callbacks?: ChatBubbleCallbacks;
   /** External chat engine — bypasses built-in useChatBubbleEngine when provided. */

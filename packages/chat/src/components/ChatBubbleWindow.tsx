@@ -20,8 +20,10 @@ export function ChatBubbleWindow() {
   const { config } = useChatBubbleConfig();
   const wallet = config.wallet;
   const gatewayUrl = config.gatewayUrl ?? 'https://agents.rickydata.org';
+  const hasExternalEngine = !!config.engine;
 
-  const { gatewayToken, status: gatewayStatus, error: gatewayError } = useWalletAuth(wallet, gatewayUrl);
+  // Skip gateway auth when an external engine handles its own auth (avoids CORS errors)
+  const { gatewayToken, status: gatewayStatus, error: gatewayError } = useWalletAuth(wallet, hasExternalEngine ? '' : gatewayUrl);
 
   const chatContext = config.callbacks?.getPageContext?.() ?? null;
 
@@ -95,8 +97,8 @@ export function ChatBubbleWindow() {
     }}>
       <ChatWindowHeader />
 
-      {/* Gateway auth status indicators */}
-      {walletAddress && gatewayStatus === 'authenticating' && (
+      {/* Gateway auth status indicators (hidden when external engine handles auth) */}
+      {!hasExternalEngine && walletAddress && gatewayStatus === 'authenticating' && (
         <div style={{
           margin: '0 12px',
           marginTop: '4px',
@@ -120,7 +122,7 @@ export function ChatBubbleWindow() {
           </span>
         </div>
       )}
-      {walletAddress && gatewayStatus === 'error' && gatewayError && (
+      {!hasExternalEngine && walletAddress && gatewayStatus === 'error' && gatewayError && (
         <div style={{
           margin: '0 12px',
           marginTop: '4px',
@@ -190,6 +192,10 @@ export function ChatBubbleWindow() {
           onSelectThread={async () => {}}
           onNewThread={async () => { builtInEngine.clearChat(); }}
         />
+      ) : mode !== 'chat' && config.callbacks?.renderCustomMode ? (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {config.callbacks.renderCustomMode(mode)}
+        </div>
       ) : (
         <>
           <ChatMessageList

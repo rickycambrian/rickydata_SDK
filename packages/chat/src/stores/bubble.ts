@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ChatBubbleMode = 'chat' | 'voice' | 'threads';
+export type ChatBubbleMode = 'chat' | 'voice' | 'threads' | 'traces';
 
 export interface ChatBubbleState {
   isOpen: boolean;

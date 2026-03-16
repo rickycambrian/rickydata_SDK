@@ -12,6 +12,7 @@ export function ChatWindowHeader() {
     chat: 'Chat',
     voice: 'Voice',
     threads: 'Threads',
+    traces: 'Traces',
   };
 
   return (

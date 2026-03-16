@@ -48,4 +48,6 @@ export interface ChatEngine {
   streamingPhase?: 'idle' | 'tools' | 'streaming';
   activeTools?: string[];
   abort?: () => void;
+  /** Live trace events for execution visibility (from @rickydata/trace). */
+  traceEvents?: unknown[];
 }
