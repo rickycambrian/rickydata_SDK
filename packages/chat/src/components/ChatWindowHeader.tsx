@@ -11,7 +11,7 @@ export function ChatWindowHeader() {
   const modeLabels: Record<ChatBubbleMode, string> = {
     chat: 'Chat',
     voice: 'Voice',
-    threads: 'Threads',
+    threads: 'History',
     traces: 'Traces',
   };
 

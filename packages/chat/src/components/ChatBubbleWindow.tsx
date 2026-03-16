@@ -34,6 +34,10 @@ export function ChatBubbleWindow() {
     config.callbacks?.onRevalidate?.(keys);
   }, [config.callbacks]);
 
+  const handleNewChat = useCallback(() => {
+    builtInEngine.clearChat();
+  }, [builtInEngine]);
+
   const walletAddress = wallet.getAddress();
 
   if (isMinimized) {
@@ -190,7 +194,7 @@ export function ChatBubbleWindow() {
           threads={[]}
           activeThreadId={null}
           onSelectThread={async () => {}}
-          onNewThread={async () => { builtInEngine.clearChat(); }}
+          onNewThread={async () => { handleNewChat(); }}
         />
       ) : mode !== 'chat' && config.callbacks?.renderCustomMode ? (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -263,6 +267,39 @@ export function ChatBubbleWindow() {
             );
           })()}
 
+          {/* New chat button */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            padding: '4px 12px 0',
+          }}>
+            <button
+              type="button"
+              onClick={handleNewChat}
+              disabled={engine.streaming}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '10px',
+                fontFamily: 'var(--chat-font-family)',
+                color: 'var(--chat-text-muted)',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: engine.streaming ? 'default' : 'pointer',
+                opacity: engine.streaming ? 0.4 : 1,
+                transition: 'color 150ms ease',
+              }}
+              title="Start a new conversation"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New
+            </button>
+          </div>
+
           <ChatInputBar
             value={engine.input}
             onChange={engine.setInput}
@@ -273,7 +310,7 @@ export function ChatBubbleWindow() {
         </>
       )}
 
-      {/* Pulse animation */}
+      {/* Animations */}
       <style>{`
         @keyframes rickydata-chat-pulse {
           0%, 100% { opacity: 1; }
