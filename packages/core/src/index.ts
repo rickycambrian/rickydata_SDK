@@ -304,3 +304,14 @@ export type {
   BenchmarkStats,
   BenchmarkClientConfig,
 } from './benchmarks/index.js';
+
+// Cycle Client (autonomous loop tracking)
+export { CycleClient } from './cycles/index.js';
+export type {
+  CycleClientConfig,
+  CycleResult,
+  CycleListResponse,
+  CycleSummaryResponse,
+  IngestCycleRequest,
+  IngestCycleResponse,
+} from './cycles/index.js';
