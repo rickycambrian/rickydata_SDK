@@ -152,3 +152,51 @@ export interface PipelineClientConfig {
   /** Subprocess timeout in ms for local mode (default: 1800000 = 30min) */
   localTimeout?: number;
 }
+
+// ── Plan Proposal ────────────────────────────────────────────────────────────
+
+export type PlanStatus =
+  | 'pending'
+  | 'revising'
+  | 'approved'
+  | 'executing'
+  | 'completed'
+  | 'rejected';
+
+export interface PipelineProposeRequest {
+  /** Repository in "owner/name" format */
+  repo: string;
+  /** GitHub issue number */
+  issue_number: number;
+  /** Override model selection */
+  model?: string;
+  /** Maximum spend in USD */
+  budget_usd?: number;
+}
+
+export interface PipelineProposeResponse {
+  /** Unique identifier for this plan */
+  run_id: string;
+  repo: string;
+  issue_number: number;
+  status: PlanStatus;
+  confidence: number;
+  model: string;
+  estimated_cost: number;
+  /** URL of the GitHub comment with the plan */
+  comment_url: string;
+  created_at: string;
+}
+
+export interface PendingPlan {
+  run_id: string;
+  repo: string;
+  issue_number: number;
+  status: PlanStatus;
+  confidence: number;
+  model: string;
+  budget: number;
+  feedback: string[];
+  created_at: string;
+  updated_at: string;
+}

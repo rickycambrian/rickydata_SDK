@@ -281,6 +281,10 @@ export type {
   PipelineOutcomeResponse,
   PipelineROIUpdate,
   PipelineClientConfig,
+  PlanStatus,
+  PipelineProposeRequest,
+  PipelineProposeResponse,
+  PendingPlan,
 } from './pipeline/index.js';
 
 // Benchmark Client

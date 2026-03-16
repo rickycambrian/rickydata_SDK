@@ -25,6 +25,9 @@ import type {
   PipelineStatusResponse,
   PipelineOutcomeReport,
   PipelineOutcomeResponse,
+  PipelineProposeRequest,
+  PipelineProposeResponse,
+  PendingPlan,
 } from './types.js';
 
 export class PipelineClient {
@@ -157,6 +160,146 @@ export class PipelineClient {
     }
 
     return res.json();
+  }
+
+  // ── Plan Proposal ────────────────────────────────────────────────────────
+
+  /**
+   * Propose a plan for an issue without executing it.
+   * Posts a structured plan comment on the GitHub issue for review.
+   *
+   * In local mode, runs resolve_issue.py --plan-comment.
+   */
+  async propose(
+    repo: string,
+    issueNumber: number,
+    opts?: { model?: string; budget_usd?: number },
+  ): Promise<PipelineProposeResponse> {
+    if (!repo) throw new Error('repo is required');
+    if (!issueNumber || issueNumber <= 0) throw new Error('issueNumber must be a positive integer');
+
+    if (this.mode === 'local') {
+      return this._proposeLocal(repo, issueNumber, opts);
+    }
+
+    const body: PipelineProposeRequest = {
+      repo,
+      issue_number: issueNumber,
+      model: opts?.model,
+      budget_usd: opts?.budget_usd,
+    };
+
+    const res = await this.request('/api/v1/pipeline/propose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      await this.throwFromResponse(res, 'propose plan');
+    }
+
+    return res.json();
+  }
+
+  /**
+   * Approve a pending plan, triggering execution.
+   */
+  async approvePlan(
+    runId: string,
+    opts?: { model?: string; budget_usd?: number },
+  ): Promise<PipelineResolveResponse> {
+    if (!runId) throw new Error('runId is required');
+
+    const res = await this.request(`/api/v1/pipeline/plans/${runId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts ?? {}),
+    });
+
+    if (!res.ok) {
+      await this.throwFromResponse(res, 'approve plan');
+    }
+
+    return res.json();
+  }
+
+  /**
+   * Reject a pending plan.
+   */
+  async rejectPlan(runId: string): Promise<{ recorded: boolean }> {
+    if (!runId) throw new Error('runId is required');
+
+    const res = await this.request(`/api/v1/pipeline/plans/${runId}/reject`, {
+      method: 'POST',
+    });
+
+    if (!res.ok) {
+      await this.throwFromResponse(res, 'reject plan');
+    }
+
+    return res.json();
+  }
+
+  /**
+   * Add feedback to a pending plan, triggering re-generation.
+   */
+  async addPlanFeedback(
+    runId: string,
+    feedback: string,
+  ): Promise<PipelineProposeResponse> {
+    if (!runId) throw new Error('runId is required');
+    if (!feedback) throw new Error('feedback is required');
+
+    const res = await this.request(`/api/v1/pipeline/plans/${runId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedback }),
+    });
+
+    if (!res.ok) {
+      await this.throwFromResponse(res, 'add plan feedback');
+    }
+
+    return res.json();
+  }
+
+  private _proposeLocal(
+    repo: string,
+    issueNumber: number,
+    opts?: { model?: string; budget_usd?: number },
+  ): PipelineProposeResponse {
+    const runId = `local-plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const args = [
+      this.resolveScriptPath,
+      `${repo}#${issueNumber}`,
+      '--plan-comment',
+      '--json',
+    ];
+    if (opts?.model) args.push('--model', opts.model);
+
+    try {
+      const stdout = execFileSync(this.pythonPath, args, {
+        timeout: this.localTimeout,
+        encoding: 'utf-8',
+        maxBuffer: 50 * 1024 * 1024,
+      });
+      const data = this._parseLocalOutput(stdout);
+      return {
+        run_id: runId,
+        repo,
+        issue_number: issueNumber,
+        status: 'pending',
+        confidence: data.confidence ?? 0.5,
+        model: data.model ?? 'sonnet',
+        estimated_cost: data.cost ?? 0,
+        comment_url: '',
+        created_at: new Date().toISOString(),
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Local plan proposal failed: ${message.slice(0, 200)}`);
+    }
   }
 
   // ── Local Mode ────────────────────────────────────────────────────────────

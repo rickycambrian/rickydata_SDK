@@ -2,6 +2,10 @@ import type {
   PipelineResolveRequest,
   PipelineResolveResponse,
   PipelineStatus,
+  PipelineProposeRequest,
+  PipelineProposeResponse,
+  PendingPlan,
+  PlanApproveRequest,
 } from '../types.js';
 
 export interface PipelineApiConfig {
@@ -27,6 +31,37 @@ export class PipelineApi {
 
   async getStatus(): Promise<PipelineStatus> {
     return this.request('/api/v1/pipeline/status');
+  }
+
+  async propose(req: PipelineProposeRequest): Promise<PipelineProposeResponse> {
+    return this.request('/api/v1/pipeline/propose', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async approvePlan(runId: string, opts?: PlanApproveRequest): Promise<PipelineResolveResponse> {
+    return this.request(`/api/v1/pipeline/plans/${runId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(opts ?? {}),
+    });
+  }
+
+  async rejectPlan(runId: string): Promise<{ ok: boolean }> {
+    return this.request(`/api/v1/pipeline/plans/${runId}/reject`, {
+      method: 'POST',
+    });
+  }
+
+  async addPlanFeedback(runId: string, feedback: string): Promise<PipelineProposeResponse> {
+    return this.request(`/api/v1/pipeline/plans/${runId}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback }),
+    });
+  }
+
+  async listPlans(): Promise<PendingPlan[]> {
+    return this.request('/api/v1/pipeline/plans');
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

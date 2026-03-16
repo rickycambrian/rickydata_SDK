@@ -1,5 +1,10 @@
 import type { AuthSession } from './types/payment.js';
 
+// Re-exports from @rickydata/auth for backward compatibility
+export { AuthErrorCode, AuthError } from '@rickydata/auth';
+export { STORAGE_KEY, TOKEN_REFRESH_MARGIN_MS } from '@rickydata/auth';
+export type { AuthSession as SharedAuthSession, CachedToken, WalletTokenPayload, WalletAdapter } from '@rickydata/auth';
+
 export type EthHttpSigner = {
   address: `0x${string}`;
   chainId: number;

@@ -124,6 +124,51 @@ export interface PipelineStatus {
   overall: 'healthy' | 'degraded' | 'down';
 }
 
+// === Plan Proposal Types ===
+
+export type PlanStatus = 'pending' | 'revising' | 'approved' | 'executing' | 'completed' | 'rejected';
+
+export interface PipelineProposeRequest {
+  repo: string;
+  issueNumber: number;
+  model?: string;
+  budget?: number;
+}
+
+export interface PipelineProposeResponse {
+  runId: string;
+  repo: string;
+  issueNumber: number;
+  status: PlanStatus;
+  confidence: number;
+  model: string;
+  estimatedCost: number;
+  commentUrl: string;
+  createdAt: string;
+}
+
+export interface PendingPlan {
+  runId: string;
+  repo: string;
+  issueNumber: number;
+  status: PlanStatus;
+  confidence: number;
+  model: string;
+  budget: number;
+  feedback: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanApproveRequest {
+  model?: string;
+  budget?: number;
+}
+
+export interface PlanFeedbackRequest {
+  feedback: string;
+}
+
 export interface ComponentStatus {
   status: 'healthy' | 'degraded' | 'down';
   lastCheck: string;

@@ -20,4 +20,10 @@ export type {
 
   // Config
   PipelineClientConfig,
+
+  // Plan Proposal
+  PlanStatus,
+  PipelineProposeRequest,
+  PipelineProposeResponse,
+  PendingPlan,
 } from './types.js';

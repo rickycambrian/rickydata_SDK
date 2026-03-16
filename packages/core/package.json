@@ -71,6 +71,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@rickydata/auth": "file:../auth",
     "chalk": "^5.6.2",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.3",
