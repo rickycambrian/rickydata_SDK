@@ -245,6 +245,27 @@ export type {
   PixelWalletStatus,
 } from './pixel/index.js';
 
+// Automation Client (event-driven LLM rules)
+export { AutomationClient } from './automation/index.js';
+export type {
+  TriggerType,
+  OperationType,
+  LlmProvider,
+  OutputStrategy,
+  ExecutionStatus,
+  TriggerFilters,
+  AutomationRule,
+  ExecutionLog,
+  CreateRuleRequest,
+  UpdateRuleRequest,
+  RuleResponse,
+  ListRulesResponse,
+  RuleOperationResponse,
+  ExecutionResponse,
+  ExecutionLogsResponse,
+  AutomationClientConfig,
+} from './automation/index.js';
+
 // Answer Sheet Client
 export { AnswerSheetClient } from './answer-sheets/index.js';
 export type {
@@ -274,6 +295,7 @@ export type {
   CreateNoteRequest,
   UpdateNoteRequest,
   ListNotesOptions,
+  ListNotesResult,
   CheckEditsOptions,
   CheckEditsResult,
   WorkspaceClientConfig,
