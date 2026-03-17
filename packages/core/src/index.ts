@@ -266,6 +266,19 @@ export type {
   AnswerSheetClientConfig,
 } from './answer-sheets/index.js';
 
+// ── Workspace ─────────────────────────────────────────────────────────────
+export { WorkspaceClient } from './workspace/index.js';
+export type {
+  WorkspaceNote,
+  NoteVersion,
+  CreateNoteRequest,
+  UpdateNoteRequest,
+  ListNotesOptions,
+  CheckEditsOptions,
+  CheckEditsResult,
+  WorkspaceClientConfig,
+} from './workspace/index.js';
+
 // Pipeline Client (autonomous issue resolution)
 export { PipelineClient } from './pipeline/index.js';
 export type {
