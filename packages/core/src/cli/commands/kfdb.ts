@@ -169,7 +169,8 @@ export function createKfdbCommands(config: ConfigManager, store: CredentialStore
   kfdb
     .command('status')
     .description('Check KFDB connection, tenant, and hooks status')
-    .action(async () => {
+    .option('--gateway <url>', 'MCP gateway URL', 'https://mcp.rickydata.org')
+    .action(async (opts) => {
       const kfdbConfigDir = path.join(os.homedir(), '.knowledgeflow');
       const kfdbConfigFile = path.join(kfdbConfigDir, 'config.json');
 
@@ -177,36 +178,115 @@ export function createKfdbCommands(config: ConfigManager, store: CredentialStore
       console.log(chalk.bold('KFDB Status'));
       console.log(chalk.dim('───────────'));
 
-      // Config
+      // ── Local Config ──
+      let localConfigured = false;
       if (fs.existsSync(kfdbConfigFile)) {
-        const config = JSON.parse(fs.readFileSync(kfdbConfigFile, 'utf-8'));
+        const cfg = JSON.parse(fs.readFileSync(kfdbConfigFile, 'utf-8'));
+        localConfigured = true;
         console.log(chalk.green('✓') + ` Config: ${chalk.dim(kfdbConfigFile)}`);
-        console.log(chalk.dim(`  API URL: ${config.api_url || '(not set)'}`));
-        console.log(chalk.dim(`  Auth: ${config.api_key ? 'API key' : config.username ? `Username (${config.username})` : '(none)'}`));
-        console.log(chalk.dim(`  Hooks enabled: ${config.enabled !== false ? 'yes' : 'no'}`));
-        if (config.excluded_directories?.length > 0) {
-          console.log(chalk.dim(`  Excluded dirs: ${config.excluded_directories.join(', ')}`));
+        console.log(chalk.dim(`  API URL: ${cfg.api_url || '(not set)'}`));
+        console.log(chalk.dim(`  Auth: ${cfg.api_key ? 'API key' : cfg.username ? `Username (${cfg.username})` : '(none)'}`));
+        console.log(chalk.dim(`  Hooks enabled: ${cfg.enabled !== false ? 'yes' : 'no'}`));
+        if (cfg.excluded_directories?.length > 0) {
+          console.log(chalk.dim(`  Excluded dirs: ${cfg.excluded_directories.join(', ')}`));
         }
       } else {
-        console.log(chalk.yellow('✗') + ' Not configured. Run ' + chalk.cyan('rickydata kfdb init'));
-        return;
+        console.log(chalk.dim('✗') + ' Local config: not found');
+        console.log(chalk.dim('  Run ' + chalk.cyan('rickydata kfdb init') + ' for direct API access'));
       }
 
-      // Connection
-      const config = JSON.parse(fs.readFileSync(kfdbConfigFile, 'utf-8'));
-      const spinner = ora('Testing connection...').start();
-      try {
-        const res = await fetch(`${config.api_url}/health`, { signal: AbortSignal.timeout(5000) });
-        const health = await res.json() as { status: string };
-        spinner.succeed(`KFDB: ${health.status}`);
-      } catch {
-        spinner.fail('KFDB unreachable');
+      // ── Direct Connection ──
+      if (localConfigured) {
+        const cfg = JSON.parse(fs.readFileSync(kfdbConfigFile, 'utf-8'));
+        const spinner = ora('Testing direct connection...').start();
+        try {
+          const res = await fetch(`${cfg.api_url}/health`, { signal: AbortSignal.timeout(5000) });
+          const health = await res.json() as { status: string };
+          spinner.succeed(`Direct API: ${health.status}`);
+        } catch {
+          spinner.fail('Direct API: unreachable');
+        }
       }
 
-      // Hooks
-      const claudeSettings = path.join(os.homedir(), '.claude', 'settings.json');
-      if (fs.existsSync(claudeSettings)) {
-        const settings = JSON.parse(fs.readFileSync(claudeSettings, 'utf-8'));
+      // ── Marketplace Tenant (wallet-based) ──
+      console.log();
+      console.log(chalk.bold('Marketplace Tenant'));
+      console.log(chalk.dim('──────────────────'));
+
+      const cred = store.getToken();
+      if (!cred) {
+        console.log(chalk.dim('✗') + ' Not authenticated via marketplace');
+        console.log(chalk.dim('  Run ' + chalk.cyan('rickydata auth login') + ' to connect your wallet'));
+      } else {
+        const wallet = cred.walletAddress || '(unknown)';
+        console.log(chalk.green('✓') + ` Wallet: ${chalk.cyan(wallet)}`);
+
+        // Query tenant_status via gateway
+        const gatewayUrl = (opts.gateway as string).replace(/\/$/, '');
+        const KFDB_SERVER_ID = '217fc28a-675c-45b8-a7f4-4ac9c674ff9d';
+
+        const spinner = ora('Fetching tenant status...').start();
+        try {
+          const res = await fetch(
+            `${gatewayUrl}/api/servers/${KFDB_SERVER_ID}/tools/tenant_status`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${cred.token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({}),
+              signal: AbortSignal.timeout(15000),
+            }
+          );
+
+          if (res.status === 402) {
+            spinner.succeed('Tenant: active (payment required for status query)');
+            console.log(chalk.dim('  Use the MCP marketplace to call tenant_status with x402 payment'));
+          } else if (res.ok) {
+            const result = await res.json() as {
+              content?: Array<{ text?: string }>;
+            };
+            const text = result.content?.[0]?.text;
+            if (text) {
+              const status = JSON.parse(text);
+              spinner.succeed('Tenant: active');
+              console.log(chalk.dim(`  Tenant ID: ${status.tenant_id || '(provisioning)'}`));
+              console.log(chalk.dim(`  Keyspace: ${status.keyspace || '(pending)'}`));
+              console.log(chalk.dim(`  Tier: ${status.tier || 'free'}`));
+              if (status.usage) {
+                const u = status.usage;
+                const q = status.quota || {};
+                const nodesPct = q.max_nodes ? ` (${((u.nodes / q.max_nodes) * 100).toFixed(1)}%)` : '';
+                const storageMb = u.estimated_storage_bytes
+                  ? `${(u.estimated_storage_bytes / 1048576).toFixed(1)} MB`
+                  : '0 MB';
+                const quotaMb = q.max_storage_bytes
+                  ? `${(q.max_storage_bytes / 1048576).toFixed(0)} MB`
+                  : '?';
+                console.log(chalk.dim(`  Nodes: ${u.nodes || 0}/${q.max_nodes || '?'}${nodesPct}`));
+                console.log(chalk.dim(`  Edges: ${u.edges || 0}/${q.max_edges || '?'}`));
+                console.log(chalk.dim(`  Storage: ${storageMb} / ${quotaMb}`));
+              }
+            } else {
+              spinner.succeed('Tenant: active');
+            }
+          } else {
+            const body = await res.text().catch(() => '');
+            spinner.warn(`Tenant status: HTTP ${res.status}`);
+            if (body) console.log(chalk.dim(`  ${body.slice(0, 120)}`));
+          }
+        } catch (err) {
+          spinner.warn('Could not fetch tenant status');
+          console.log(chalk.dim(`  ${err instanceof Error ? err.message : String(err)}`));
+        }
+      }
+
+      // ── Hooks ──
+      console.log();
+      const claudeSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+      if (fs.existsSync(claudeSettingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
         const hasHooks = settings.hooks?.SessionStart || settings.hooks?.UserPromptSubmit;
         if (hasHooks) {
           console.log(chalk.green('✓') + ' Session tracking hooks: active');
