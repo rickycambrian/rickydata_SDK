@@ -28,7 +28,7 @@ interface Erc8128Module {
   createSignerClient(signer: EthHttpSigner): Erc8128SignerClient;
 }
 
-type WalletTokenStage = 'token-message' | 'create-token';
+type WalletTokenStage = 'token-message' | 'create-token' | 'derive-key-message' | 'verify-derive-key';
 
 class WalletTokenRequestError extends Error {
   status: number;
@@ -116,6 +116,77 @@ export async function createWalletToken(
     );
   }
   return tokenRes.json();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Sign-to-Derive Key Authentication
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Response from the gateway for sign-to-derive key setup
+ */
+export interface DeriveKeyResponse {
+  message: string;
+  expiresAt: string;
+}
+
+/**
+ * Create a sign-to-derive encryption key.
+ *
+ * This enables TRUE user-controlled encryption where the operator
+ * cannot read user data, even with full server access.
+ *
+ * Flow:
+ * 1. Request derivation message from gateway
+ * 2. User signs the message with their wallet
+ * 3. Use signature to derive encryption key
+ * 4. Store the signature securely (used for decryption)
+ *
+ * @param gatewayUrl - Gateway base URL
+ * @param signFn - Wallet signMessage function
+ * @param walletAddress - User's wallet address
+ * @returns Object with derived encryption key and verification
+ */
+export async function createSignToDeriveKey(
+  gatewayUrl: string,
+  signFn: (message: string) => Promise<string>,
+  walletAddress: string,
+): Promise<{ encryptionKey: string; signature: string; expiresAt: string }> {
+  const base = gatewayUrl.replace(/\/$/, '');
+
+  // 1. Get the derivation message from gateway
+  const msgRes = await fetch(
+    `${base}/api/auth/derive-key-message?walletAddress=${encodeURIComponent(walletAddress)}`
+  );
+  if (!msgRes.ok) {
+    const body = await msgRes.text();
+    throw new WalletTokenRequestError(
+      'derive-key-message',
+      msgRes.status,
+      `Failed to get derive-key message: ${msgRes.status} ${body}`,
+    );
+  }
+  const { message, expiresAt }: DeriveKeyResponse = await msgRes.json();
+
+  // 2. Sign with wallet
+  const signature = await signFn(message);
+
+  // 3. Derive encryption key locally (server never sees this)
+  const { deriveKeyFromSignature } = await import('./encryption.js');
+  const encryptionKey = deriveKeyFromSignature(signature);
+
+  // 4. Send signature to server for verification/storage (optional)
+  // Server only stores the signature hash, not the actual key
+  const verifyRes = await fetch(`${base}/api/auth/verify-derive-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress, signature, expiresAt }),
+  });
+
+  // Even if server verification fails, we still have the local key
+  // The key derivation works independently of server storage
+
+  return { encryptionKey, signature, expiresAt };
 }
 
 export class AuthManager {

@@ -2,8 +2,11 @@
 export { MCPGateway } from './client.js';
 
 // Auth
-export { AuthManager, createWalletToken } from './auth.js';
-export type { AuthenticateAutoOptions, EthHttpSigner } from './auth.js';
+export { AuthManager, createWalletToken, createSignToDeriveKey } from './auth.js';
+export type { AuthenticateAutoOptions, EthHttpSigner, DeriveKeyResponse } from './auth.js';
+
+// Encryption utilities (sign-to-derive)
+export { deriveKeyFromSignature, getDeriveKeyMessage } from './encryption.js';
 
 // Spending wallet
 export { SpendingWallet } from './wallet/spending-wallet.js';
