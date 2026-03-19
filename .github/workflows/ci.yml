@@ -19,3 +19,51 @@ jobs:
         run: |
           node packages/core/bin/rickydata.js --version
           node packages/core/bin/mcpg.js --version
+
+  gha-notify:
+    name: Notify KFDB
+    needs: [test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write GHA completion notification to KFDB
+        env:
+          KFDB_API_KEY: ${{ secrets.KFDB_API_KEY }}
+        run: |
+          CONCLUSION="${{ needs.test.result }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          case "$CONCLUSION" in
+            success)   SEVERITY="success" ; RESOLVED="true" ;;
+            failure)   SEVERITY="critical" ; RESOLVED="false" ;;
+            cancelled) SEVERITY="warning" ; RESOLVED="true" ;;
+            *)         SEVERITY="info" ; RESOLVED="true" ;;
+          esac
+
+          DESCRIPTION="rickydata_SDK: CI ${CONCLUSION} (${SHORT_SHA})"
+
+          curl -s -X POST http://34.60.37.158/api/v1/write \
+            -H "Authorization: Bearer $KFDB_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(cat <<NOTIFY_EOF
+          {"operations": [{"operation": "create_node", "label": "InfraAlert", "properties": {
+            "alert_type": {"String": "gha_workflow"},
+            "source": {"String": "ci"},
+            "severity": {"String": "$SEVERITY"},
+            "description": {"String": "$DESCRIPTION"},
+            "workflow_name": {"String": "CI"},
+            "workflow_conclusion": {"String": "$CONCLUSION"},
+            "repo": {"String": "rickydata_SDK"},
+            "repo_full": {"String": "${{ github.repository }}"},
+            "branch": {"String": "${{ github.ref_name }}"},
+            "commit_sha": {"String": "$SHA"},
+            "commit_short": {"String": "$SHORT_SHA"},
+            "actor": {"String": "${{ github.actor }}"},
+            "workflow_url": {"String": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"},
+            "resolved": {"Boolean": $RESOLVED},
+            "timestamp": {"String": "$TIMESTAMP"}
+          }}]}
+          NOTIFY_EOF
+          )" || true
