@@ -301,7 +301,6 @@ export type {
   CreateNoteRequest,
   UpdateNoteRequest,
   ListNotesOptions,
-  ListNotesResult,
   CheckEditsOptions,
   CheckEditsResult,
   WorkspaceClientConfig,
