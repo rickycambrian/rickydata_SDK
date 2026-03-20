@@ -21,3 +21,7 @@ export { SharedAuthManager } from './auth-manager.js';
 export type { WalletAdapter } from './adapters/wallet-adapter.js';
 export { createPrivyAdapter } from './adapters/privy-adapter.js';
 export type { PrivyWallet, PrivyWallets, PrivyAuth } from './adapters/privy-adapter.js';
+
+// SiYuan adapter
+export { authenticateViaSiYuan, getSiYuanTenantStatus, activateSiYuanTenant } from './adapters/siyuan-adapter.js';
+export type { SiYuanAuthConfig, SiYuanAuthResult } from './adapters/siyuan-adapter.js';
