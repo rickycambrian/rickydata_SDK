@@ -39,6 +39,8 @@ describe('auth commands', () => {
     tmpDir = makeTempDir();
     config = new ConfigManager(path.join(tmpDir, 'config.json'));
     store = new CredentialStore(path.join(tmpDir, 'credentials.json'));
+    // Mock fetch to prevent real network calls in CI (auth status checks balance + payment config)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
   });
 
   afterEach(() => {
