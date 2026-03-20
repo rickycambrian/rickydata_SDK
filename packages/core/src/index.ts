@@ -63,6 +63,9 @@ export {
 } from './agent/index.js';
 
 export type {
+  // Image attachments (multimodal / screenshare)
+  ImageAttachment,
+
   AgentClientConfig,
   AgentInfo,
   AgentDetailResponse,

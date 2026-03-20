@@ -13,6 +13,7 @@ import {
   AgentErrorCode,
 } from './types.js';
 import type {
+  ImageAttachment,
   AgentClientConfig,
   AgentInfo,
   AgentDetailResponse,
@@ -354,15 +355,19 @@ export class AgentClient {
   /**
    * Send a raw chat request and return the Response for SSE streaming.
    * Caller is responsible for parsing the SSE stream.
+   *
+   * @param images - Optional image attachments for multimodal (screenshare) support.
+   *   Each image must have a base64-encoded `data` field and a `mediaType`.
+   *   Empty arrays are treated the same as omitting the parameter.
    */
-  async chatRaw(agentId: string, sessionId: string, message: string, model?: string): Promise<Response> {
+  async chatRaw(agentId: string, sessionId: string, message: string, model?: string, images?: ImageAttachment[]): Promise<Response> {
     await this.ensureAuthenticated();
     const res = await fetch(
       `${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionId)}/chat`,
       {
         method: 'POST',
         headers: this.authHeaders(),
-        body: JSON.stringify({ message, model }),
+        body: JSON.stringify({ message, model, ...(images?.length ? { images } : {}) }),
       },
     );
     if (!res.ok) {

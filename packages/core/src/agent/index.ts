@@ -15,6 +15,9 @@ export {
 } from './agent-client.js';
 
 export type {
+  // Image attachments (multimodal / screenshare)
+  ImageAttachment,
+
   // Config
   AgentClientConfig,
   AgentInfo,

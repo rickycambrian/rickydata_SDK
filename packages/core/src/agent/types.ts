@@ -49,6 +49,15 @@ export interface CustomAgentUpsertResult {
   qualityScore?: number;
 }
 
+// ─── Image Attachments ──────────────────────────────────────
+
+export interface ImageAttachment {
+  /** Base64-encoded image data. */
+  data: string;
+  /** MIME type of the image. */
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
+}
+
 // ─── Chat ───────────────────────────────────────────────────
 
 export interface ChatOptions {

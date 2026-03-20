@@ -3,7 +3,7 @@
  * for every session creation, message send, and SSE stream event.
  */
 
-import type { AgentClient, SSEEvent, SessionCreateResponse } from 'rickydata';
+import type { AgentClient, SSEEvent, SessionCreateResponse, ImageAttachment } from 'rickydata';
 import { streamSSEEvents } from 'rickydata';
 import { TraceRecorder } from './recorder.js';
 import type { TraceRecorderConfig } from './types.js';
@@ -41,8 +41,13 @@ export class TracedAgentClient {
     return result;
   }
 
-  /** Sends a chat message via the underlying client and records the send event. */
-  async chatRaw(agentId: string, sessionId: string, message: string, model?: string): Promise<Response> {
+  /**
+   * Sends a chat message via the underlying client and records the send event.
+   *
+   * @param images - Optional image attachments for multimodal (screenshare) support.
+   *   Forwarded directly to the underlying AgentClient.chatRaw call.
+   */
+  async chatRaw(agentId: string, sessionId: string, message: string, model?: string, images?: ImageAttachment[]): Promise<Response> {
     this.trace.record({
       type: 'message_sent',
       sessionId: this.trace.getActiveSession()?.id,
@@ -51,11 +56,12 @@ export class TracedAgentClient {
         gatewaySessionId: sessionId,
         message,
         model,
+        imageCount: images?.length ?? 0,
         sentAt: formatTimestamp(),
       },
     });
 
-    return this.client.chatRaw(agentId, sessionId, message, model);
+    return this.client.chatRaw(agentId, sessionId, message, model, images);
   }
 
   /**
