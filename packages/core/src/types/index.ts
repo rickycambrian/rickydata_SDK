@@ -27,3 +27,11 @@ export type {
 } from './payment.js';
 
 export type { PaymentEvents } from './events.js';
+
+export type {
+  OfferPayload,
+  EIP712SignedOffer,
+  ReceiptPayload,
+  EIP712SignedReceipt,
+  ServerReceipt,
+} from './offer-receipt.js';

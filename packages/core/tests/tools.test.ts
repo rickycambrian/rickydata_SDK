@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthManager } from '../src/auth.js';
 import { ToolsManager } from '../src/tools.js';
+import type { EIP712SignedOffer, EIP712SignedReceipt } from '../src/types/offer-receipt.js';
 
 const BASE = 'http://localhost:8080';
 
@@ -342,6 +343,176 @@ describe('ToolsManager', () => {
       expect(result.content).toBe('ok');
       // authenticate(1) + proactive-reauth(2) + callTool(3) = 3 total
       expect(fetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('offer-receipt extension', () => {
+    it('extracts offers from 402 response with extensions field', async () => {
+      const offer: EIP712SignedOffer = {
+        format: 'eip712',
+        payload: {
+          version: 1,
+          resourceUrl: `${BASE}/api/servers/server-1/tools/search`,
+          scheme: 'exact',
+          network: 'eip155:8453',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+          payTo: '0x2c241F8509BB6a7b672a440DFebd332cB0B258DE',
+          amount: '500',
+          validUntil: 9999999999,
+        },
+        signature: '0xoffersig',
+      };
+
+      const receipt: EIP712SignedReceipt = {
+        format: 'eip712',
+        payload: {
+          version: 1,
+          network: 'eip155:8453',
+          resourceUrl: `${BASE}/api/servers/server-1/tools/search`,
+          payer: '0xpayer',
+          issuedAt: Math.floor(Date.now() / 1000),
+          transaction: '0xtxhash',
+        },
+        signature: '0xreceiptsig',
+      };
+
+      const mock402 = {
+        ok: false,
+        status: 402,
+        json: () => Promise.resolve({
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:8453',
+            amount: '500',
+            maxAmountRequired: '500',
+            payTo: '0x2c241F8509BB6a7b672a440DFebd332cB0B258DE',
+            asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            extra: { name: 'USD Coin', version: '2' },
+          }],
+          x402Version: 2,
+          extensions: {
+            'offer-receipt': {
+              info: { offers: [offer] },
+            },
+          },
+        }),
+      } as unknown as Response;
+
+      let recordedReceipt: any = null;
+      const mockWallet = {
+        signPayment: vi.fn().mockResolvedValue({ header: 'signed-header', receipt: {} }),
+        recordFailure: vi.fn(),
+        getSpending: vi.fn().mockReturnValue({ totalSpent: 0, sessionSpent: 0, daySpent: 0, weekSpent: 0, callCount: 0 }),
+        recordServerReceipt: vi.fn((r: any) => { recordedReceipt = r; }),
+      } as any;
+
+      const mockSuccess = {
+        ok: true,
+        headers: new Headers({ 'PAYMENT-RESPONSE': btoa(JSON.stringify({
+          extensions: { 'offer-receipt': { info: { receipt } } },
+        })) }),
+        json: () => Promise.resolve({ content: 'paid result', isError: false }),
+      } as unknown as Response;
+
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mock402)
+        .mockResolvedValueOnce(mockSuccess);
+
+      const tools = new ToolsManager(BASE, auth, mockWallet, true);
+      const result = await tools.callTool('server-1', 'search', {});
+
+      expect(result.content).toBe('paid result');
+      // Receipt should be recorded with the offer paired
+      expect(mockWallet.recordServerReceipt).toHaveBeenCalledTimes(1);
+      expect(recordedReceipt.receipt.signature).toBe('0xreceiptsig');
+      expect(recordedReceipt.offer.signature).toBe('0xoffersig');
+      expect(recordedReceipt.toolName).toBe('search');
+      expect(recordedReceipt.serverId).toBe('server-1');
+    });
+
+    it('succeeds normally on 402 without extensions (backward compat)', async () => {
+      const mock402 = {
+        ok: false,
+        status: 402,
+        json: () => Promise.resolve({
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:8453',
+            amount: '500',
+            maxAmountRequired: '500',
+            payTo: '0x0000000000000000000000000000000000000001',
+            asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            extra: { name: 'USD Coin', version: '2' },
+          }],
+          x402Version: 2,
+          // no extensions field
+        }),
+      } as unknown as Response;
+
+      const mockWallet = {
+        signPayment: vi.fn().mockResolvedValue({ header: 'h', receipt: {} }),
+        recordFailure: vi.fn(),
+        getSpending: vi.fn().mockReturnValue({ totalSpent: 0, sessionSpent: 0, daySpent: 0, weekSpent: 0, callCount: 0 }),
+        recordServerReceipt: vi.fn(),
+      } as any;
+
+      const mockSuccess = {
+        ok: true,
+        headers: new Headers(),
+        json: () => Promise.resolve({ content: 'ok', isError: false }),
+      } as unknown as Response;
+
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mock402)
+        .mockResolvedValueOnce(mockSuccess);
+
+      const tools = new ToolsManager(BASE, auth, mockWallet, true);
+      const result = await tools.callTool('server-1', 'search', {});
+
+      expect(result.content).toBe('ok');
+      // No receipt extracted, so recordServerReceipt not called
+      expect(mockWallet.recordServerReceipt).not.toHaveBeenCalled();
+    });
+
+    it('extracts receipt from PAYMENT-RESPONSE header on 200 (no 402 flow)', async () => {
+      const receipt: EIP712SignedReceipt = {
+        format: 'eip712',
+        payload: {
+          version: 1,
+          network: 'eip155:8453',
+          resourceUrl: `${BASE}/api/servers/server-1/tools/search`,
+          payer: '0xpayer',
+          issuedAt: Math.floor(Date.now() / 1000),
+          transaction: '0xtx',
+        },
+        signature: '0xreceiptonlysig',
+      };
+
+      let recordedReceipt: any = null;
+      const mockWallet = {
+        signPayment: vi.fn(),
+        recordFailure: vi.fn(),
+        getSpending: vi.fn().mockReturnValue({ totalSpent: 0, sessionSpent: 0, daySpent: 0, weekSpent: 0, callCount: 0 }),
+        recordServerReceipt: vi.fn((r: any) => { recordedReceipt = r; }),
+      } as any;
+
+      const mockSuccess = {
+        ok: true,
+        headers: new Headers({ 'PAYMENT-RESPONSE': btoa(JSON.stringify({
+          extensions: { 'offer-receipt': { info: { receipt } } },
+        })) }),
+        json: () => Promise.resolve({ content: 'direct result', isError: false }),
+      } as unknown as Response;
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(mockSuccess);
+
+      const tools = new ToolsManager(BASE, auth, mockWallet, true);
+      const result = await tools.callTool('server-1', 'search', {});
+
+      expect(result.content).toBe('direct result');
+      expect(mockWallet.recordServerReceipt).toHaveBeenCalledTimes(1);
+      expect(recordedReceipt.receipt.signature).toBe('0xreceiptonlysig');
+      expect(recordedReceipt.offer).toBeUndefined();
     });
   });
 });

@@ -1,6 +1,17 @@
 import type { AuthManager } from './auth.js';
 import type { Tool, ToolResult, PaymentRequirements, SpendingSummary } from './types/index.js';
+import type { EIP712SignedOffer, EIP712SignedReceipt, ServerReceipt } from './types/offer-receipt.js';
 import type { SpendingWallet } from './wallet/spending-wallet.js';
+import {
+  extractOffersFromPaymentData,
+  extractReceiptFromHeader,
+  extractReceiptFromPaymentData,
+} from './payment/offer-receipt-verifier.js';
+
+// Minimal interface for receipt recording — avoids tight coupling to SpendingWallet
+interface ReceiptRecordable {
+  recordServerReceipt(receipt: ServerReceipt): void;
+}
 
 export class ToolsManager {
   constructor(
@@ -60,9 +71,16 @@ export class ToolsManager {
       body: JSON.stringify(args),
     });
 
+    // Holds the signed offer from the 402 response for pairing with the eventual receipt
+    let pendingOffer: EIP712SignedOffer | undefined;
+
     // Handle x402 payment required (single retry only — never loop)
     if (res.status === 402 && this.autoSign && this.wallet) {
       const paymentData = await res.json();
+
+      // Extract signed offers from extensions (additive — no-op if absent)
+      const offers: EIP712SignedOffer[] = extractOffersFromPaymentData(paymentData);
+      pendingOffer = offers[0];
 
       // Parse the x402 v2 response format
       const accept = paymentData.accepts?.[0];
@@ -119,6 +137,30 @@ export class ToolsManager {
     }
 
     const data = await res.json();
+
+    // Extract receipt from PAYMENT-RESPONSE header (HTTP routes)
+    const paymentResponseHeader = res.headers?.get('PAYMENT-RESPONSE');
+    let serverReceipt: EIP712SignedReceipt | null = null;
+    if (paymentResponseHeader) {
+      serverReceipt = extractReceiptFromHeader(paymentResponseHeader);
+    }
+    // Also check _payment.receipt (MCP protocol path)
+    if (!serverReceipt) {
+      serverReceipt = extractReceiptFromPaymentData(data);
+    }
+
+    // Record server receipt in SpendingTracker if present
+    if (serverReceipt && this.wallet) {
+      const entry: ServerReceipt = {
+        receipt: serverReceipt,
+        offer: pendingOffer,
+        toolName: tool,
+        serverId,
+        receivedAt: Date.now(),
+      };
+      (this.wallet as unknown as ReceiptRecordable).recordServerReceipt(entry);
+    }
+
     return {
       content: data.content ?? data.result ?? data,
       isError: data.isError ?? false,

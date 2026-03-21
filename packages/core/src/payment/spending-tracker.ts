@@ -1,10 +1,12 @@
 import type { PaymentReceipt, SpendingSummary } from '../types/payment.js';
+import type { ServerReceipt } from '../types/offer-receipt.js';
 
 /**
  * Enhanced spending tracker with full payment history and export/import.
  */
 export class SpendingTracker {
   private history: PaymentReceipt[] = [];
+  private serverReceipts: ServerReceipt[] = [];
   private sessionSpent = 0;
   private callCount = 0;
 
@@ -47,6 +49,36 @@ export class SpendingTracker {
       weekSpent,
       callCount: this.callCount,
     };
+  }
+
+  /** Record a server-signed receipt (from PAYMENT-RESPONSE header or _payment.receipt) */
+  recordServerReceipt(receipt: ServerReceipt): void {
+    this.serverReceipts.push(receipt);
+  }
+
+  /** Get server receipts, most recent first */
+  getServerReceipts(opts?: { limit?: number }): ServerReceipt[] {
+    const sorted = [...this.serverReceipts].sort((a, b) => b.receivedAt - a.receivedAt);
+    if (opts?.limit && opts.limit > 0) {
+      return sorted.slice(0, opts.limit);
+    }
+    return sorted;
+  }
+
+  /** Export server receipts for persistence */
+  exportServerReceipts(): { serverReceipts: ServerReceipt[]; exportedAt: string } {
+    return {
+      serverReceipts: this.serverReceipts,
+      exportedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Import previously exported server receipts */
+  importServerReceipts(data: { serverReceipts: ServerReceipt[] }): void {
+    if (!Array.isArray(data.serverReceipts)) return;
+    for (const receipt of data.serverReceipts) {
+      this.serverReceipts.push(receipt);
+    }
   }
 
   /** Export history for persistence */

@@ -1,5 +1,6 @@
 import type { SpendingPolicyConfig } from '../types/config.js';
 import type { PaymentRequirements, PaymentReceipt, SignedPayment, SpendingSummary } from '../types/payment.js';
+import type { ServerReceipt } from '../types/offer-receipt.js';
 import type { PaymentEvents } from '../types/events.js';
 import type { WalletBalance } from './balance-checker.js';
 import { TypedEventEmitter } from '../events/event-emitter.js';
@@ -228,6 +229,26 @@ export class SpendingWallet extends TypedEventEmitter<PaymentEvents> {
   /** Import previously exported history */
   importHistory(data: { history: PaymentReceipt[] }): void {
     this.tracker.importHistory(data);
+  }
+
+  /** Record a server-signed receipt */
+  recordServerReceipt(receipt: ServerReceipt): void {
+    this.tracker.recordServerReceipt(receipt);
+  }
+
+  /** Get server receipts, most recent first */
+  getServerReceipts(opts?: { limit?: number }): ServerReceipt[] {
+    return this.tracker.getServerReceipts(opts);
+  }
+
+  /** Export server receipts for persistence */
+  exportServerReceipts() {
+    return this.tracker.exportServerReceipts();
+  }
+
+  /** Import previously exported server receipts */
+  importServerReceipts(data: { serverReceipts: ServerReceipt[] }): void {
+    this.tracker.importServerReceipts(data);
   }
 
   /** Get full policy stats */
