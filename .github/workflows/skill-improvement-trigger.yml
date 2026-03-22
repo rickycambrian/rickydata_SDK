@@ -22,14 +22,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Dispatch to ai_research
+      - name: Trigger skill analysis via Gateway API
         run: |
-          gh api repos/rickycambrian/ai_research/dispatches \
-            --method POST \
-            -f event_type=skill-improvement-trigger \
-            -f "client_payload[repo]=${{ github.repository }}" \
-            -f "client_payload[sha]=${{ github.sha }}" \
-            -f "client_payload[changed_files]=${{ steps.changes.outputs.files }}" \
-            -f "client_payload[commit_message]=${{ github.event.head_commit.message }}"
-        env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          # Route through the Agent Gateway — no cross-repo PAT needed.
+          # The gateway uses its GitHub App installation token to dispatch to ai_research.
+          curl -sf -X POST "https://agents.rickydata.org/github/skill-analysis/trigger" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GATEWAY_INTERNAL_KEY }}" \
+            -d '{
+              "repo": "${{ github.repository }}",
+              "sha": "${{ github.sha }}",
+              "changedFiles": "${{ steps.changes.outputs.files }}",
+              "commitMessage": "${{ github.event.head_commit.message }}"
+            }' || echo "::warning::Skill analysis trigger failed (non-blocking)"
