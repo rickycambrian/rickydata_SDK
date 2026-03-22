@@ -50,6 +50,9 @@ export interface GitHubIssue {
   recommendedModel?: string;
   estimatedCost?: number;
   resolutionStatus?: ResolutionStatus;
+  parentIssueNumber?: number;
+  childIssueNumbers?: number[];
+  relationships?: IssueRelationship[];
 }
 
 export type ResolutionStatus =
@@ -483,6 +486,53 @@ export interface ReviewTriggerComment {
   rawComment: string;
   commentId: number;
   commentAuthor: string;
+}
+
+// === Issue Intelligence Types ===
+
+export type RelationshipType = 'parent' | 'child' | 'related' | 'blocks' | 'blocked_by' | 'duplicate';
+
+export interface IssueRelationship {
+  fromIssue: number;
+  toIssue: number;
+  type: RelationshipType;
+  confidence: number;
+  reason: string;
+}
+
+export interface LabelSuggestion {
+  label: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface CommitAnalysis {
+  recentCommits: Array<{
+    sha: string;
+    message: string;
+    files: string[];
+    author: string;
+    date: string;
+  }>;
+  activeAreas: string[];
+  recentFeatures: string[];
+  openWork: string[];
+}
+
+export interface StateContext {
+  commitAnalysis: CommitAnalysis;
+  relatedIssues: Array<{number: number; title: string; state: string; labels: string[]}>;
+  suggestedLabels: LabelSuggestion[];
+  relationships: IssueRelationship[];
+  repoLanguages: Record<string, number>;
+  recentPRs: Array<{number: number; title: string; state: string}>;
+}
+
+export interface TriageResult {
+  labelsApplied: string[];
+  relationshipsDetected: IssueRelationship[];
+  stateContext: StateContext;
+  triageComment?: string;
 }
 
 // === Common ===

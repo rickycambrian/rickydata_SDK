@@ -5,6 +5,7 @@ export { GitHubProvider, useGitHubClients, type GitHubProviderProps } from './pr
 export { GitHubApi, type GitHubApiConfig, type CreateReviewRunInput, type CreateTeamReviewRunInput } from './services/github-api.js';
 export { PipelineApi, type PipelineApiConfig } from './services/pipeline-api.js';
 export { FeedbackApi, type FeedbackApiConfig } from './services/feedback-api.js';
+export { IntelligenceApi, type IntelligenceApiConfig } from './services/intelligence-api.js';
 
 // Hooks
 export {
