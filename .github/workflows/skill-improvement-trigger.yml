@@ -1,0 +1,35 @@
+name: Skill Improvement Trigger
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]'
+    steps:
+      - name: Collect changed files
+        id: changes
+        run: |
+          FILES=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }} --jq '[.files[].filename] | join(",")')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dispatch to ai_research
+        run: |
+          gh api repos/rickycambrian/ai_research/dispatches \
+            --method POST \
+            -f event_type=skill-improvement-trigger \
+            -f "client_payload[repo]=${{ github.repository }}" \
+            -f "client_payload[sha]=${{ github.sha }}" \
+            -f "client_payload[changed_files]=${{ steps.changes.outputs.files }}" \
+            -f "client_payload[commit_message]=${{ github.event.head_commit.message }}"
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
