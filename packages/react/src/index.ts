@@ -20,6 +20,13 @@ export { useSessions, useSession, useDeleteSession, sessionKeys } from './hooks/
 // Hooks — Wallet Settings
 export { useWalletSettings, walletSettingsKeys } from './hooks/wallet-settings.js';
 
+// Hooks — Free Tier
+export { useFreeTierStatus, freeTierKeys } from './hooks/free-tier.js';
+export type { UseFreeTierStatusOptions } from './hooks/free-tier.js';
+
+// Hooks — Wallet Plan
+export { useWalletPlan } from './hooks/wallet-plan.js';
+
 // Hooks — Secrets
 export { useSecrets } from './hooks/secrets.js';
 
@@ -66,6 +73,8 @@ export type {
   SessionListEntry,
   SessionDetail,
   WalletSettings,
+  WalletPlan,
+  FreeTierStatus,
   WalletBalanceResponse,
   SSEEvent,
 } from 'rickydata/agent';

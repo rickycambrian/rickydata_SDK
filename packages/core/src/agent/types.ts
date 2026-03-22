@@ -258,7 +258,22 @@ export interface WalletSettings {
   groupConversations?: GroupConversationMeta[];
   kfdbTenantId?: string;
   kfdbApiKey?: string;
+  plan?: 'free' | 'byok';
+  modelProvider?: string;
+  onboardingComplete?: boolean;
+  autoImprove?: boolean;
   [key: string]: unknown;
+}
+
+export type WalletPlan = 'free' | 'byok';
+
+export interface FreeTierStatus {
+  plan: 'free';
+  dailyLimit: number;
+  dailyUsed: number;
+  dailyRemaining: number;
+  resetsAt: string;
+  model: string;
 }
 
 export interface GroupConversationMeta {

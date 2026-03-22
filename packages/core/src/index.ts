@@ -48,7 +48,8 @@ export type {
 
 // Agent Client (high-level chat helper)
 export { AgentClient } from './agent/index.js';
-export { SessionStore } from './agent/index.js';
+// SessionStore removed from main export — uses Node.js builtins (fs, path, os)
+// Use: import { SessionStore } from 'rickydata/agent/session-store' for server
 
 // Agent Error Taxonomy
 export { AgentError, AgentErrorCode } from './agent/index.js';

@@ -1,7 +1,9 @@
 export { AgentClient } from './agent-client.js';
 export { AgentMCPClient } from './agent-mcp-client.js';
 export { AgentSession } from './agent-session.js';
-export { SessionStore } from './session-store.js';
+// SessionStore uses Node.js builtins (fs, path, os) — export from a
+// separate entrypoint to avoid breaking browser bundlers.
+// import { SessionStore } from 'rickydata/agent/node' for server usage.
 
 // Error taxonomy
 export { AgentError, AgentErrorCode } from './types.js';
@@ -54,6 +56,8 @@ export type {
 
   // Wallet
   WalletSettings,
+  WalletPlan,
+  FreeTierStatus,
   GroupConversationMeta,
   WalletBalanceResponse,
   WalletTransactionsResponse,

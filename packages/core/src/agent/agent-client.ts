@@ -7,7 +7,7 @@
  * Uses viem for wallet signing (consistent with the rest of the SDK).
  */
 
-import { SessionStore } from './session-store.js';
+import type { SessionStore as SessionStoreType } from './session-store.js';
 import {
   AgentError,
   AgentErrorCode,
@@ -41,6 +41,7 @@ import type {
   TeamWorkflowPayload,
   TeamSSEEvent,
   TeamWorkflowOptions,
+  FreeTierStatus,
 } from './types.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
@@ -51,7 +52,7 @@ export class AgentClient {
   private readonly privateKey: `0x${string}` | null;
   private readonly tokenGetter: (() => Promise<string | undefined>) | null;
   private token: string | null = null;
-  private sessions: SessionStore;
+  private sessions: SessionStoreType | null = null;
 
   constructor(options: AgentClientConfig) {
     if (!options.privateKey && !options.token && !options.tokenGetter) {
@@ -70,7 +71,12 @@ export class AgentClient {
     if (options.token) {
       this.token = options.token;
     }
-    this.sessions = new SessionStore(options.sessionStorePath);
+    // SessionStore uses Node.js fs/path — only import in Node.js environments
+    if (typeof globalThis.process !== 'undefined' && globalThis.process.versions?.node) {
+      import(/* @vite-ignore */ './session-store.js').then(({ SessionStore }) => {
+        this.sessions = new SessionStore(options.sessionStorePath);
+      }).catch(() => {});
+    }
   }
 
   // ─── BYOK API Key Management ─────────────────────────────
@@ -270,7 +276,7 @@ export class AgentClient {
     // Get or create session
     const sessionId = options?.sessionId ?? await this.getOrCreateSession(agentId, options?.model);
     if (options?.sessionId) {
-      this.sessions.set(agentId, options.sessionId);
+      this.sessions?.set(agentId, options.sessionId);
     }
 
     const sendChatRequest = async (): Promise<Response> => {
@@ -354,7 +360,7 @@ export class AgentClient {
    * Useful for CLI recovery after transient stream disconnects.
    */
   getCachedSessionId(agentId: string): string | undefined {
-    return this.sessions.get(agentId);
+    return this.sessions?.get(agentId);
   }
 
   // ─── Discovery ───────────────────────────────────────────
@@ -399,7 +405,7 @@ export class AgentClient {
       throw err;
     }
     const data: SessionCreateResponse = await res.json();
-    this.sessions.set(agentId, data.id);
+    this.sessions?.set(agentId, data.id);
     return data;
   }
 
@@ -546,6 +552,18 @@ export class AgentClient {
       body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error(`Failed to update wallet settings: ${res.status}`);
+    return res.json();
+  }
+
+  /** Get free tier usage status. */
+  async getFreeTierStatus(): Promise<FreeTierStatus> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/free-tier/status`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      throw AgentError.fromHttpStatus(res.status, await res.text());
+    }
     return res.json();
   }
 
@@ -753,7 +771,7 @@ export class AgentClient {
   }
 
   private async getOrCreateSession(agentId: string, model?: string): Promise<string> {
-    const existing = this.sessions.get(agentId);
+    const existing = this.sessions?.get(agentId);
     if (existing) return existing;
 
     let res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
@@ -781,7 +799,7 @@ export class AgentClient {
       throw AgentError.fromHttpStatus(res.status, body, { agentId, operation: 'createSession' });
     }
     const data = await res.json();
-    this.sessions.set(agentId, data.id);
+    this.sessions?.set(agentId, data.id);
     return data.id;
   }
 
