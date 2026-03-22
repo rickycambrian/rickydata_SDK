@@ -8,7 +8,6 @@ export { useAgents, useAgent, agentKeys } from './hooks/agents.js';
 // Hooks — API Key
 export {
   useApiKeyStatus, useSetApiKey, useDeleteApiKey,
-  useOpenAIApiKeyStatus, useSetOpenAIApiKey, useDeleteOpenAIApiKey,
   apiKeyKeys,
 } from './hooks/apikey.js';
 

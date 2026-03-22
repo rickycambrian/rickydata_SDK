@@ -142,37 +142,6 @@ export class AgentClient {
     if (!res.ok) throw new Error(`Failed to delete API key: ${res.status}`);
   }
 
-  // ─── OpenAI API Key ──────────────────────────────────────
-
-  async getOpenAIApiKeyStatus(): Promise<{ configured: boolean }> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey/status`, {
-      headers: this.authHeaders(),
-    });
-    if (!res.ok) return { configured: false };
-    return res.json();
-  }
-
-  async storeOpenAIApiKey(apiKey: string): Promise<{ configured: boolean }> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey`, {
-      method: 'PUT',
-      headers: this.authHeaders(),
-      body: JSON.stringify({ openaiApiKey: apiKey }),
-    });
-    if (!res.ok) throw new Error(`Failed to store OpenAI API key: ${res.status}`);
-    return res.json();
-  }
-
-  async deleteOpenAIApiKey(): Promise<void> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey`, {
-      method: 'DELETE',
-      headers: this.authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Failed to delete OpenAI API key: ${res.status}`);
-  }
-
   // ─── Reflect & KB Tools (Builder) ─────────────────────────
 
   async getReflectStatus(agentId: string): Promise<ReflectStatus> {

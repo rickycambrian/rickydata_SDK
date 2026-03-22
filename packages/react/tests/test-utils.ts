@@ -18,9 +18,6 @@ export function createMockClient() {
     getApiKeyStatus: vi.fn().mockResolvedValue({ configured: true }),
     setApiKey: vi.fn().mockResolvedValue(undefined),
     deleteApiKey: vi.fn().mockResolvedValue(undefined),
-    getOpenAIApiKeyStatus: vi.fn().mockResolvedValue({ configured: false }),
-    storeOpenAIApiKey: vi.fn().mockResolvedValue(undefined),
-    deleteOpenAIApiKey: vi.fn().mockResolvedValue(undefined),
 
     // Secrets
     getAgentSecretStatus: vi.fn().mockResolvedValue({ configuredSecrets: [], missingRequired: [], ready: true }),
