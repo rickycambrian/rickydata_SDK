@@ -136,7 +136,7 @@ export interface UseAgentVoiceChatResult {
 export function useAgentVoiceChat({
   agentId,
   model = 'claude-sonnet-4-20250514',
-  voice = '79a125e8-cd45-4c13-8a67-188112f4dd22',
+  voice = '5ee9feff-1265-424a-9d7f-8e4d431a12c7',
   gatewayUrl,
   onError,
 }: UseAgentVoiceChatOptions): UseAgentVoiceChatResult {
