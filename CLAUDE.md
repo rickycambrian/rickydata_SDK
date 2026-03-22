@@ -6,6 +6,13 @@ This is the rickydata SDK — a Turborepo monorepo with packages:
 - `packages/chat` (`@rickydata/chat`) — Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming
 - `packages/trace` (`@rickydata/trace`) — Trace recorder, viewer, and timeline for agent interactions (Node.js file output + browser memory buffer)
 
+## Ecosystem Context
+This SDK is consumed by rickydata_agentbook (mobile app) and external users.
+- **mcp_deployments_registry** — SDK calls Agent Gateway (https://agents.rickydata.org) and MCP Gateway (https://mcp.rickydata.org)
+- **rickydata_agentbook** — Primary consumer of React hooks and AgentClient
+
+Type changes here require matching updates in mcp_deployments_registry (API contracts) and rickydata_agentbook (hook usage).
+
 ## Monorepo structure
 
 ```
@@ -117,7 +124,7 @@ npm test                # turbo test (core tests)
 |-----------------|----------------------------------|--------------------------------------|
 | MCP Gateway     | https://mcp.rickydata.org        | MCP server hosting + tool proxy      |
 | Agent Gateway   | https://agents.rickydata.org     | BYOK Claude agents + canvas runtime  |
-| Marketplace     | https://mcpmarketplace.rickydata.org | Browse + manage servers          |
+| Marketplace     | https://marketplace.rickydata.org | Browse + manage servers          |
 
 ## Authentication
 
