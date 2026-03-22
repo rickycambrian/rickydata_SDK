@@ -76,16 +76,16 @@ describe('PipelineClient', () => {
         'Content-Type': 'application/json',
       });
 
-      // Verify request body
+      // Verify request body (provider defaults to 'minimax' when not specified)
       const sentBody = JSON.parse(init?.body as string);
       expect(sentBody).toEqual({
         repo: 'owner/repo',
         issue_number: 42,
-        options: { mode: 'local', budget_usd: 0.5 },
+        options: { mode: 'local', budget_usd: 0.5, provider: 'minimax' },
       });
     });
 
-    it('sends request without options when not provided', async () => {
+    it('sends request with default provider when options not provided', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         okResponse({ run_id: 'run-2', accepted: true }),
       );
@@ -94,7 +94,7 @@ describe('PipelineClient', () => {
       await client.resolve('owner/repo', 1);
 
       const sentBody = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
-      expect(sentBody.options).toBeUndefined();
+      expect(sentBody.options).toEqual({ provider: 'minimax' });
     });
 
     it('throws when repo is empty', async () => {

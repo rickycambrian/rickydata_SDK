@@ -62,7 +62,7 @@ export interface ImageAttachment {
 
 export interface ChatOptions {
   /** Claude model to use. Defaults to 'haiku'. */
-  model?: 'haiku' | 'sonnet' | 'opus';
+  model?: 'haiku' | 'sonnet' | 'opus' | 'MiniMax-M2.7';
   /** Reuse an existing session. Auto-creates one if omitted. */
   sessionId?: string;
   /** Maximum number of retries on transport/network errors. Defaults to 3. */

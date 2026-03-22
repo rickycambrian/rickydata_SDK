@@ -10,6 +10,12 @@
  * (src/execution/execution_bridge.py).
  */
 
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+export type PipelineProvider = 'claude' | 'minimax';
+
+export const MINIMAX_MODEL = 'MiniMax-M2.7' as const;
+
 // ── Resolve Request / Response ───────────────────────────────────────────────
 
 export interface PipelineResolveOptions {
@@ -17,6 +23,8 @@ export interface PipelineResolveOptions {
   mode?: 'local' | 'remote';
   /** Override model selection (skips ROI routing). E.g. "claude-haiku", "claude-sonnet" */
   model?: string;
+  /** AI provider. Defaults to 'minimax'. */
+  provider?: PipelineProvider;
   /** Maximum spend in USD for this resolution */
   budget_usd?: number;
   /** Subprocess timeout in seconds (default: 600) */

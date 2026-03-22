@@ -19,6 +19,7 @@ import { homedir } from 'node:os';
 
 import type {
   PipelineClientConfig,
+  PipelineProvider,
   PipelineResolveRequest,
   PipelineResolveResponse,
   PipelineResolveOptions,
@@ -85,10 +86,11 @@ export class PipelineClient {
       return this._resolveLocal(repo, issueNumber, opts);
     }
 
+    const provider = this._resolveProvider(opts?.provider, opts?.model);
     const body: PipelineResolveRequest = {
       repo,
       issue_number: issueNumber,
-      options: opts,
+      options: { ...opts, provider },
     };
 
     const res = await this.request('/api/v1/pipeline/resolve', {
@@ -300,6 +302,20 @@ export class PipelineClient {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Local plan proposal failed: ${message.slice(0, 200)}`);
     }
+  }
+
+  // ── Provider Resolution ─────────────────────────────────────────────────
+
+  /**
+   * Derive the provider from explicit value, model prefix, or default.
+   *  1. Explicit provider wins.
+   *  2. Model starting with "MiniMax" -> 'minimax'.
+   *  3. Default -> 'minimax'.
+   */
+  _resolveProvider(provider?: PipelineProvider, model?: string): PipelineProvider {
+    if (provider) return provider;
+    if (model?.startsWith('MiniMax')) return 'minimax';
+    return 'minimax';
   }
 
   // ── Local Mode ────────────────────────────────────────────────────────────
