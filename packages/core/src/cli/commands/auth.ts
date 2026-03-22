@@ -226,7 +226,7 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
 
       // Browser-based login (default path when no auth method flag is provided)
       if (!opts.token && opts.privy === undefined && !opts.privateKey) {
-        const marketplaceUrl = 'https://mcpmarketplace.rickydata.org/#/auth/cli';
+        const marketplaceUrl = 'https://marketplace.rickydata.org/#/auth/cli';
 
         console.log(chalk.cyan('Opening browser for sign-in...'));
         console.log(chalk.dim(`If the browser doesn't open, visit: ${marketplaceUrl}`));

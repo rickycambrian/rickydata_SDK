@@ -55,7 +55,7 @@
     "type": "git",
     "url": "https://github.com/rickycambrian/rickydata_SDK.git"
   },
-  "homepage": "https://mcpmarketplace.rickydata.org",
+  "homepage": "https://marketplace.rickydata.org",
   "keywords": [
     "mcp",
     "model-context-protocol",

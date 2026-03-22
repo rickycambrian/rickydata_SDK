@@ -263,7 +263,7 @@ function parseManagedRelayInfo(pr: Record<string, unknown> | undefined): Managed
   if (r.mode !== 'managed') return null;
   const payerAddress = String(r.payerAddress || '');
   const requiredBaseUnits = String(r.requiredBaseUnits || '');
-  const topUpUrl = String(r.topUpUrl || 'https://mcpmarketplace.rickydata.org/#/wallet');
+  const topUpUrl = String(r.topUpUrl || 'https://marketplace.rickydata.org/#/wallet');
   const availableBaseUnits = r.availableBaseUnits != null ? String(r.availableBaseUnits) : undefined;
   if (!payerAddress || !requiredBaseUnits) return null;
   return {
@@ -417,7 +417,7 @@ function classifyMcpError(err: unknown, context: 'search' | 'enable' | 'disable'
     return `Cannot reach MCP gateway. Check your connection or run \`rickydata auth status\` to verify the gateway URL.\n  ${msg}`;
   }
   if (lower.includes('secrets') || lower.includes('needs_secrets') || lower.includes('api key')) {
-    return `This server requires secrets. Configure them at https://mcpmarketplace.rickydata.org and try again.\n  ${msg}`;
+    return `This server requires secrets. Configure them at https://marketplace.rickydata.org and try again.\n  ${msg}`;
   }
   return msg;
 }
@@ -682,7 +682,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
         console.log(chalk.yellow('Not authenticated. Opening browser to log in...\n'));
         try {
           const { default: open } = await import('open');
-          await open('https://mcpmarketplace.rickydata.org/#/auth/cli');
+          await open('https://marketplace.rickydata.org/#/auth/cli');
         } catch { /* ignore */ }
         console.log(chalk.dim('After authenticating, run: rickydata auth login'));
         console.log(chalk.dim('Then re-run: rickydata mcp connect'));
@@ -990,7 +990,7 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       if (!cred?.token) {
         console.log(chalk.yellow('Not authenticated. Opening browser to log in...\n'));
         const { default: open } = await import('open');
-        await open('https://mcpmarketplace.rickydata.org/#/auth/cli');
+        await open('https://marketplace.rickydata.org/#/auth/cli');
         console.log(chalk.dim('After authenticating, run: rickydata auth login'));
         console.log(chalk.dim('Then re-run: rickydata mcp connect-server'));
         return;

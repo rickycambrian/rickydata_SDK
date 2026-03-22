@@ -187,7 +187,7 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
           console.log();
           console.log(chalk.white('To fund your wallet:'));
           console.log(chalk.white(`  1. Send USDC on Base mainnet to: ${chalk.cyan(depositAddr)}`));
-          console.log(chalk.white('  2. Or deposit via: ') + chalk.cyan('https://mcpmarketplace.rickydata.org/#/wallet'));
+          console.log(chalk.white('  2. Or deposit via: ') + chalk.cyan('https://marketplace.rickydata.org/#/wallet'));
           console.log();
           console.log(chalk.yellow('Important: Send ONLY USDC on Base mainnet (Chain 8453)'));
           console.log(chalk.yellow('Other networks are NOT auto-credited. Recovery policy applies.'));
@@ -195,7 +195,7 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
           console.log();
           console.log(chalk.yellow(`⚠ Low balance: $${balance.toFixed(4)} USDC`));
           console.log(chalk.dim(`  Each MCP tool call costs $0.0005. Agent chat: 10% markup on LLM cost.`));
-          console.log(chalk.dim(`  Fund at: https://mcpmarketplace.rickydata.org/#/wallet`));
+          console.log(chalk.dim(`  Fund at: https://marketplace.rickydata.org/#/wallet`));
         }
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));

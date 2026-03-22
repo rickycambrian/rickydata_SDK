@@ -181,7 +181,7 @@ All payments use **USDC on Base mainnet** (Chain 8453).
 rickydata wallet balance   # Shows deposit address
 ```
 
-Send USDC on Base mainnet to the address shown. Or use the web interface at https://mcpmarketplace.rickydata.org/#/wallet.
+Send USDC on Base mainnet to the address shown. Or use the web interface at https://marketplace.rickydata.org/#/wallet.
 
 </details>
 
@@ -400,7 +400,7 @@ All errors extend `MCPGatewayError`. Key subtypes: `SpendingLimitExceededError`,
 |---------|-----|---------|
 | MCP Gateway | https://mcp.rickydata.org | MCP server hosting + tool proxy |
 | Agent Gateway | https://agents.rickydata.org | BYOK Claude agents + canvas runtime |
-| Marketplace | https://mcpmarketplace.rickydata.org | Browse + manage servers |
+| Marketplace | https://marketplace.rickydata.org | Browse + manage servers |
 
 Source: [`rickydata_SDK`](https://github.com/rickycambrian/rickydata_SDK) (this repo) / [`mcp_deployments_registry`](https://github.com/rickycambrian/mcp_deployments_registry) (platform)
 

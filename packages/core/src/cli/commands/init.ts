@@ -393,7 +393,7 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 // ── Browser Login (extracted for reuse) ──────────────────────────────
 
 async function runBrowserLogin(store: CredentialStore, profile: string): Promise<string> {
-  const marketplaceUrl = 'https://mcpmarketplace.rickydata.org/#/auth/cli';
+  const marketplaceUrl = 'https://marketplace.rickydata.org/#/auth/cli';
 
   console.log(chalk.cyan('Opening browser for sign-in...'));
   console.log(chalk.dim('(email, Google, GitHub, Discord, or wallet)'));
