@@ -33,6 +33,10 @@
     "./mcp": {
       "import": "./dist/mcp/index.js",
       "types": "./dist/mcp/index.d.ts"
+    },
+    "./geo-wallet": {
+      "import": "./dist/geo-wallet/index.js",
+      "types": "./dist/geo-wallet/index.d.ts"
     }
   },
   "bin": {
