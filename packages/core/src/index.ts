@@ -351,8 +351,8 @@ export type {
 } from './benchmarks/index.js';
 
 // Geo Wallet (transaction detection & signing for Geo protocol APPROVAL mode)
-export { detectGeoTransactionRequest, GeoTransactionSigner } from './geo-wallet/index.js';
-export type { PendingGeoTransaction, GeoTxResult, GeoTxSignerConfig } from './geo-wallet/index.js';
+export { detectGeoTransactionRequest, GeoTransactionSigner, resolveGeoWalletConfig } from './geo-wallet/index.js';
+export type { PendingGeoTransaction, GeoTxResult, GeoTxSignerConfig, GeoWalletContext, GeoWalletConfigResult } from './geo-wallet/index.js';
 
 // Cycle Client (autonomous loop tracking)
 export { CycleClient } from './cycles/index.js';
