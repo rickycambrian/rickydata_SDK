@@ -3,6 +3,7 @@ export type {
   SpendingWalletConfig,
   SpendingPolicyConfig,
   ApprovalDetails,
+  AttestationResult,
 } from './config.js';
 export type { RuntimeScope } from './runtime-scope.js';
 
@@ -13,6 +14,9 @@ export type {
   ToolResult,
   PaymentInfo,
   ListOptions,
+  SemanticSearchOptions,
+  SemanticSearchResultItem,
+  SemanticSearchResult,
 } from './server.js';
 
 export type {

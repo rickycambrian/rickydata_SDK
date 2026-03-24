@@ -43,3 +43,34 @@ export interface ListOptions {
   limit?: number;
   offset?: number;
 }
+
+export interface SemanticSearchOptions {
+  limit?: number;
+  includeAgents?: boolean;
+  category?: string;
+  type?: 'server' | 'agent' | 'all';
+}
+
+export interface SemanticSearchResultItem {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  type: 'server' | 'agent';
+  score: number;
+  semanticScore: number;
+  textScore: number;
+  matchReason: string;
+  categories: string[];
+  toolCount: number;
+  securityScore?: number;
+  skillCount?: number;
+  isEnabled?: boolean;
+}
+
+export interface SemanticSearchResult {
+  results: SemanticSearchResultItem[];
+  searchMode: string;
+  totalResults: number;
+  latencyMs: number;
+}

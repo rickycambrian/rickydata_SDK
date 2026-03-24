@@ -30,6 +30,7 @@ export type {
   SpendingWalletConfig,
   SpendingPolicyConfig,
   ApprovalDetails,
+  AttestationResult,
   Server,
   ServerDetail,
   Tool,
@@ -44,6 +45,9 @@ export type {
   PolicyViolationType,
   AuthSession,
   PaymentEvents,
+  SemanticSearchOptions,
+  SemanticSearchResultItem,
+  SemanticSearchResult,
 } from './types/index.js';
 
 // Agent Client (high-level chat helper)

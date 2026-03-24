@@ -483,6 +483,96 @@ export function createMcpCommands(config: ConfigManager, store: CredentialStore)
       }
     });
 
+  // ── mcp semantic-search <query> ──────────────────────────────────
+  mcp
+    .command('semantic-search <query>')
+    .description('AI-powered semantic search for servers and agents')
+    .option('-l, --limit <n>', 'Max results', '10')
+    .option('--agents', 'Include agents in results')
+    .option('-c, --category <cat>', 'Filter by category')
+    .option('-t, --type <type>', 'Result type: server, agent, or all', 'all')
+    .option('-o, --output <format>', 'Output format (table|json)', 'table')
+    .option('--profile <profile>', 'Config profile')
+    .action(async (query: string, opts) => {
+      const profile = opts.profile ?? config.getActiveProfile();
+      const mcpGatewayUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
+      const cred = store.getToken(profile);
+      if (!cred?.token) fail('Not authenticated. Semantic search requires wallet auth. Run `rickydata auth login` first.');
+      const format = opts.output as OutputFormat;
+
+      const spinner = ora('Searching...').start();
+      try {
+        const body: Record<string, unknown> = {
+          query,
+          limit: parseInt(opts.limit),
+        };
+        if (opts.agents) body.includeAgents = true;
+        if (opts.category) body.category = opts.category;
+        if (opts.type && opts.type !== 'all') body.type = opts.type;
+
+        const res = await fetch(`${mcpGatewayUrl}/api/catalog/semantic-search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${cred.token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          if (res.status === 401 || res.status === 403) {
+            throw new CliError('Authentication failed. Run `rickydata auth login` to refresh your token.');
+          }
+          throw new CliError(`Semantic search failed: ${res.status}${text ? ` — ${text}` : ''}`);
+        }
+
+        const data = await res.json() as {
+          results: Array<Record<string, unknown>>;
+          searchMode: string;
+          totalResults: number;
+          latencyMs: number;
+        };
+        spinner.stop();
+
+        if (format === 'json') {
+          console.log(formatJson(data));
+          return;
+        }
+
+        if (!data.results || data.results.length === 0) {
+          console.log(chalk.yellow('No results found.'));
+          console.log(chalk.dim('Try a broader query or different wording — semantic search understands natural language.'));
+          return;
+        }
+
+        const rows = data.results.map((r) => ({
+          name: String(r.name || r.title || ''),
+          type: String(r.type || 'server'),
+          score: typeof r.score === 'number' ? r.score.toFixed(2) : '-',
+          tools: String(r.toolCount ?? 0),
+          reason: String(r.matchReason || '').slice(0, 40),
+          categories: (Array.isArray(r.categories) ? r.categories : []).join(', ').slice(0, 20),
+        }));
+
+        console.log(
+          formatOutput(rows, [
+            { header: 'Name', key: 'name', width: 32 },
+            { header: 'Type', key: 'type', width: 8 },
+            { header: 'Score', key: 'score', width: 8 },
+            { header: 'Tools', key: 'tools', width: 7 },
+            { header: 'Match Reason', key: 'reason', width: 42 },
+            { header: 'Categories', key: 'categories', width: 22 },
+          ], format)
+        );
+        console.log(chalk.dim(`\n${data.totalResults} result(s) in ${data.latencyMs}ms (${data.searchMode} mode)`));
+      } catch (err) {
+        spinner.stop();
+        if (err instanceof CliError) throw err;
+        throw new CliError(classifyMcpError(err, 'search'));
+      }
+    });
+
   // ── mcp enable <name-or-id> ───────────────────────────────────────
   mcp
     .command('enable <name-or-id>')
