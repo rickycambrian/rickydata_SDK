@@ -20,6 +20,28 @@ export interface GatewayConfig {
     maxPerCall?: string;
     maxDaily?: string;
   };
+
+  /**
+   * Route all requests through the TEE-protected endpoint.
+   *
+   * Defaults to `true` when wallet auth is configured (spendingWallet or
+   * wallet.privateKey), since private data should go through TEE.
+   * Defaults to `false` when only an API key is provided.
+   * Set explicitly to override the default (e.g. `teeMode: false` to
+   * disable TEE even with a wallet).
+   */
+  teeMode?: boolean;
+
+  /** TEE endpoint URL (default: 'https://tee.knowledgedataflow.org') */
+  teeBaseUrl?: string;
+}
+
+/** Result from TEE attestation verification */
+export interface AttestationResult {
+  verified: boolean;
+  platform: string;
+  imageDigest: string;
+  encryptionEnabled: boolean;
 }
 
 /** Configuration for creating a SpendingWallet */

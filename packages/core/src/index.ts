@@ -12,6 +12,10 @@ export { deriveKeyFromSignature, getDeriveKeyMessage } from './encryption.js';
 export { SpendingWallet } from './wallet/spending-wallet.js';
 export { SpendingPolicy } from './wallet/spending-policy.js';
 
+// x402 HTTP client
+export { X402Client } from './payment/x402-client.js';
+export type { X402RequestOptions, X402Response } from './payment/x402-client.js';
+
 // Errors
 export {
   MCPGatewayError,

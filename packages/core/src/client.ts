@@ -1,5 +1,6 @@
 import type {
   GatewayConfig,
+  AttestationResult,
   AuthSession,
   Server,
   ServerDetail,
@@ -9,11 +10,15 @@ import type {
   SpendingSummary,
   ListOptions,
   RuntimeScope,
+  SemanticSearchOptions,
+  SemanticSearchResult,
 } from './types/index.js';
 import { AuthManager, type AuthenticateAutoOptions, type EthHttpSigner } from './auth.js';
 import { SecretsManager } from './secrets.js';
 import { ToolsManager } from './tools.js';
 import { SpendingWallet } from './wallet/spending-wallet.js';
+
+const DEFAULT_TEE_BASE_URL = 'https://tee.knowledgedataflow.org';
 
 export class MCPGateway {
   private auth: AuthManager;
@@ -21,9 +26,29 @@ export class MCPGateway {
   private tools: ToolsManager;
   private baseUrl: string;
   private _wallet: SpendingWallet | null = null;
+  private _teeMode: boolean;
+  private _teeBaseUrl: string;
+  private _attestationVerified = false;
+  private _attestationPromise: Promise<void> | null = null;
 
   constructor(config: GatewayConfig) {
-    this.baseUrl = config.url.replace(/\/$/, '');
+    this._teeMode = config.teeMode ?? !!(config.spendingWallet || config.wallet?.privateKey);
+    this._teeBaseUrl = (config.teeBaseUrl ?? DEFAULT_TEE_BASE_URL).replace(/\/$/, '');
+
+    // When teeMode is enabled, use the TEE endpoint as base URL
+    this.baseUrl = this._teeMode
+      ? this._teeBaseUrl
+      : config.url.replace(/\/$/, '');
+
+    // Warn if teeMode is enabled without wallet auth
+    if (this._teeMode && !config.spendingWallet && !config.wallet?.privateKey) {
+      console.warn(
+        '[SDK] teeMode is enabled without wallet auth (spendingWallet or wallet.privateKey). ' +
+        'API-key-only auth will not produce encrypted data in TEE mode. ' +
+        'Configure a SpendingWallet or privateKey for full TEE protection.',
+      );
+    }
+
     this.auth = new AuthManager(this.baseUrl, config.auth?.token);
     this.auth.setRuntimeScopeId(config.auth?.runtimeScopeId);
     this.secrets = new SecretsManager(this.baseUrl, this.auth);
@@ -96,6 +121,37 @@ export class MCPGateway {
     }
   }
 
+  /**
+   * Verify TEE attestation once per session when teeMode is active.
+   * Called automatically before the first request. Safe to call concurrently.
+   */
+  private async _ensureAttestationVerified(): Promise<void> {
+    if (!this._teeMode || this._attestationVerified) return;
+
+    // Deduplicate concurrent calls
+    if (this._attestationPromise) {
+      await this._attestationPromise;
+      return;
+    }
+
+    this._attestationPromise = (async () => {
+      const result = await this.verifyAttestation();
+      if (!result.verified) {
+        throw new Error(
+          `TEE attestation failed: platform=${result.platform}, ` +
+          `encryptionEnabled=${result.encryptionEnabled}. Data may not be protected.`,
+        );
+      }
+      this._attestationVerified = true;
+    })();
+
+    try {
+      await this._attestationPromise;
+    } finally {
+      this._attestationPromise = null;
+    }
+  }
+
   // Auth
   async authenticate(signFn?: (message: string) => Promise<string>, address?: string): Promise<AuthSession> {
     // Auto-init legacy wallet if needed
@@ -141,6 +197,7 @@ export class MCPGateway {
    * Re-authenticates once if the server returns 401 and credentials are stored.
    */
   private async authenticatedFetch(url: string, init?: RequestInit): Promise<Response> {
+    await this._ensureAttestationVerified();
     return this.auth.fetchWithAuth(url, init, { retryOn401: true });
   }
 
@@ -171,6 +228,29 @@ export class MCPGateway {
     if (!res.ok) throw new Error(`Search failed: ${res.status}`);
     const data = await res.json();
     return data.servers ?? [];
+  }
+
+  /**
+   * Semantic search for MCP servers and agents using AI embeddings.
+   * Requires wallet authentication.
+   */
+  async semanticSearch(query: string, options?: SemanticSearchOptions): Promise<SemanticSearchResult> {
+    const body: Record<string, unknown> = { query };
+    if (options?.limit != null) body.limit = options.limit;
+    if (options?.includeAgents != null) body.includeAgents = options.includeAgents;
+    if (options?.category) body.category = options.category;
+    if (options?.type) body.type = options.type;
+
+    const res = await this.authenticatedFetch(`${this.baseUrl}/api/catalog/semantic-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Semantic search failed: ${res.status}${text ? ` — ${text}` : ''}`);
+    }
+    return res.json();
   }
 
   async listRuntimeScopes(externalRef?: string): Promise<RuntimeScope[]> {
@@ -252,6 +332,7 @@ export class MCPGateway {
   // Tools
   async callTool(serverId: string, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
     await this.ensureWallet();
+    await this._ensureAttestationVerified();
     return this.tools.callTool(serverId, tool, args);
   }
 
@@ -288,5 +369,73 @@ export class MCPGateway {
   /** Get the underlying spending wallet (if configured) */
   get wallet(): SpendingWallet | null {
     return this._wallet;
+  }
+
+  /** Whether TEE private mode is currently active */
+  get teeMode(): boolean {
+    return this._teeMode;
+  }
+
+  /**
+   * Verify TEE attestation by calling the attestation endpoint.
+   * Returns structured attestation information including platform,
+   * image digest, and whether encryption is enabled.
+   */
+  async verifyAttestation(): Promise<AttestationResult> {
+    const url = `${this._teeBaseUrl}/api/v1/attestation`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`TEE attestation request failed: ${res.status}`);
+    }
+    const data = await res.json();
+    return {
+      verified: data.attestation_available === true,
+      platform: data.platform ?? 'unknown',
+      imageDigest: data.image_digest ?? '',
+      encryptionEnabled: data.encryption_enabled === true,
+    };
+  }
+
+  /**
+   * Switch to TEE private mode.
+   *
+   * Verifies TEE attestation, then reconfigures the client to route
+   * all subsequent requests through the TEE-protected endpoint.
+   * Throws if attestation verification fails.
+   */
+  async enablePrivateMode(): Promise<AttestationResult> {
+    if (!this._wallet && !this._legacyWalletConfig) {
+      throw new Error(
+        'TEE private mode requires wallet auth (SpendingWallet or privateKey). ' +
+        'API-key-only auth will not produce encrypted data.',
+      );
+    }
+
+    const attestation = await this.verifyAttestation();
+    if (!attestation.verified) {
+      throw new Error(
+        `TEE attestation failed: platform=${attestation.platform}, ` +
+        `encryptionEnabled=${attestation.encryptionEnabled}`,
+      );
+    }
+
+    // Switch base URL to TEE endpoint
+    this._teeMode = true;
+    this._attestationVerified = true;
+    this.baseUrl = this._teeBaseUrl;
+
+    // Recreate managers with new base URL
+    const savedAuth = this.auth.isAuthenticated ? this.auth.getToken() : undefined;
+    this.auth = new AuthManager(this.baseUrl, savedAuth);
+    this.secrets = new SecretsManager(this.baseUrl, this.auth);
+    const autoSign = true;
+    this.tools = new ToolsManager(
+      this.baseUrl,
+      this.auth,
+      this._wallet,
+      autoSign,
+    );
+
+    return attestation;
   }
 }
