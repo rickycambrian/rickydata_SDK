@@ -139,7 +139,48 @@ export interface SSEErrorEvent {
   data: { code?: string; message: string };
 }
 
-export type SSEEvent = SSETextEvent | SSEToolCallEvent | SSEToolResultEvent | SSEDoneEvent | SSEErrorEvent;
+export interface SSEThinkingEvent {
+  type: 'thinking';
+  data: string;
+}
+
+export interface SSEPlanningEvent {
+  type: 'planning';
+  data: string;
+}
+
+export interface SSEToolApprovalRequestEvent {
+  type: 'tool_approval_request';
+  data: {
+    approvalId: string;
+    toolName: string;
+    args: unknown;
+    description?: string;
+    timeoutMs?: number;
+  };
+}
+
+export interface SSETransactionSigningRequestEvent {
+  type: 'transaction_signing_request';
+  data: {
+    approvalId: string;
+    description: string;
+    toolName: string;
+    metadata?: Record<string, unknown>;
+    timeoutMs: number;
+  };
+}
+
+export type SSEEvent =
+  | SSETextEvent
+  | SSEToolCallEvent
+  | SSEToolResultEvent
+  | SSEDoneEvent
+  | SSEErrorEvent
+  | SSEThinkingEvent
+  | SSEPlanningEvent
+  | SSEToolApprovalRequestEvent
+  | SSETransactionSigningRequestEvent;
 
 // ─── Agent MCP Client ──────────────────────────────────────
 

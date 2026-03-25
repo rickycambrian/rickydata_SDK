@@ -114,6 +114,10 @@ export type {
   SSEToolResultEvent,
   SSEDoneEvent,
   SSEErrorEvent,
+  SSEThinkingEvent,
+  SSEPlanningEvent,
+  SSEToolApprovalRequestEvent,
+  SSETransactionSigningRequestEvent,
 } from './agent/index.js';
 
 // AgentSession facade (auth + session management in one)

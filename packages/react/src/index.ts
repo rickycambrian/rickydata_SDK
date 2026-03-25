@@ -61,7 +61,7 @@ export type { DepositPanelProps, DepositStatus } from './components/DepositPanel
 
 // Types
 export type {
-  ChatMessage, ToolExecution, SecretSection,
+  ChatMessage, ChatImage, ToolExecution, SecretSection,
   VoiceConnectionState, VoicePhase, VoiceTranscript, VoiceToolCallInfo,
 } from './types.js';
 

@@ -43,6 +43,10 @@ export type {
   SSEToolResultEvent,
   SSEDoneEvent,
   SSEErrorEvent,
+  SSEThinkingEvent,
+  SSEPlanningEvent,
+  SSEToolApprovalRequestEvent,
+  SSETransactionSigningRequestEvent,
 
   // Sessions
   SessionCreateResponse,

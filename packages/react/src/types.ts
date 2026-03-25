@@ -1,11 +1,20 @@
+/** Image attached to a chat message. */
+export interface ChatImage {
+  data: string;
+  mediaType: string;
+  preview: string;
+}
+
 /** Chat message as used in React UI state. */
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent';
   content: string;
   toolExecutions?: ToolExecution[];
+  thinking?: string;
   timestamp: string;
   costUSD?: string;
+  images?: ChatImage[];
 }
 
 /** A tool call + optional result within a chat message. */
