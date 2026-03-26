@@ -13,6 +13,8 @@ export interface ChatTestCase {
   model?: 'haiku' | 'sonnet' | 'opus';
   /** Validation checks to run against the response. */
   validation: ChatValidationChecks;
+  /** Base64 image to send with the question (for screenshare tests). */
+  screenshareImage?: string;
 }
 
 export interface ChatValidationChecks {
@@ -32,6 +34,8 @@ export interface ChatValidationChecks {
   maxCostUsd?: number;
   /** Custom validator returning failure messages (empty = pass). */
   custom?: (result: ChatTestResult) => string[];
+  /** Keywords expected in the image description (screenshare tests). */
+  screenshareDescriptionKeywords?: string[];
 }
 
 /** Enriched chat result with tracking data for validation. */

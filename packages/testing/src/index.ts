@@ -61,3 +61,18 @@ export {
   createSessionCostPayload,
   createAgentTextPayload,
 } from './voice/data-channel-mock.js';
+
+// E2E
+export { AgentE2ERunner } from './e2e/agent-e2e-runner.js';
+export type { AgentE2EConfig, ChatWithImageResult } from './e2e/agent-e2e-runner.js';
+export {
+  MINIMAL_PNG_BASE64,
+  TEST_SCREENSHOT_BASE64,
+  verifyImageDescription,
+  createImageAttachment,
+} from './e2e/screenshare-test-utils.js';
+export {
+  requestTwoVoiceTokens,
+  assertDifferentRooms,
+} from './e2e/voice-overlap-detector.js';
+export type { VoiceTokenResult } from './e2e/voice-overlap-detector.js';
