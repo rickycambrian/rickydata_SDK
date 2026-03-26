@@ -74,6 +74,12 @@ export class X402Client {
         }
       } else {
         fetchBody = body;
+        // Auto-detect JSON string bodies and set Content-Type if not already set.
+        // MCP tool args pass body as a string, so '{"key":"val"}' arrives as a
+        // string — the server still needs Content-Type: application/json to parse it.
+        if (!fetchHeaders['Content-Type'] && fetchBody.trimStart().startsWith('{')) {
+          fetchHeaders['Content-Type'] = 'application/json';
+        }
       }
     }
 

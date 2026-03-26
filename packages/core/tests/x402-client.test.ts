@@ -243,6 +243,32 @@ describe('X402Client', () => {
     expect(callOpts.body).toBe('raw-string');
   });
 
+  it('auto-detects JSON string body and sets Content-Type', async () => {
+    const fetchMock = mockFetch(200, { ok: true }, { 'content-type': 'application/json' });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    await client.request(TEST_URL, {
+      method: 'POST',
+      body: '{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}',
+    });
+
+    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(callOpts.body).toBe('{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}');
+    expect((callOpts.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+  });
+
+  it('does not set Content-Type for non-JSON string body', async () => {
+    const fetchMock = mockFetch(200, 'ok', {});
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    await client.request(TEST_URL, { method: 'POST', body: 'plain text body' });
+
+    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((callOpts.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+
   // ── Constructor defaults ─────────────────────────────────────────────────
 
   it('uses BASE_CHAIN_ID (8453) by default', async () => {
