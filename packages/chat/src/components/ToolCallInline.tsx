@@ -48,9 +48,11 @@ export interface ToolCallInlineProps {
   tool: ToolExecution;
   /** Auto-expand when scrolled into view (default: true). */
   autoExpand?: boolean;
+  /** Start collapsed — used for completed messages where results should be hidden by default. */
+  defaultCollapsed?: boolean;
 }
 
-export function ToolCallInline({ tool, autoExpand = true }: ToolCallInlineProps) {
+export function ToolCallInline({ tool, autoExpand = true, defaultCollapsed = false }: ToolCallInlineProps) {
   const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasError = tool.result?.isError;
@@ -60,16 +62,16 @@ export function ToolCallInline({ tool, autoExpand = true }: ToolCallInlineProps)
   const borderColor = TOOL_BORDER_COLORS[category] || TOOL_BORDER_COLORS.default;
   const { icon, value, style } = getArgSummary(tool.args);
 
-  // Auto-expand when scrolled into view
+  // Auto-expand when scrolled into view — only if not defaultCollapsed
   useEffect(() => {
-    if (!autoExpand || !containerRef.current || expanded || isRunning) return;
+    if (defaultCollapsed || !autoExpand || !containerRef.current || expanded || isRunning) return;
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setExpanded(true); },
       { threshold: 0.3 },
     );
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [autoExpand, expanded, isRunning]);
+  }, [autoExpand, defaultCollapsed, expanded, isRunning]);
 
   const resultContent = tool.result?.content || '';
   const looksLikeMarkdown = resultContent.length > 20 && /^[#|*\-\d]|^\s*\||^\s*[-*]\s/m.test(resultContent.trim());

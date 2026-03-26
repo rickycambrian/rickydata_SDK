@@ -139,11 +139,11 @@ export function ChatMessageTimeline({
                   <ThinkingBlock content={msg.thinking} />
                 )}
 
-                {/* Tool executions — inline, before text */}
+                {/* Tool executions — inline, before text. Collapsed once message is complete. */}
                 {msg.role === 'agent' && msg.toolExecutions && msg.toolExecutions.length > 0 && (
                   <div className="mb-2 space-y-0.5">
                     {msg.toolExecutions.map((tool: ToolExecution) => (
-                      <ToolCallInline key={tool.id} tool={tool} />
+                      <ToolCallInline key={tool.id} tool={tool} defaultCollapsed={!isStreaming} />
                     ))}
                   </div>
                 )}
