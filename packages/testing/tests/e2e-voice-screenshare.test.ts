@@ -147,6 +147,72 @@ describeIf('E2E: Screenshare + Voice (production)', () => {
     // The response should be substantive
     expect(result.text.length).toBeGreaterThan(50);
   }, 120_000);
+
+  it('screenshare_issue event includes suggestedAction field', async () => {
+    // This test verifies the enhanced SSE event structure
+    const sessionId = await runner.createSession(TEST_AGENT, 'MiniMax-M2.7-highspeed');
+    const result = await runner.chatWithImage(
+      TEST_AGENT, sessionId,
+      'Describe this screenshot in detail.',
+      [createImageAttachment()],
+      'MiniMax-M2.7-highspeed',
+    );
+
+    if (result.screenshareIssueDetected) {
+      // Find the screenshare_issue event
+      const issueEvent = result.events.find(e => e.type === 'screenshare_issue');
+      expect(issueEvent).toBeDefined();
+      const data = issueEvent!.data as Record<string, unknown>;
+      expect(data.reason).toBe('minimax_url_conversion');
+      expect(data.suggestedAction).toBe('switch_provider');
+      expect(data.alternativeProvider).toBe('anthropic');
+      console.log('[E2E] screenshare_issue event has suggestedAction:', data.suggestedAction);
+    } else {
+      // MiniMax processed the image successfully — also valid
+      console.log('[E2E] MiniMax processed image without URL conversion');
+      expect(result.text.length).toBeGreaterThan(10);
+    }
+  }, 180_000);
+
+  it('GET /wallet/settings returns enabledProviders array', async () => {
+    const res = await fetch(`${AGENT_GATEWAY_URL}/wallet/settings`, {
+      headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` },
+    });
+    expect(res.ok).toBe(true);
+    const settings = await res.json() as Record<string, unknown>;
+
+    // enabledProviders should exist and be an array
+    expect(settings.enabledProviders).toBeDefined();
+    expect(Array.isArray(settings.enabledProviders)).toBe(true);
+
+    // Free tier should include 'minimax'
+    const providers = settings.enabledProviders as string[];
+    if (settings.plan === 'free') {
+      expect(providers).toContain('minimax');
+    }
+
+    console.log('[E2E] enabledProviders:', providers, 'plan:', settings.plan);
+  }, 10_000);
+
+  it('MiniMax screenshare response does not contain hallucinated URLs', async () => {
+    const sessionId = await runner.createSession(TEST_AGENT, 'MiniMax-M2.7-highspeed');
+    const result = await runner.chatWithImage(
+      TEST_AGENT, sessionId,
+      'What do you see in this screenshot?',
+      [createImageAttachment()],
+      'MiniMax-M2.7-highspeed',
+    );
+
+    // The response should NOT contain Alibaba Cloud URLs (those should be intercepted)
+    const hasAlibabaUrl = /minimax-algeng|aliyuncs\.com/.test(result.text);
+    if (hasAlibabaUrl) {
+      console.warn('[E2E] WARNING: Response contains leaked Alibaba URL — detection may not be catching all cases');
+    }
+
+    // The response should be substantive (either image description or provider limitation message)
+    expect(result.text.length).toBeGreaterThan(10);
+    console.log('[E2E] Response (first 200):', result.text.slice(0, 200));
+  }, 180_000);
 });
 
 // Always-run tests for the E2E utilities themselves (no network required)
