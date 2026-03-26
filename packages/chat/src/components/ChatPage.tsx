@@ -139,33 +139,12 @@ export function ChatPage({
   onClose,
   children,
 }: ChatPageProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const displayName = agent?.title ?? agentName ?? 'agent';
   const shortName = displayName.toLowerCase().split(' ').slice(0, 2).join(' ');
   const hasSidebar = !!agent;
 
   const chatArea = (
     <div className="flex-1 flex flex-col min-w-0 relative">
-      {/* Sidebar toggle (only when sidebar exists) */}
-      {hasSidebar && (
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute top-3 left-3 z-10 p-1.5 rounded-lg text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-          title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-        >
-          {sidebarOpen ? (
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /><path d="m16 15-3-3 3-3" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /><path d="m14 9 3 3-3 3" />
-            </svg>
-          )}
-        </button>
-      )}
-
       {/* Optional header */}
       {header}
 
@@ -245,7 +224,7 @@ export function ChatPage({
     <div className="h-[calc(100vh-4rem)] flex animate-fade-in">
       {/* Sidebar */}
       <aside
-        className={`${sidebarOpen ? 'w-72' : 'w-0'} flex-shrink-0 border-r border-surface-200 dark:border-surface-800 bg-surface-50/80 dark:bg-surface-900/80 backdrop-blur-sm flex flex-col overflow-hidden transition-all duration-200`}
+        className="w-72 flex-shrink-0 border-r border-surface-200 dark:border-surface-800 bg-surface-50/80 dark:bg-surface-900/80 backdrop-blur-sm flex flex-col overflow-hidden"
       >
         <div className="w-72 flex flex-col h-full">
           {/* Agent identity */}
