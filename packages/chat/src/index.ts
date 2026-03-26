@@ -17,6 +17,21 @@ export { ThreadDrawer } from './components/ThreadDrawer.js';
 export type { ThreadDrawerProps } from './components/ThreadDrawer.js';
 export { HighlightOverlay } from './components/HighlightOverlay.js';
 
+// Full-page chat components (Tailwind-styled, marketplace-style)
+export { ChatPage } from './components/ChatPage.js';
+export type { ChatPageProps, ChatPageAgentInfo, ChatPageModelOption } from './components/ChatPage.js';
+export { ChatMessageTimeline } from './components/ChatMessageTimeline.js';
+export type { ChatMessageTimelineProps } from './components/ChatMessageTimeline.js';
+export { ChatInputTimeline } from './components/ChatInputTimeline.js';
+export type { ChatInputTimelineProps } from './components/ChatInputTimeline.js';
+export { ToolCallInline } from './components/ToolCallInline.js';
+export type { ToolCallInlineProps } from './components/ToolCallInline.js';
+export { getToolCategory, TOOL_BORDER_COLORS } from './components/ToolCallInline.js';
+export { ThinkingBlock } from './components/ThinkingBlock.js';
+export type { ThinkingBlockProps } from './components/ThinkingBlock.js';
+export { ChatInput } from './components/ChatInput.js';
+export type { ChatInputProps } from './components/ChatInput.js';
+
 // Hooks
 export { useChatBubbleEngine } from './hooks/useChatBubbleEngine.js';
 export type { UseChatBubbleEngineOptions, UseChatBubbleEngineReturn } from './hooks/useChatBubbleEngine.js';

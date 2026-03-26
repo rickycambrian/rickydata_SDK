@@ -32,7 +32,10 @@ export { useSecrets } from './hooks/secrets.js';
 
 // Hooks — Chat (SSE streaming)
 export { useAgentChat } from './hooks/chat.js';
-export type { UseAgentChatOptions, UseAgentChatResult } from './hooks/chat.js';
+export type {
+  UseAgentChatOptions, UseAgentChatResult,
+  ChatSidebarState, ToolApprovalData, TransactionSigningData,
+} from './hooks/chat.js';
 
 // Hooks — Voice (LiveKit)
 export {

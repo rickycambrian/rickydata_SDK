@@ -1,12 +1,48 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { streamSSEEvents, AgentError, AgentErrorCode, type SSEEvent } from 'rickydata/agent';
+import { streamSSEEvents, AgentError, AgentErrorCode, type SSEEvent, type ImageAttachment } from 'rickydata/agent';
 import { useRickyData } from '../providers/RickyDataProvider.js';
-import type { ChatMessage, ToolExecution } from '../types.js';
+import type { ChatMessage, ChatImage, ToolExecution } from '../types.js';
+
+// ─── Tool Approval / Transaction Signing Data ────────────────
+
+export interface ToolApprovalData {
+  approvalId: string;
+  toolName: string;
+  args: unknown;
+  description?: string;
+  timeoutMs?: number;
+}
+
+export interface TransactionSigningData {
+  approvalId: string;
+  description: string;
+  toolName: string;
+  metadata?: Record<string, unknown>;
+  timeoutMs: number;
+}
+
+// ─── Sidebar State ───────────────────────────────────────────
+
+export interface ChatSidebarState {
+  selectedModel: string;
+  sessionId: string | null;
+  messageCount: number;
+  totalCost: number;
+  streamingPhase: 'idle' | 'tools' | 'streaming';
+  activeTools: string[];
+  sending: boolean;
+}
+
+// ─── Hook Options & Result ───────────────────────────────────
 
 export interface UseAgentChatOptions {
   agentId: string;
-  model?: 'haiku' | 'sonnet' | 'opus';
+  model?: string;
   resumeSessionId?: string;
+  excludeCodeTools?: boolean;
+  onStateChange?: (state: ChatSidebarState) => void;
+  onToolApprovalRequest?: (data: ToolApprovalData) => void;
+  onTransactionRequest?: (data: TransactionSigningData) => void;
 }
 
 export interface UseAgentChatResult {
@@ -17,22 +53,34 @@ export interface UseAgentChatResult {
   streamingPhase: 'idle' | 'tools' | 'streaming';
   activeTools: string[];
   apiKeyConfigured: boolean | null;
-  sendMessage: (text: string) => Promise<void>;
+  pendingApproval: ToolApprovalData | null;
+  pendingTransaction: TransactionSigningData | null;
+  totalCost: number;
+  sendMessage: (text: string, options?: { images?: ChatImage[] }) => Promise<void>;
   clearChat: () => void;
   refreshApiKeyStatus: () => void;
   /** Create a session eagerly (without sending a message). Enables voice before first chat. */
   ensureSession: () => Promise<string>;
+  /** Respond to a tool approval request. */
+  approveToolUse: (approvalId: string, approved: boolean, approveForSession?: boolean) => Promise<void>;
+  /** Respond to a transaction signing request. */
+  submitTransaction: (approvalId: string, txHash?: string, rejected?: boolean) => Promise<void>;
 }
 
 /**
- * SSE streaming chat hook. NOT React Query — uses imperative state management.
+ * SSE streaming chat hook with thinking, planning, tool approval,
+ * transaction signing, image support, and sidebar state callbacks.
  *
- * Ported from rickydata_agentbook/src/hooks/useAgentTextChat.ts.
+ * Port of marketplace AgentChat.tsx streaming handler into reusable SDK hook.
  */
 export function useAgentChat({
   agentId,
   model = 'haiku',
   resumeSessionId,
+  excludeCodeTools,
+  onStateChange,
+  onToolApprovalRequest,
+  onTransactionRequest,
 }: UseAgentChatOptions): UseAgentChatResult {
   const client = useRickyData();
 
@@ -43,12 +91,46 @@ export function useAgentChat({
   const [streamingPhase, setStreamingPhase] = useState<'idle' | 'tools' | 'streaming'>('idle');
   const [activeTools, setActiveTools] = useState<string[]>([]);
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<ToolApprovalData | null>(null);
+  const [pendingTransaction, setPendingTransaction] = useState<TransactionSigningData | null>(null);
+  const [totalCost, setTotalCost] = useState(0);
 
   const modelRef = useRef(model);
   modelRef.current = model;
   const messageQueueRef = useRef<string[]>([]);
 
-  // Check API key status on mount
+  // Keep callback refs stable to avoid re-renders
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+  const onToolApprovalRef = useRef(onToolApprovalRequest);
+  onToolApprovalRef.current = onToolApprovalRequest;
+  const onTransactionRef = useRef(onTransactionRequest);
+  onTransactionRef.current = onTransactionRequest;
+
+  // ─── State change emission ─────────────────────────────────
+
+  const emitStateChange = useCallback((overrides?: Partial<ChatSidebarState>) => {
+    // Read from refs/state at call time — caller can pass overrides for values
+    // that haven't settled into state yet (e.g. during the same tick).
+    onStateChangeRef.current?.({
+      selectedModel: modelRef.current,
+      sessionId,
+      messageCount: messages.length,
+      totalCost,
+      streamingPhase,
+      activeTools,
+      sending,
+      ...overrides,
+    });
+  }, [sessionId, messages.length, totalCost, streamingPhase, activeTools, sending]);
+
+  // Emit state change whenever key values change
+  useEffect(() => {
+    emitStateChange();
+  }, [emitStateChange]);
+
+  // ─── API key check ─────────────────────────────────────────
+
   useEffect(() => {
     let cancelled = false;
     client.getApiKeyStatus()
@@ -57,7 +139,8 @@ export function useAgentChat({
     return () => { cancelled = true; };
   }, [client]);
 
-  // Load messages when resuming a session
+  // ─── Resume session ────────────────────────────────────────
+
   useEffect(() => {
     if (!resumeSessionId) return;
     let cancelled = false;
@@ -77,7 +160,9 @@ export function useAgentChat({
     return () => { cancelled = true; };
   }, [client, agentId, resumeSessionId]);
 
-  const sendMessage = useCallback(async (text: string) => {
+  // ─── Send message ──────────────────────────────────────────
+
+  const sendMessage = useCallback(async (text: string, options?: { images?: ChatImage[] }) => {
     if (!text.trim()) return;
     if (sending) {
       messageQueueRef.current.push(text.trim());
@@ -100,6 +185,7 @@ export function useAgentChat({
       role: 'user',
       content: text.trim(),
       timestamp: new Date().toISOString(),
+      images: options?.images,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -113,16 +199,51 @@ export function useAgentChat({
         setSessionId(sid);
       }
 
-      const response = await client.chatRaw(agentId, sid, text.trim(), modelRef.current);
+      // Convert ChatImage[] to ImageAttachment[] for the API
+      const apiImages: ImageAttachment[] | undefined = options?.images?.length
+        ? options.images.map(img => ({ data: img.data, mediaType: img.mediaType as ImageAttachment['mediaType'] }))
+        : undefined;
+
+      const response = await client.chatRaw(agentId, sid, text.trim(), modelRef.current, apiImages);
 
       let textAccum = '';
+      let thinkingAccum = '';
       const toolExecutions: ToolExecution[] = [];
       let messageCost = '';
       let toolIdCounter = 0;
+
       const streamingMsgId = `agent-streaming-${Date.now()}`;
 
+      // Reset streaming state
       setActiveTools([]);
       setStreamingPhase('idle');
+
+      // Helper: update or create the streaming message efficiently.
+      // Uses the marketplace's optimized flushStreamingMsg pattern:
+      // streamingMsgCreated flag + findIndex + splice instead of prev.map()
+      let streamingMsgCreated = false;
+      const flushStreamingMsg = () => {
+        const snapshot: ChatMessage = {
+          id: streamingMsgId,
+          role: 'agent' as const,
+          content: textAccum,
+          thinking: thinkingAccum || undefined,
+          toolExecutions: toolExecutions.length > 0 ? [...toolExecutions] : undefined,
+          timestamp: new Date().toISOString(),
+        };
+        if (!streamingMsgCreated) {
+          streamingMsgCreated = true;
+          setMessages(prev => [...prev, snapshot]);
+        } else {
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === streamingMsgId);
+            if (idx === -1) return [...prev, snapshot];
+            const next = [...prev];
+            next[idx] = snapshot;
+            return next;
+          });
+        }
+      };
 
       await streamSSEEvents(response, (event: SSEEvent) => {
         switch (event.type) {
@@ -130,24 +251,22 @@ export function useAgentChat({
             setStreamingPhase('streaming');
             setActiveTools([]);
             textAccum += event.data;
-            setMessages(prev => {
-              const existing = prev.find(m => m.id === streamingMsgId);
-              if (!existing) {
-                return [...prev, {
-                  id: streamingMsgId,
-                  role: 'agent' as const,
-                  content: textAccum,
-                  toolExecutions: toolExecutions.length > 0 ? [...toolExecutions] : undefined,
-                  timestamp: new Date().toISOString(),
-                }];
-              }
-              return prev.map(m =>
-                m.id === streamingMsgId
-                  ? { ...m, content: textAccum, toolExecutions: toolExecutions.length > 0 ? [...toolExecutions] : undefined }
-                  : m
-              );
-            });
+            flushStreamingMsg();
             break;
+
+          case 'thinking':
+            // Thinking text stored separately for collapsible display
+            thinkingAccum += (typeof event.data === 'string' ? event.data : (event.data as { thinking?: string }).thinking || '');
+            flushStreamingMsg();
+            break;
+
+          case 'planning':
+            // Planning text shows agent reasoning before tool use
+            textAccum += (typeof event.data === 'string' ? event.data : '');
+            setStreamingPhase('streaming');
+            flushStreamingMsg();
+            break;
+
           case 'tool_call': {
             const data = event.data;
             const displayName = data.displayName || data.name.split('__').pop() || data.name;
@@ -159,8 +278,10 @@ export function useAgentChat({
             });
             setActiveTools(prev => [...prev, displayName]);
             setStreamingPhase('tools');
+            flushStreamingMsg();
             break;
           }
+
           case 'tool_result': {
             const resultData = event.data;
             const resultContent = resultData.result ?? resultData.content;
@@ -180,29 +301,55 @@ export function useAgentChat({
                 }
               }
             }
+            flushStreamingMsg();
             break;
           }
+
           case 'done':
             if (event.data.cost) messageCost = event.data.cost as string;
             break;
+
           case 'error':
             textAccum += `\n\nError: ${event.data.message}`;
+            flushStreamingMsg();
             break;
+
+          case 'tool_approval_request': {
+            const approvalData = event.data as ToolApprovalData;
+            setPendingApproval(approvalData);
+            onToolApprovalRef.current?.(approvalData);
+            break;
+          }
+
+          case 'transaction_signing_request': {
+            const txData = event.data as TransactionSigningData;
+            setPendingTransaction(txData);
+            onTransactionRef.current?.(txData);
+            break;
+          }
         }
       });
 
-      // Finalize
+      // Finalize — replace streaming message with permanent one
       setMessages(prev => {
         const withoutStreaming = prev.filter(m => m.id !== streamingMsgId);
         return [...withoutStreaming, {
           id: `msg-${Date.now()}-agent`,
           role: 'agent' as const,
-          content: textAccum || '(No response)',
+          content: textAccum || (toolExecutions.length > 0 ? '' : '(No response)'),
+          thinking: thinkingAccum || undefined,
           toolExecutions: toolExecutions.length > 0 ? [...toolExecutions] : undefined,
           timestamp: new Date().toISOString(),
           costUSD: messageCost || undefined,
         }];
       });
+
+      // Track cost
+      if (messageCost) {
+        const costNum = parseFloat(messageCost.replace('$', ''));
+        if (!isNaN(costNum)) setTotalCost(prev => prev + costNum);
+      }
+
     } catch (err: unknown) {
       const addError = (content: string) => {
         setMessages(prev => [...prev, {
@@ -249,7 +396,37 @@ export function useAgentChat({
         setTimeout(() => sendMessage(nextMessage), 0);
       }
     }
-  }, [client, agentId, sessionId, apiKeyConfigured]);
+  }, [client, agentId, sessionId, apiKeyConfigured, sending]);
+
+  // ─── Tool approval / transaction signing ───────────────────
+
+  const approveToolUse = useCallback(async (approvalId: string, approved: boolean, _approveForSession?: boolean) => {
+    setPendingApproval(null);
+    const token = await (client as any).ensureAuthenticated?.() ?? undefined;
+    await fetch(
+      `${(client as any).gatewayUrl || 'https://agents.rickydata.org'}/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionId || '')}/approve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ approvalId, approved }),
+      },
+    );
+  }, [client, agentId, sessionId]);
+
+  const submitTransaction = useCallback(async (approvalId: string, txHash?: string, rejected?: boolean) => {
+    setPendingTransaction(null);
+    const token = await (client as any).ensureAuthenticated?.() ?? undefined;
+    await fetch(
+      `${(client as any).gatewayUrl || 'https://agents.rickydata.org'}/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionId || '')}/approve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ approvalId, approved: !rejected, txHash }),
+      },
+    );
+  }, [client, agentId, sessionId]);
+
+  // ─── Refresh API key status ────────────────────────────────
 
   const refreshApiKeyStatus = useCallback(() => {
     client.getApiKeyStatus()
@@ -271,18 +448,18 @@ export function useAgentChat({
     prevApiKeyRef.current = apiKeyConfigured;
   }, [apiKeyConfigured]);
 
+  // ─── Clear / Ensure Session ────────────────────────────────
+
   const clearChat = useCallback(() => {
     setMessages([]);
     setSessionId(null);
     setStreamingPhase('idle');
     setActiveTools([]);
+    setTotalCost(0);
+    setPendingApproval(null);
+    setPendingTransaction(null);
   }, []);
 
-  /**
-   * Eagerly create a session without sending a message.
-   * Useful for enabling voice or other session-dependent features
-   * before the user types their first message.
-   */
   const ensureSession = useCallback(async (): Promise<string> => {
     if (sessionId) return sessionId;
     const session = await client.createSession(agentId, modelRef.current);
@@ -298,9 +475,14 @@ export function useAgentChat({
     streamingPhase,
     activeTools,
     apiKeyConfigured,
+    pendingApproval,
+    pendingTransaction,
+    totalCost,
     sendMessage,
     clearChat,
     refreshApiKeyStatus,
     ensureSession,
+    approveToolUse,
+    submitTransaction,
   };
 }
