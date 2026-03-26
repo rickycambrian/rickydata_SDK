@@ -1,9 +1,67 @@
 import type { AuthSession } from './types/payment.js';
 
-// Re-exports from @rickydata/auth for backward compatibility
-export { AuthErrorCode, AuthError } from '@rickydata/auth';
-export { STORAGE_KEY, TOKEN_REFRESH_MARGIN_MS } from '@rickydata/auth';
-export type { AuthSession as SharedAuthSession, CachedToken, WalletTokenPayload, WalletAdapter } from '@rickydata/auth';
+// ── Inlined from @rickydata/auth to avoid file: dependency in published package ──
+
+export enum AuthErrorCode {
+  CHALLENGE_EXPIRED = 'CHALLENGE_EXPIRED',
+  SIGNATURE_INVALID = 'SIGNATURE_INVALID',
+  ADDRESS_MISMATCH = 'ADDRESS_MISMATCH',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  TOKEN_MALFORMED = 'TOKEN_MALFORMED',
+  NO_IDENTITY_FOUND = 'NO_IDENTITY_FOUND',
+  IDENTITY_SUSPENDED = 'IDENTITY_SUSPENDED',
+  PROVIDER_LINK_CONFLICT = 'PROVIDER_LINK_CONFLICT',
+  SESSION_REVOKED = 'SESSION_REVOKED',
+  RATE_LIMITED = 'RATE_LIMITED',
+}
+
+export class AuthError extends Error {
+  constructor(
+    public readonly code: AuthErrorCode,
+    message: string,
+    public readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'AuthError';
+  }
+
+  toJSON() {
+    return {
+      error: this.message,
+      code: this.code,
+      ...(this.details && { details: this.details }),
+    };
+  }
+}
+
+export const STORAGE_KEY = 'rickydata-auth-token';
+export const TOKEN_REFRESH_MARGIN_MS = 120_000; // 2 minutes before expiry
+
+export type SharedAuthSession = AuthSession;
+
+export interface CachedToken {
+  token: string;
+  address: string;
+  tenantId?: string;
+  expiresAt: number;
+  storedAt: number;
+}
+
+export interface WalletTokenPayload {
+  sub: string;
+  iss: string;
+  exp: number;
+  iat: number;
+  tid?: string;
+  permissions?: string[];
+}
+
+export interface WalletAdapter {
+  getAddress(): string | null;
+  signMessage(message: string): Promise<string>;
+  isReady(): boolean;
+  onAddressChange?(callback: (address: string | null) => void): () => void;
+}
 
 export type EthHttpSigner = {
   address: `0x${string}`;
