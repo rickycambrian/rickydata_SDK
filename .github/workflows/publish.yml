@@ -19,14 +19,7 @@ jobs:
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # After publishing, invalidate all MCP server Docker images so they
-      # pick up the new rickydata version on next cold start.
-      - name: Invalidate MCP Gateway server images
-        if: success()
-        run: |
-          echo "Invalidating all MCP server Docker images..."
-          curl -sf -X POST \
-            -H "Authorization: Bearer ${{ secrets.MCP_GATEWAY_ADMIN_TOKEN }}" \
-            https://mcp.rickydata.org/api/admin/invalidate-all-images \
-            || echo "Warning: Gateway invalidation failed (non-blocking)"
+      # NOTE: After publishing, the monorepo's refresh-trusted-deps.yml
+      # (runs every 6h + manual dispatch) detects the new version and
+      # invalidates MCP server Docker images. Admin tokens are kept
+      # exclusively in the private monorepo, never in this public repo.
