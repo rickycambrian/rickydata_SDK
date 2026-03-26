@@ -37,6 +37,10 @@
     "./geo-wallet": {
       "import": "./dist/geo-wallet/index.js",
       "types": "./dist/geo-wallet/index.d.ts"
+    },
+    "./rpc": {
+      "import": "./dist/rpc/index.js",
+      "types": "./dist/rpc/index.d.ts"
     }
   },
   "bin": {

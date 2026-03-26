@@ -5,8 +5,17 @@ export { MCPGateway } from './client.js';
 export { AuthManager, createWalletToken, createSignToDeriveKey } from './auth.js';
 export type { AuthenticateAutoOptions, EthHttpSigner, DeriveKeyResponse } from './auth.js';
 
-// Encryption utilities (sign-to-derive)
-export { deriveKeyFromSignature, getDeriveKeyMessage } from './encryption.js';
+// Encryption utilities (sign-to-derive + AES-256-GCM client-side encryption)
+export {
+  deriveKeyFromSignature,
+  getDeriveKeyMessage,
+  importKeyFromHex,
+  encryptValue,
+  decryptValue,
+  encryptProperties,
+  decryptResponseRows,
+  isClientEncrypted,
+} from './encryption.js';
 
 // Spending wallet
 export { SpendingWallet } from './wallet/spending-wallet.js';
@@ -365,6 +374,10 @@ export type {
 // Geo Wallet (transaction detection & signing for Geo protocol APPROVAL mode)
 export { detectGeoTransactionRequest, GeoTransactionSigner, resolveGeoWalletConfig } from './geo-wallet/index.js';
 export type { PendingGeoTransaction, GeoTxResult, GeoTxSignerConfig, GeoWalletContext, GeoWalletConfigResult } from './geo-wallet/index.js';
+
+// RPC Client (multi-chain JSON-RPC proxy)
+export { RpcClient } from './rpc/rpc-client.js';
+export type { ChainInfo, JsonRpcRequest, JsonRpcResponse } from './rpc/rpc-client.js';
 
 // Cycle Client (autonomous loop tracking)
 export { CycleClient } from './cycles/index.js';
