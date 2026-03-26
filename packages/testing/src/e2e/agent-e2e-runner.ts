@@ -1,6 +1,14 @@
 /**
  * Agent E2E Runner — production test runner for agent chat with image support.
  * Uses raw fetch against the production agent gateway.
+ *
+ * SSE format from agent gateway:
+ *   data: {"type":"thinking","data":"..."}
+ *   data: {"type":"text","data":"..."}
+ *   data: {"type":"tool_call","data":{...}}
+ *   data: {"type":"tool_result","data":{...}}
+ *   data: {"type":"screenshare_issue","data":{...}}
+ *   data: {"type":"done","data":{...}}
  */
 
 export interface AgentE2EConfig {
@@ -15,6 +23,9 @@ export interface ChatWithImageResult {
   events: Array<{ type: string; data: unknown }>;
   screenshareIssueDetected: boolean;
   sessionId: string;
+  model?: string;
+  freeTier?: boolean;
+  doneData?: Record<string, unknown>;
 }
 
 export class AgentE2ERunner {
@@ -31,8 +42,8 @@ export class AgentE2ERunner {
       body: JSON.stringify({ model: model || 'claude-haiku-4-5-20251001' }),
     });
     if (!res.ok) throw new Error(`Session creation failed: ${res.status} ${await res.text()}`);
-    const data = await res.json() as { sessionId: string };
-    return data.sessionId;
+    const data = await res.json() as { id?: string; sessionId?: string };
+    return data.id || data.sessionId || '';
   }
 
   /** Send a chat message with optional images, parse SSE response */
@@ -43,7 +54,6 @@ export class AgentE2ERunner {
     images?: Array<{ data: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' }>,
     model?: string,
   ): Promise<ChatWithImageResult> {
-    // Build body
     const body: Record<string, unknown> = { message };
     if (images) body.images = images;
     if (model) body.model = model;
@@ -79,41 +89,68 @@ export class AgentE2ERunner {
     return await res.json() as { token: string; roomName: string; sessionId: string };
   }
 
+  /**
+   * Parse SSE response from agent gateway.
+   * Format: `data: {"type":"text","data":"Hello"}` — type is INSIDE the JSON, not as SSE event: prefix.
+   */
   private async parseSSEResponse(res: Response, sessionId: string): Promise<ChatWithImageResult> {
     const result: ChatWithImageResult = {
       text: '', toolCalls: [], toolResults: [], events: [],
       screenshareIssueDetected: false, sessionId,
     };
 
-    const text = await res.text();
-    const lines = text.split('\n');
-    let currentEvent = '';
-    let currentData = '';
+    const body = await res.text();
+    const lines = body.split('\n');
 
     for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
-        currentData = line.slice(6);
-        try {
-          const parsed = JSON.parse(currentData);
-          result.events.push({ type: currentEvent || 'message', data: parsed });
+      if (!line.startsWith('data: ')) continue;
+      const jsonStr = line.slice(6);
+      try {
+        const parsed = JSON.parse(jsonStr) as { type: string; data: unknown };
+        const eventType = parsed.type;
+        const eventData = parsed.data;
 
-          if (currentEvent === 'text' && typeof parsed.text === 'string') {
-            result.text += parsed.text;
-          } else if (currentEvent === 'tool_call') {
-            result.toolCalls.push({ name: parsed.name || parsed.toolName, args: parsed.arguments || parsed.input });
-          } else if (currentEvent === 'tool_result') {
-            result.toolResults.push({ name: parsed.name || parsed.toolName, result: parsed.result, isError: !!parsed.isError });
-          } else if (currentEvent === 'screenshare_issue') {
+        result.events.push({ type: eventType, data: eventData });
+
+        switch (eventType) {
+          case 'text':
+            if (typeof eventData === 'string') {
+              result.text += eventData;
+            }
+            break;
+          case 'tool_call':
+            if (typeof eventData === 'object' && eventData !== null) {
+              const tc = eventData as Record<string, unknown>;
+              result.toolCalls.push({
+                name: (tc.name || tc.toolName || '') as string,
+                args: tc.arguments || tc.input,
+              });
+            }
+            break;
+          case 'tool_result':
+            if (typeof eventData === 'object' && eventData !== null) {
+              const tr = eventData as Record<string, unknown>;
+              result.toolResults.push({
+                name: (tr.name || tr.toolName || '') as string,
+                result: tr.result as string | undefined,
+                isError: !!tr.isError,
+              });
+            }
+            break;
+          case 'screenshare_issue':
             result.screenshareIssueDetected = true;
-          }
-        } catch {
-          // Non-JSON data line, could be plain text
-          if (currentEvent === 'text') result.text += currentData;
+            break;
+          case 'done':
+            if (typeof eventData === 'object' && eventData !== null) {
+              const done = eventData as Record<string, unknown>;
+              result.model = done.model as string | undefined;
+              result.freeTier = !!done.freeTier;
+              result.doneData = done;
+            }
+            break;
         }
-        currentEvent = '';
-        currentData = '';
+      } catch {
+        // Non-JSON data line — skip
       }
     }
 
