@@ -221,7 +221,7 @@ export function ChatPage({
 
   // ─── Full layout with sidebar ────
   return (
-    <div className="h-[calc(100vh-4rem)] flex animate-fade-in">
+    <div className="h-full flex animate-fade-in">
       {/* Sidebar */}
       <aside
         className="w-72 flex-shrink-0 border-r border-surface-200 dark:border-surface-800 bg-surface-50/80 dark:bg-surface-900/80 backdrop-blur-sm flex flex-col overflow-hidden"
@@ -229,14 +229,9 @@ export function ChatPage({
         <div className="w-72 flex flex-col h-full">
           {/* Agent identity */}
           <div className="p-5 pb-4">
-            <h1 className="text-base font-semibold text-surface-900 dark:text-surface-50 leading-tight mb-1">
+            <h1 className="text-base font-semibold text-surface-900 dark:text-surface-50 leading-tight">
               {agent.title}
             </h1>
-            {agent.description && (
-              <p className="text-xs text-surface-500 mt-2 line-clamp-2 leading-relaxed">
-                {agent.description}
-              </p>
-            )}
           </div>
 
           {/* Mode switcher slot */}
