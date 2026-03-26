@@ -144,9 +144,7 @@ export function ChatMessageList({ messages, streaming, onRevalidate }: ChatMessa
   const endRef = useRef<HTMLDivElement>(null);
   const pendingActions = useAgentActions((s) => s.pendingActions);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingActions.size]);
+  // Auto-scroll removed — users control their own scroll position
 
   // Filter out empty assistant messages from history
   const visibleMessages = messages.filter((msg) => {
