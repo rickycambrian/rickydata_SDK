@@ -250,17 +250,9 @@ export function ChatPage({
         <div className="w-72 flex flex-col h-full">
           {/* Agent identity */}
           <div className="p-5 pb-4">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-primary-500/10 shrink-0">
-                <svg className="w-5 h-5 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 8V4H8" /><rect x="4" y="8" width="16" height="12" rx="2" />
-                  <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
-                </svg>
-              </div>
-              <h1 className="text-base font-semibold text-surface-900 dark:text-surface-50 leading-tight">
-                {agent.title}
-              </h1>
-            </div>
+            <h1 className="text-base font-semibold text-surface-900 dark:text-surface-50 leading-tight mb-1">
+              {agent.title}
+            </h1>
             {agent.description && (
               <p className="text-xs text-surface-500 mt-2 line-clamp-2 leading-relaxed">
                 {agent.description}
