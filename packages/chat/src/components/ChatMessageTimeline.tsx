@@ -67,10 +67,7 @@ export function ChatMessageTimeline({
   loading = false,
 }: ChatMessageTimelineProps) {
   const endRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // Auto-scroll removed — users control their own scroll position
 
   if (loading) {
     return (
