@@ -2,8 +2,25 @@
 export { MCPGateway } from './client.js';
 
 // Auth
-export { AuthManager, createWalletToken, createSignToDeriveKey } from './auth.js';
-export type { AuthenticateAutoOptions, EthHttpSigner, DeriveKeyResponse } from './auth.js';
+export {
+  AuthManager,
+  createWalletToken,
+  createSignToDeriveKey,
+  createAuthenticatedClient,
+  decodeTokenPayload,
+  permissionMatches,
+  getPermissions,
+  hasPermission,
+  AuthErrorCode,
+} from './auth.js';
+export type {
+  AuthenticateAutoOptions,
+  EthHttpSigner,
+  DeriveKeyResponse,
+  WalletTokenPayload,
+  WalletTokenOptions,
+  AuthenticatedClient,
+} from './auth.js';
 
 // Encryption utilities (sign-to-derive + AES-256-GCM client-side encryption)
 export {
@@ -35,6 +52,7 @@ export {
   CircuitBreakerTrippedError,
   PaymentSigningError,
   CanvasHttpError,
+  VaultError,
 } from './errors/index.js';
 
 // Types
@@ -61,6 +79,8 @@ export type {
   SemanticSearchOptions,
   SemanticSearchResultItem,
   SemanticSearchResult,
+  VaultSecretStatus,
+  VaultSecretEntry,
 } from './types/index.js';
 
 // Agent Client (high-level chat helper)
@@ -127,6 +147,9 @@ export type {
   SSEPlanningEvent,
   SSEToolApprovalRequestEvent,
   SSETransactionSigningRequestEvent,
+  // Connect Wizard
+  ConnectWizardStep,
+  TelegramConnectConfig,
 } from './agent/index.js';
 
 // AgentSession facade (auth + session management in one)

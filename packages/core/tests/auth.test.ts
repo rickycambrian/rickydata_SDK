@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AuthManager, createWalletToken } from '../src/auth.js';
+import {
+  AuthManager,
+  createWalletToken,
+  decodeTokenPayload,
+  permissionMatches,
+  getPermissions,
+  hasPermission,
+  createAuthenticatedClient,
+} from '../src/auth.js';
 
 const BASE = 'http://localhost:8080';
 
@@ -541,5 +549,215 @@ describe('AuthManager', () => {
       const url = vi.mocked(fetch).mock.calls[0][0] as string;
       expect(url).not.toContain('//api');
     });
+
+    it('passes permissions and serverId to endpoints', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Sign this' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ token: 'mcpwt_x', walletAddress: '0xA', expiresAt: '2028-01-01' }),
+        } as Response);
+
+      const signFn = vi.fn().mockResolvedValue('0xsig');
+      await createWalletToken(BASE, signFn, '0xA', '2028-01-01', {
+        permissions: ['telegram:read', 'kfdb:write'],
+        serverId: 'srv-123',
+      });
+
+      // Check token-message URL includes permissions and serverId
+      const msgUrl = vi.mocked(fetch).mock.calls[0][0] as string;
+      expect(msgUrl).toContain('permissions=telegram%3Aread%2Ckfdb%3Awrite');
+      expect(msgUrl).toContain('serverId=srv-123');
+
+      // Check create-token body includes permissions and serverId
+      const createCall = vi.mocked(fetch).mock.calls[1];
+      const body = JSON.parse(createCall[1]?.body as string);
+      expect(body.permissions).toEqual(['telegram:read', 'kfdb:write']);
+      expect(body.serverId).toBe('srv-123');
+    });
+
+    it('omits permissions from request when not provided', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Sign this' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ token: 'mcpwt_x', walletAddress: '0xA', expiresAt: '2028-01-01' }),
+        } as Response);
+
+      const signFn = vi.fn().mockResolvedValue('0xsig');
+      await createWalletToken(BASE, signFn, '0xA', '2028-01-01');
+
+      const msgUrl = vi.mocked(fetch).mock.calls[0][0] as string;
+      expect(msgUrl).not.toContain('permissions');
+      expect(msgUrl).not.toContain('serverId');
+
+      const createBody = JSON.parse(vi.mocked(fetch).mock.calls[1][1]?.body as string);
+      expect(createBody.permissions).toBeUndefined();
+      expect(createBody.serverId).toBeUndefined();
+    });
+  });
+});
+
+// ─── Token Permission Helpers ──────────────────────────────────────
+
+describe('decodeTokenPayload', () => {
+  it('decodes mcpwt_ tokens', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000 };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const token = `mcpwt_${b64}`;
+
+    const decoded = decodeTokenPayload(token);
+    expect(decoded).toEqual(payload);
+  });
+
+  it('decodes JWT tokens', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, permissions: ['telegram:read'] };
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const token = `${header}.${body}.signature`;
+
+    const decoded = decodeTokenPayload(token);
+    expect(decoded?.permissions).toEqual(['telegram:read']);
+  });
+
+  it('returns null for invalid tokens', () => {
+    expect(decodeTokenPayload('garbage')).toBeNull();
+    expect(decodeTokenPayload('')).toBeNull();
+    expect(decodeTokenPayload('mcpwt_!!invalid!!')).toBeNull();
+  });
+
+  it('decodes token with server_id', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, server_id: 'srv-123' };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const decoded = decodeTokenPayload(`mcpwt_${b64}`);
+    expect(decoded?.server_id).toBe('srv-123');
+  });
+});
+
+describe('permissionMatches', () => {
+  it('matches exact permissions', () => {
+    expect(permissionMatches('telegram:read', 'telegram:read')).toBe(true);
+  });
+
+  it('does not match different permissions', () => {
+    expect(permissionMatches('telegram:read', 'telegram:write')).toBe(false);
+    expect(permissionMatches('telegram:read', 'kfdb:read')).toBe(false);
+  });
+
+  it('matches namespace wildcard', () => {
+    expect(permissionMatches('telegram:*', 'telegram:read')).toBe(true);
+    expect(permissionMatches('telegram:*', 'telegram:extract')).toBe(true);
+    expect(permissionMatches('telegram:*', 'kfdb:read')).toBe(false);
+  });
+
+  it('matches global wildcard', () => {
+    expect(permissionMatches('*:*', 'telegram:read')).toBe(true);
+    expect(permissionMatches('*:*', 'kfdb:write')).toBe(true);
+  });
+
+  it('matches action wildcard', () => {
+    expect(permissionMatches('*:read', 'telegram:read')).toBe(true);
+    expect(permissionMatches('*:read', 'kfdb:read')).toBe(true);
+    expect(permissionMatches('*:read', 'telegram:write')).toBe(false);
+  });
+});
+
+describe('getPermissions', () => {
+  it('returns empty array for legacy tokens', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000 };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(getPermissions(`mcpwt_${b64}`)).toEqual([]);
+  });
+
+  it('returns permissions from token', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, permissions: ['telegram:read', 'kfdb:write'] };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(getPermissions(`mcpwt_${b64}`)).toEqual(['telegram:read', 'kfdb:write']);
+  });
+});
+
+describe('hasPermission', () => {
+  it('returns true for legacy tokens (backward compat)', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000 };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(hasPermission(`mcpwt_${b64}`, 'anything:here')).toBe(true);
+  });
+
+  it('returns true when permission is granted', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, permissions: ['telegram:read', 'kfdb:write'] };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(hasPermission(`mcpwt_${b64}`, 'telegram:read')).toBe(true);
+    expect(hasPermission(`mcpwt_${b64}`, 'kfdb:write')).toBe(true);
+  });
+
+  it('returns false when permission is not granted', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, permissions: ['telegram:read'] };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(hasPermission(`mcpwt_${b64}`, 'telegram:write')).toBe(false);
+    expect(hasPermission(`mcpwt_${b64}`, 'kfdb:read')).toBe(false);
+  });
+
+  it('supports wildcard permissions in token', () => {
+    const payload = { sub: '0xABC', iss: 'rickydata', exp: 9999999999, iat: 1000000000, permissions: ['telegram:*'] };
+    const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(hasPermission(`mcpwt_${b64}`, 'telegram:read')).toBe(true);
+    expect(hasPermission(`mcpwt_${b64}`, 'telegram:extract')).toBe(true);
+    expect(hasPermission(`mcpwt_${b64}`, 'kfdb:read')).toBe(false);
+  });
+});
+
+// ─── Authenticated Client ──────────────────────────────────────────
+
+describe('createAuthenticatedClient', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('adds Bearer token to requests', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    } as Response);
+
+    const client = createAuthenticatedClient('http://api.example.com', async () => 'my-token');
+    await client.get('/health');
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('http://api.example.com/health');
+    expect((init?.headers as Record<string, string>)['Authorization']).toBe('Bearer my-token');
+  });
+
+  it('sends JSON body with post()', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 1 }),
+    } as Response);
+
+    const client = createAuthenticatedClient('http://api.example.com/', async () => 'tok');
+    await client.post('/connect', { phone: '+1234567890' });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe('http://api.example.com/connect');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ phone: '+1234567890' });
+  });
+
+  it('works without token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    } as Response);
+
+    const client = createAuthenticatedClient('http://api.example.com', async () => undefined);
+    await client.get('/public');
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect((init?.headers as Record<string, string>)['Authorization']).toBeUndefined();
   });
 });

@@ -74,3 +74,20 @@ export interface SemanticSearchResult {
   totalResults: number;
   latencyMs: number;
 }
+
+// Vault secrets
+
+export interface VaultSecretStatus {
+  serverId: string;
+  configured: string[];
+  required: string[];
+  optional: string[];
+  missing: string[];
+  ready: boolean;
+  injectionMode: 'env' | 'file' | 'none';
+}
+
+export interface VaultSecretEntry {
+  key: string;
+  value: string;
+}

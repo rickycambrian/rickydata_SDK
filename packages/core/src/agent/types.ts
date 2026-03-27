@@ -529,3 +529,15 @@ export class AgentError extends Error {
     return new AgentError(AgentErrorCode.VALIDATION_ERROR, body || `Request failed: ${status}`, { ...context, statusCode: status });
   }
 }
+
+// ─── Connect Wizard Types ──────────────────────────────────────────
+
+export interface ConnectWizardStep {
+  step: 'credentials' | 'verify' | 'two_factor' | 'select_groups' | 'processing';
+  status: 'pending' | 'active' | 'completed' | 'error';
+}
+
+export interface TelegramConnectConfig {
+  apiBaseUrl: string;
+  serverId: string;
+}

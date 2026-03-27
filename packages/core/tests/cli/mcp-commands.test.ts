@@ -560,6 +560,11 @@ describe('mcp commands', () => {
 
   describe('mcp connect', () => {
     it('executes claude mcp add or prints command with token when authenticated', async () => {
+      // Mock child_process to prevent real execFileSync calls to `claude` CLI
+      vi.mock('child_process', () => ({
+        execFileSync: vi.fn(),
+      }));
+
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const program = createProgram(config, store);
       await program.parseAsync(['node', 'rickydata', 'mcp', 'connect']);

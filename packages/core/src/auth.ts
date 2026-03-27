@@ -13,6 +13,7 @@ export enum AuthErrorCode {
   PROVIDER_LINK_CONFLICT = 'PROVIDER_LINK_CONFLICT',
   SESSION_REVOKED = 'SESSION_REVOKED',
   RATE_LIMITED = 'RATE_LIMITED',
+  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
 }
 
 export class AuthError extends Error {
@@ -54,6 +55,12 @@ export interface WalletTokenPayload {
   iat: number;
   tid?: string;
   permissions?: string[];
+  server_id?: string;
+}
+
+export interface WalletTokenOptions {
+  permissions?: string[];
+  serverId?: string;
 }
 
 export interface WalletAdapter {
@@ -139,13 +146,22 @@ export async function createWalletToken(
   signFn: (message: string) => Promise<string>,
   walletAddress: string,
   expiresAt: string,
+  options?: WalletTokenOptions,
 ): Promise<{ token: string; walletAddress: string; expiresAt: string }> {
   const base = gatewayUrl.replace(/\/$/, '');
 
   // 1. Get the canonical message to sign
-  const msgRes = await fetch(
-    `${base}/api/auth/token-message?walletAddress=${encodeURIComponent(walletAddress)}&expiresAt=${encodeURIComponent(expiresAt)}`
-  );
+  const msgParams = new URLSearchParams({
+    walletAddress,
+    expiresAt,
+  });
+  if (options?.permissions?.length) {
+    msgParams.set('permissions', options.permissions.join(','));
+  }
+  if (options?.serverId) {
+    msgParams.set('serverId', options.serverId);
+  }
+  const msgRes = await fetch(`${base}/api/auth/token-message?${msgParams}`);
   if (!msgRes.ok) {
     const body = await msgRes.text();
     throw new WalletTokenRequestError(
@@ -160,10 +176,17 @@ export async function createWalletToken(
   const signature = await signFn(message);
 
   // 3. Create the self-verifying token
+  const tokenBody: Record<string, unknown> = { walletAddress, signature, expiresAt };
+  if (options?.permissions?.length) {
+    tokenBody.permissions = options.permissions;
+  }
+  if (options?.serverId) {
+    tokenBody.serverId = options.serverId;
+  }
   const tokenRes = await fetch(`${base}/api/auth/create-token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress, signature, expiresAt }),
+    body: JSON.stringify(tokenBody),
   });
   if (!tokenRes.ok) {
     const body = await tokenRes.text();
@@ -620,4 +643,103 @@ export class AuthManager {
     this.expiresAt = this.parseExpiresAt(data.expiresAt);
     return { token: data.token, address, expiresAt: data.expiresAt ?? '' };
   }
+}
+
+// ─── Token permission helpers ──────────────────────────────────────
+
+/** Decode an mcpwt_ or JWT token payload without verification (client-side only). */
+export function decodeTokenPayload(token: string): WalletTokenPayload | null {
+  try {
+    let json: string;
+    if (token.startsWith('mcpwt_')) {
+      const b64 = token.slice(6);
+      json = typeof Buffer !== 'undefined'
+        ? Buffer.from(b64, 'base64url').toString('utf-8')
+        : atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+    } else if (token.includes('.')) {
+      // JWT: header.payload.signature
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const b64 = parts[1];
+      json = typeof Buffer !== 'undefined'
+        ? Buffer.from(b64, 'base64url').toString('utf-8')
+        : atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+    } else {
+      return null;
+    }
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/** Check if a granted permission matches a required permission (supports wildcards). */
+export function permissionMatches(granted: string, required: string): boolean {
+  if (granted === '*:*' || granted === required) return true;
+  const [gNs, gAct] = granted.split(':');
+  const [rNs, rAct] = required.split(':');
+  if (gNs === '*' || gNs === rNs) {
+    return gAct === '*' || gAct === rAct;
+  }
+  return false;
+}
+
+/** Get all permissions from a token (empty array for legacy tokens without permissions). */
+export function getPermissions(token: string): string[] {
+  const payload = decodeTokenPayload(token);
+  return payload?.permissions ?? [];
+}
+
+/**
+ * Check if a token has a specific permission.
+ * Returns true for legacy tokens without permissions (backward compat = full access).
+ */
+export function hasPermission(token: string, permission: string): boolean {
+  const perms = getPermissions(token);
+  if (perms.length === 0) return true; // legacy token = full access
+  return perms.some(p => permissionMatches(p, permission));
+}
+
+// ─── Authenticated client for external APIs ────────────────────────
+
+export interface AuthenticatedClient {
+  fetch(path: string, init?: RequestInit): Promise<Response>;
+  get(path: string): Promise<Response>;
+  post(path: string, body: unknown): Promise<Response>;
+}
+
+/**
+ * Create a lightweight authenticated HTTP client for external APIs (e.g., connect wizard).
+ * Adds Bearer token via the provided tokenGetter on each request.
+ */
+export function createAuthenticatedClient(
+  baseUrl: string,
+  tokenGetter: () => Promise<string | undefined>,
+): AuthenticatedClient {
+  const base = baseUrl.replace(/\/$/, '');
+
+  async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+    const token = await tokenGetter();
+    const headers: Record<string, string> = {
+      ...(init?.headers as Record<string, string>),
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(`${base}${path}`, { ...init, headers });
+  }
+
+  return {
+    fetch: authFetch,
+    get(path: string) {
+      return authFetch(path);
+    },
+    post(path: string, body: unknown) {
+      return authFetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    },
+  };
 }

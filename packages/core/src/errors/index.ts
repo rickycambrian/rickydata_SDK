@@ -71,3 +71,15 @@ export class CanvasHttpError extends MCPGatewayError {
     this.status = status;
   }
 }
+
+/** Thrown when a vault secret operation fails */
+export class VaultError extends MCPGatewayError {
+  public readonly status: number;
+  public readonly serverId: string;
+  constructor(status: number, serverId: string, message: string) {
+    super(message);
+    this.name = 'VaultError';
+    this.status = status;
+    this.serverId = serverId;
+  }
+}

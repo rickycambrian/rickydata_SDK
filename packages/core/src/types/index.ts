@@ -17,6 +17,8 @@ export type {
   SemanticSearchOptions,
   SemanticSearchResultItem,
   SemanticSearchResult,
+  VaultSecretStatus,
+  VaultSecretEntry,
 } from './server.js';
 
 export type {

@@ -43,6 +43,15 @@ describe('Integration: MCPGateway + SpendingWallet', () => {
         ok: true,
         json: () => Promise.resolve({ token: 'jwt' }),
       } as Response)
+      // TEE attestation (auto-enabled when spendingWallet is provided)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          attestation_available: true,
+          platform: 'unknown',
+          encryption_enabled: true,
+        }),
+      } as Response)
       // First call returns 402
       .mockResolvedValueOnce({
         ok: false,
@@ -74,8 +83,8 @@ describe('Integration: MCPGateway + SpendingWallet', () => {
     expect(spending.callCount).toBe(1);
     expect(spending.sessionSpent).toBeCloseTo(0.0005);
 
-    // Verify X-Payment header was sent on retry
-    const retryCall = vi.mocked(fetch).mock.calls[2];
+    // Verify X-Payment header was sent on retry (call index shifted by attestation)
+    const retryCall = vi.mocked(fetch).mock.calls[3];
     const retryHeaders = new Headers((retryCall[1]?.headers ?? {}) as HeadersInit);
     expect(retryHeaders.get('x-payment')).toBeTruthy();
   });

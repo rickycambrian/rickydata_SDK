@@ -92,6 +92,10 @@ export type {
 
   // Error Taxonomy
   AgentErrorContext,
+
+  // Connect Wizard
+  ConnectWizardStep,
+  TelegramConnectConfig,
 } from './types.js';
 
 export type { AgentSessionConfig, Message } from './agent-session.js';

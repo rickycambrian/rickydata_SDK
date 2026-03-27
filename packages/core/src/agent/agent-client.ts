@@ -491,6 +491,31 @@ export class AgentClient {
     if (!res.ok) throw new Error(`Failed to delete secrets: ${res.status}`);
   }
 
+  /** Retrieve all MCP server secret values. Only accessible by the storing wallet. */
+  async getMcpSecretValues(serverId: string): Promise<{ key: string; value: string }[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(
+      `${this.gatewayUrl}/wallet/mcp-secrets/${encodeURIComponent(serverId)}/values`,
+      { headers: this.authHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to get MCP secret values: ${res.status}`);
+    const data = await res.json();
+    return data.secrets ?? [];
+  }
+
+  /** Retrieve a single MCP server secret value. Returns null if not configured. */
+  async getMcpSecretValue(serverId: string, key: string): Promise<string | null> {
+    await this.ensureAuthenticated();
+    const res = await fetch(
+      `${this.gatewayUrl}/wallet/mcp-secrets/${encodeURIComponent(serverId)}/values/${encodeURIComponent(key)}`,
+      { headers: this.authHeaders() },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Failed to get MCP secret value: ${res.status}`);
+    const data = await res.json();
+    return data.value ?? null;
+  }
+
   // ─── Agent Secret Management ─────────────────────────────
 
   /** Get agent-level secret status. */

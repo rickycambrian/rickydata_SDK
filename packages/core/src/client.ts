@@ -12,6 +12,8 @@ import type {
   RuntimeScope,
   SemanticSearchOptions,
   SemanticSearchResult,
+  VaultSecretStatus,
+  VaultSecretEntry,
 } from './types/index.js';
 import { AuthManager, type AuthenticateAutoOptions, type EthHttpSigner } from './auth.js';
 import { SecretsManager } from './secrets.js';
@@ -327,6 +329,21 @@ export class MCPGateway {
 
   async deleteSecrets(serverId: string): Promise<void> {
     return this.secrets.delete(serverId);
+  }
+
+  /** Retrieve all secret values for a server. Only accessible by the storing user. */
+  async getSecretValues(serverId: string): Promise<VaultSecretEntry[]> {
+    return this.secrets.getValues(serverId);
+  }
+
+  /** Retrieve a single secret value by key. Returns null if not configured. */
+  async getSecretValue(serverId: string, key: string): Promise<string | null> {
+    return this.secrets.getValue(serverId, key);
+  }
+
+  /** Get comprehensive secret status including requirements and injection mode. */
+  async getSecretStatus(serverId: string): Promise<VaultSecretStatus> {
+    return this.secrets.getFullStatus(serverId);
   }
 
   // Tools
