@@ -10,6 +10,7 @@ KFDB is available as a remote MCP server in the RickyData marketplace. When you 
 - **1 GB** total data limit
 - **KQL and SQL** query languages
 - **Semantic search** with vector embeddings
+- **Global + private scopes** — shared global graph reads, private tenant writes
 - **Full isolation** — your data is completely separate from other users
 
 Your wallet address is your identity. No API keys to manage, no secrets to store.
@@ -169,22 +170,47 @@ Writes that exceed your quota are rejected with a clear error message. Use `tena
 
 ## Direct API Access
 
-For advanced use or higher quotas, you can access KFDB directly with the TypeScript SDK:
+For advanced use, you can access KFDB directly with the TypeScript SDK:
 
 ```bash
-npm install @knowledgeflow/core
+npm install rickydata
 ```
 
 ```typescript
-import { KFDBClient } from '@knowledgeflow/core';
+import { KFDBClient } from 'rickydata';
 
-const client = new KFDBClient({
-  apiUrl: 'http://34.60.37.158',
+const kfdb = new KFDBClient({
+  baseUrl: 'http://34.60.37.158',
   apiKey: 'your-api-key', // from rickydata kfdb init
+  // defaultReadScope is "global" if omitted
 });
 
-const result = await client.query('MATCH (n:Note) RETURN n LIMIT 10');
+// Global read (default)
+const marketplaceServers = await kfdb.listEntities('MCPServer', { limit: 10 });
+
+// Private read using scoped client
+const privateNotes = await kfdb.withScope('private').listEntities('Note', { limit: 10 });
+
+// Per-call override (beats client default)
+const privateTasks = await kfdb.listEntities('Task', { scope: 'private', limit: 20 });
+
+// Writes always use tenant-scoped /api/v1/write
+await kfdb.write({
+  operations: [
+    {
+      operation: 'create_node',
+      label: 'Note',
+      properties: {
+        title: { String: 'SDK note' },
+      },
+    },
+  ],
+});
 ```
+
+Scope model:
+- Reads (`listLabels`, `listEntities`, `getEntity`, `filterEntities`, `batchGetEntities`) support `global` and `private`.
+- Writes (`write`) are always tenant-isolated.
 
 Run `rickydata kfdb init` to configure direct API access with an API key.
 

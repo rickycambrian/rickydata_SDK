@@ -41,6 +41,10 @@
     "./rpc": {
       "import": "./dist/rpc/index.js",
       "types": "./dist/rpc/index.d.ts"
+    },
+    "./kfdb": {
+      "import": "./dist/kfdb/index.js",
+      "types": "./dist/kfdb/index.d.ts"
     }
   },
   "bin": {

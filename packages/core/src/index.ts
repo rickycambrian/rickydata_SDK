@@ -1,5 +1,6 @@
 // Main client
 export { MCPGateway } from './client.js';
+export { KFDBClient } from './kfdb/index.js';
 
 // Auth
 export {
@@ -82,6 +83,22 @@ export type {
   VaultSecretStatus,
   VaultSecretEntry,
 } from './types/index.js';
+export type {
+  KfdbBatchGetEntitiesRequest,
+  KfdbBatchGetEntitiesResponse,
+  KfdbClientConfig,
+  KfdbEntityRef,
+  KfdbEntityResponse,
+  KfdbFilterEntitiesRequest,
+  KfdbGetEntityOptions,
+  KfdbLabelInfo,
+  KfdbListEntitiesOptions,
+  KfdbListEntitiesResponse,
+  KfdbListLabelsResponse,
+  KfdbQueryScope,
+  KfdbWriteRequest,
+  KfdbWriteResponse,
+} from './kfdb/index.js';
 
 // Agent Client (high-level chat helper)
 export { AgentClient } from './agent/index.js';

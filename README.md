@@ -282,6 +282,40 @@ const result = await gw.callTool(serverId, 'brave_web_search', { query: 'MCP' })
 wallet.destroy();
 ```
 
+### Direct KFDB API (Global/Private Scope)
+
+```typescript
+import { KFDBClient } from 'rickydata';
+
+const kfdb = new KFDBClient({
+  baseUrl: 'http://34.60.37.158',
+  apiKey: process.env.KFDB_API_KEY!,
+  // defaultReadScope defaults to "global"
+});
+
+// Global read (default)
+const globalServers = await kfdb.listEntities('MCPServer', { limit: 10 });
+
+// Private read (scoped view)
+const privateNotes = await kfdb.withScope('private').listEntities('Note', { limit: 25 });
+
+// Per-call override
+const privateTasks = await kfdb.listEntities('Task', { scope: 'private', limit: 50 });
+
+// Writes always go through tenant-scoped /api/v1/write
+await kfdb.write({
+  operations: [
+    {
+      operation: 'create_node',
+      label: 'Note',
+      properties: {
+        title: { String: 'Hello from KFDBClient' },
+      },
+    },
+  ],
+});
+```
+
 ### Agent Chat
 
 ```typescript
@@ -346,6 +380,18 @@ const result = await client.callTool('research-agent', 'web_research', { topic: 
 | `startServer(serverId)` / `stopServer(serverId)` | Start/stop on-demand |
 | `storeSecrets(serverId, secrets)` | Store API keys |
 | `authenticateAuto(options)` | Production-safe auth |
+
+### KFDBClient
+
+| Method | Description |
+|--------|-------------|
+| `listLabels(scope?)` | List available labels in global/private scope |
+| `listEntities(label, opts?)` | List entities with explicit scope control |
+| `getEntity(label, id, opts?)` | Get a single entity by label + ID |
+| `filterEntities(label, request)` | Filter entities with scoped body request |
+| `batchGetEntities(request)` | Batch fetch entities with scoped request |
+| `withScope(scope)` | Create a scoped client view (`global` or `private`) |
+| `write(request)` | Tenant-isolated writes via `/api/v1/write` |
 
 ### SpendingWallet
 
