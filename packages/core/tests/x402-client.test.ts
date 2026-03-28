@@ -1,81 +1,87 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  readContract: vi.fn(),
+  signPayment: vi.fn(),
+}));
+
+vi.mock('viem/accounts', () => ({
+  privateKeyToAccount: () => ({
+    address: '0x1111111111111111111111111111111111111111' as `0x${string}`,
+    signTypedData: vi.fn().mockResolvedValue('0xmocksignature'),
+  }),
+}));
+
+vi.mock('viem', () => ({
+  http: (url: string) => ({ url }),
+  createPublicClient: ({ transport }: { transport: { url: string } }) => ({
+    readContract: (args: unknown) => mocks.readContract(transport.url, args),
+  }),
+}));
+
+vi.mock('../src/payment/payment-signer.js', () => ({
+  signPayment: mocks.signPayment,
+}));
+
 import { X402Client } from '../src/payment/x402-client.js';
 
-// Mock viem/accounts so tests don't do real crypto
-vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: (_key: string) => ({
-    address: '0xTestAddress1234567890abcdef1234567890ab' as `0x${string}`,
-    signTypedData: vi.fn().mockResolvedValue('0xmocksignature'),
-  }),
-  generatePrivateKey: () => ['0xac0974bec39a17e36ba4a6b4d', '238ff944bacb478cbed5efcae784d7bf4f2ff80'].join('') as `0x${string}`,
-}));
-
-// Mock viem + viem/chains used by payment-signer
-vi.mock('viem', () => ({
-  createWalletClient: () => ({
-    signTypedData: vi.fn().mockResolvedValue('0xmocksignature'),
-  }),
-  http: () => ({}),
-}));
-
-vi.mock('viem/chains', () => ({
-  base: { id: 8453, name: 'Base' },
-}));
-
-// Hardhat Account #0 — well-known, zero-value test key
-const TEST_PRIVATE_KEY = ['0xac0974bec39a17e36ba4a6b4d', '238ff944bacb478cbed5efcae784d7bf4f2ff80'].join('');
+const TEST_PRIVATE_KEY = [
+  '0xac0974bec39a17e36ba4a6b4d',
+  '238ff944bacb478cbed5efcae784d7bf4f2ff80',
+].join('');
 const TEST_URL = 'https://api.example.com/tool';
+const BASE_RPC_URL = 'https://mainnet.base.org';
+const POLYGON_RPC_URL = 'https://polygon-rpc.com';
 
-/** Create a fetch mock that returns a single pre-built response */
-function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
-  return vi.fn().mockResolvedValue({
+function createResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
+  const normalizedHeaders = Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
+  );
+
+  return {
     status,
     statusText: status === 200 ? 'OK' : status === 402 ? 'Payment Required' : 'Error',
     ok: status >= 200 && status < 300,
     headers: {
-      get: (name: string) => headers[name.toLowerCase()] ?? null,
+      get: (name: string) => normalizedHeaders[name.toLowerCase()] ?? null,
     },
     json: vi.fn().mockResolvedValue(body),
-    text: vi.fn().mockResolvedValue(String(body)),
-  });
+    text: vi.fn().mockResolvedValue(typeof body === 'string' ? body : JSON.stringify(body)),
+  };
 }
 
-/** Create a fetch mock that returns 402 on first call, then 200 on second call */
-function mockFetch402ThenOk(paymentBody: unknown, okBody: unknown) {
-  let callCount = 0;
+function mockFetchSequence(
+  ...responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>
+) {
+  let index = 0;
   return vi.fn().mockImplementation(() => {
-    callCount++;
-    if (callCount === 1) {
-      return Promise.resolve({
-        status: 402,
-        statusText: 'Payment Required',
-        ok: false,
-        headers: { get: (_: string) => 'application/json' },
-        json: vi.fn().mockResolvedValue(paymentBody),
-        text: vi.fn().mockResolvedValue(''),
-      });
-    }
-    return Promise.resolve({
-      status: 200,
-      statusText: 'OK',
-      ok: true,
-      headers: { get: (_: string) => 'application/json' },
-      json: vi.fn().mockResolvedValue(okBody),
-      text: vi.fn().mockResolvedValue(''),
-    });
+    const response = responses[Math.min(index, responses.length - 1)];
+    index += 1;
+    return Promise.resolve(createResponse(response.status, response.body, response.headers));
   });
 }
 
-const sample402Body = {
-  accepts: [
-    {
-      network: 'eip155:8453',
-      amount: '500', // $0.0005
-      payTo: '0xRecipient',
-      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      extra: { tokenName: 'USD Coin', tokenVersion: '2' },
-    },
-  ],
+const baseOffer = {
+  network: 'eip155:8453',
+  amount: '500',
+  payTo: '0xBaseRecipient',
+  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  extra: { tokenName: 'USD Coin', tokenVersion: '2' },
+};
+
+const polygonOffer = {
+  network: 'eip155:137',
+  amount: '750',
+  payTo: '0xPolygonRecipient',
+  asset: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
+  extra: { tokenName: 'USD Coin', tokenVersion: '2' },
+};
+
+const unsupportedOffer = {
+  network: 'solana:mainnet',
+  amount: '500',
+  payTo: 'SomeSolanaRecipient',
+  asset: 'So11111111111111111111111111111111111111112',
 };
 
 describe('X402Client', () => {
@@ -83,168 +89,320 @@ describe('X402Client', () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    mocks.readContract.mockReset();
+    mocks.signPayment.mockReset();
+    mocks.signPayment.mockResolvedValue({
+      header: 'signed-payment-header',
+      receipt: {
+        from: '0x1111111111111111111111111111111111111111',
+        to: '0xPolygonRecipient',
+      },
+    });
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
   });
 
-  // ── Non-402 responses ────────────────────────────────────────────────────
-
-  it('returns ok status for 200 JSON response', async () => {
-    const mockData = { tools: ['brave_search'] };
-    globalThis.fetch = mockFetch(200, mockData, { 'content-type': 'application/json' }) as unknown as typeof fetch;
+  it('returns ok status for a successful JSON response', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 200,
+      body: { ok: true },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
 
     const client = new X402Client(TEST_PRIVATE_KEY);
-    const res = await client.request(TEST_URL);
+    const result = await client.request(TEST_URL);
 
-    expect(res.success).toBe(true);
-    expect(res.status).toBe('ok');
-    expect(res.x402).toBe(false);
-    expect(res.result).toEqual(mockData);
-    expect(res.httpStatus).toBe(200);
+    expect(result).toMatchObject({
+      success: true,
+      status: 'ok',
+      x402: false,
+      httpStatus: 200,
+      result: { ok: true },
+    });
   });
 
-  it('returns error for 500 response', async () => {
-    globalThis.fetch = mockFetch(500, 'Internal Server Error') as unknown as typeof fetch;
+  it('returns payment_failed for non-402 HTTP errors', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 500,
+      body: 'Internal Server Error',
+    }) as unknown as typeof fetch;
 
     const client = new X402Client(TEST_PRIVATE_KEY);
-    const res = await client.request(TEST_URL);
+    const result = await client.request(TEST_URL);
 
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('payment_failed');
-    expect(res.x402).toBe(false);
-    expect(res.error).toContain('500');
-    expect(res.httpStatus).toBe(500);
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_failed',
+      x402: false,
+      httpStatus: 500,
+    });
+    expect(result.error).toContain('500');
   });
 
-  // ── 402 with autoPay=false ───────────────────────────────────────────────
+  it('returns payment_required preview with usable offers and the first funded selection', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 402,
+      body: { accepts: [baseOffer, polygonOffer] },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
 
-  it('returns payment_required when autoPay is false (default)', async () => {
-    globalThis.fetch = mockFetch(402, sample402Body, { 'content-type': 'application/json' }) as unknown as typeof fetch;
+    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
+      if (rpcUrl === BASE_RPC_URL) return 0n;
+      if (rpcUrl === POLYGON_RPC_URL) return 750n;
+      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    });
 
     const client = new X402Client(TEST_PRIVATE_KEY);
-    const res = await client.request(TEST_URL);
+    const result = await client.request(TEST_URL);
 
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('payment_required');
-    expect(res.x402).toBe(true);
-    expect(res.httpStatus).toBe(402);
-    expect(res.paymentDetails).toEqual(sample402Body);
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_required',
+      x402: true,
+      httpStatus: 402,
+      paymentAttempted: false,
+      selectedOffer: {
+        network: 'eip155:137',
+        chainId: 137,
+        amount: '750',
+      },
+    });
+    expect(result.usableOffers).toEqual([
+      expect.objectContaining({
+        network: 'eip155:8453',
+        chainId: 8453,
+        balance: '0',
+        balanceSufficient: false,
+      }),
+      expect.objectContaining({
+        network: 'eip155:137',
+        chainId: 137,
+        balance: '750',
+        balanceSufficient: true,
+      }),
+    ]);
+    expect(mocks.signPayment).not.toHaveBeenCalled();
   });
 
-  it('returns payment_required when autoPay=false is explicit', async () => {
-    globalThis.fetch = mockFetch(402, sample402Body, { 'content-type': 'application/json' }) as unknown as typeof fetch;
-
-    const client = new X402Client(TEST_PRIVATE_KEY);
-    const res = await client.request(TEST_URL, { autoPay: false });
-
-    expect(res.status).toBe('payment_required');
-    expect(res.paymentDetails).toBeDefined();
-  });
-
-  // ── 402 with autoPay=true ────────────────────────────────────────────────
-
-  it('pays and retries when autoPay=true and chain matches', async () => {
-    const okBody = { result: 'search results' };
-    globalThis.fetch = mockFetch402ThenOk(sample402Body, okBody) as unknown as typeof fetch;
-
-    const client = new X402Client(TEST_PRIVATE_KEY);
-    const res = await client.request(TEST_URL, { autoPay: true });
-
-    expect(res.success).toBe(true);
-    expect(res.status).toBe('paid');
-    expect(res.x402).toBe(true);
-    expect(res.result).toEqual(okBody);
-    expect(res.payment).toBeDefined();
-    expect(res.payment?.amount).toBe('500');
-    expect(res.payment?.network).toBe('eip155:8453');
-  });
-
-  it('includes payment headers on retry request', async () => {
-    const okBody = { ok: true };
-    const fetchMock = mockFetch402ThenOk(sample402Body, okBody);
+  it('auto-pays using the first funded supported offer in server order', async () => {
+    const fetchMock = mockFetchSequence(
+      {
+        status: 402,
+        body: { accepts: [baseOffer, polygonOffer] },
+        headers: { 'content-type': 'application/json' },
+      },
+      {
+        status: 200,
+        body: { result: 'scan-complete' },
+        headers: { 'content-type': 'application/json' },
+      },
+    );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
-    await client.request(TEST_URL, { autoPay: true });
+    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
+      if (rpcUrl === BASE_RPC_URL) return 0n;
+      if (rpcUrl === POLYGON_RPC_URL) return 750n;
+      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    });
 
-    // Second call should include X-PAYMENT header
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const secondCallHeaders = (fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>;
-    expect(secondCallHeaders['X-PAYMENT']).toBeDefined();
-    expect(secondCallHeaders['PAYMENT-SIGNATURE']).toBeDefined();
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    const result = await client.request(TEST_URL, {
+      autoPay: true,
+      method: 'POST',
+      body: '{"chain":"polygon","tokenAddress":"0xabc"}',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: 'paid',
+      x402: true,
+      result: { result: 'scan-complete' },
+      payment: {
+        amount: '750',
+        network: 'eip155:137',
+      },
+      selectedOffer: {
+        network: 'eip155:137',
+        chainId: 137,
+      },
+      paymentAttempted: true,
+    });
+    expect(mocks.signPayment).toHaveBeenCalledTimes(1);
+    expect(mocks.signPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ address: '0x1111111111111111111111111111111111111111' }),
+      expect.objectContaining({
+        amount: '750',
+        chainId: 137,
+        network: 'eip155:137',
+        recipient: '0xPolygonRecipient',
+      }),
+    );
+
+    const retryOptions = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect((retryOptions.headers as Record<string, string>)['X-PAYMENT']).toBe('signed-payment-header');
+    expect((retryOptions.headers as Record<string, string>)['PAYMENT-SIGNATURE']).toBe('signed-payment-header');
+    expect(retryOptions.body).toBe('{"chain":"polygon","tokenAddress":"0xabc"}');
+    expect((retryOptions.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 
-  // ── maxPaymentUsd safety limit ───────────────────────────────────────────
+  it('does not fall back when a strict payment chain is requested and that chain is unfunded', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 402,
+      body: { accepts: [baseOffer, polygonOffer] },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
 
-  it('rejects payment when amount exceeds maxPaymentUsd', async () => {
-    // amount=500 base units = $0.0005; maxPaymentUsd=0.0001
-    globalThis.fetch = mockFetch(402, sample402Body, { 'content-type': 'application/json' }) as unknown as typeof fetch;
+    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
+      if (rpcUrl === BASE_RPC_URL) return 0n;
+      if (rpcUrl === POLYGON_RPC_URL) return 750n;
+      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    });
+
+    const client = new X402Client(TEST_PRIVATE_KEY, { chainId: 8453, strictChainId: true });
+    const result = await client.request(TEST_URL, { autoPay: true });
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_unfunded',
+      x402: true,
+      httpStatus: 402,
+      paymentAttempted: false,
+    });
+    expect(result.error).toContain('eip155:8453');
+    expect(mocks.signPayment).not.toHaveBeenCalled();
+  });
+
+  it('returns payment_rejected when only non-EVM offers are provided', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 402,
+      body: { accepts: [unsupportedOffer] },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
+
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    const result = await client.request(TEST_URL, { autoPay: true });
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_rejected',
+      x402: true,
+      httpStatus: 402,
+      paymentAttempted: false,
+    });
+    expect(result.error).toContain('No supported EVM payment offer available');
+    expect(mocks.readContract).not.toHaveBeenCalled();
+    expect(mocks.signPayment).not.toHaveBeenCalled();
+  });
+
+  it('returns payment_unfunded without signing when no supported offer has enough balance', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 402,
+      body: { accepts: [baseOffer, polygonOffer] },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
+
+    mocks.readContract.mockResolvedValue(100n);
+
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    const result = await client.request(TEST_URL, { autoPay: true });
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_unfunded',
+      x402: true,
+      httpStatus: 402,
+      paymentAttempted: false,
+    });
+    expect(result.error).toContain('No funded payment offer available');
+    expect(mocks.signPayment).not.toHaveBeenCalled();
+  });
+
+  it('rejects payment when the selected offer exceeds maxPaymentUsd', async () => {
+    globalThis.fetch = mockFetchSequence({
+      status: 402,
+      body: { accepts: [polygonOffer] },
+      headers: { 'content-type': 'application/json' },
+    }) as unknown as typeof fetch;
+
+    mocks.readContract.mockResolvedValue(750n);
 
     const client = new X402Client(TEST_PRIVATE_KEY, { maxPaymentUsd: 0.0001 });
-    const res = await client.request(TEST_URL, { autoPay: true });
+    const result = await client.request(TEST_URL, { autoPay: true });
 
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('payment_rejected');
-    expect(res.error).toContain('exceeds maxPaymentUsd');
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_rejected',
+      x402: true,
+      httpStatus: 402,
+      paymentAttempted: false,
+    });
+    expect(result.error).toContain('exceeds maxPaymentUsd');
+    expect(mocks.signPayment).not.toHaveBeenCalled();
   });
 
-  it('respects per-request maxPaymentUsd override', async () => {
-    globalThis.fetch = mockFetch(402, sample402Body, { 'content-type': 'application/json' }) as unknown as typeof fetch;
+  it('surfaces the retry failure reason when the paid retry is rejected', async () => {
+    globalThis.fetch = mockFetchSequence(
+      {
+        status: 402,
+        body: { accepts: [polygonOffer] },
+        headers: { 'content-type': 'application/json' },
+      },
+      {
+        status: 402,
+        body: {
+          error: {
+            message: 'Insufficient token balance for settlement',
+          },
+        },
+        headers: { 'content-type': 'application/json' },
+      },
+    ) as unknown as typeof fetch;
 
-    // Constructor allows $1, but per-request limits to $0.00001
-    const client = new X402Client(TEST_PRIVATE_KEY, { maxPaymentUsd: 1.0 });
-    const res = await client.request(TEST_URL, { autoPay: true, maxPaymentUsd: 0.00001 });
+    mocks.readContract.mockResolvedValue(750n);
 
-    expect(res.status).toBe('payment_rejected');
-    expect(res.error).toContain('exceeds maxPaymentUsd');
+    const client = new X402Client(TEST_PRIVATE_KEY);
+    const result = await client.request(TEST_URL, { autoPay: true });
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 'payment_failed',
+      x402: true,
+      httpStatus: 402,
+      serverReason: 'Insufficient token balance for settlement',
+      paymentAttempted: true,
+      selectedOffer: {
+        network: 'eip155:137',
+        chainId: 137,
+      },
+    });
+    expect(result.error).toContain('Insufficient token balance for settlement');
+    expect(mocks.signPayment).toHaveBeenCalledTimes(1);
   });
 
-  // ── No matching chain ────────────────────────────────────────────────────
-
-  it('rejects when no offer matches the configured chain', async () => {
-    const differentChain402 = {
-      accepts: [{ network: 'eip155:1', amount: '500', payTo: '0xRecipient', asset: '0xUSDC' }],
-    };
-    globalThis.fetch = mockFetch(402, differentChain402, { 'content-type': 'application/json' }) as unknown as typeof fetch;
-
-    const client = new X402Client(TEST_PRIVATE_KEY, { chainId: 8453 });
-    const res = await client.request(TEST_URL, { autoPay: true });
-
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('payment_rejected');
-    expect(res.error).toContain('eip155:8453');
-  });
-
-  // ── Body auto-stringify ──────────────────────────────────────────────────
-
-  it('stringifies object body and sets Content-Type', async () => {
-    const fetchMock = mockFetch(200, { ok: true }, { 'content-type': 'application/json' });
+  it('stringifies object bodies and sets application/json', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: { ok: true },
+      headers: { 'content-type': 'application/json' },
+    });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const client = new X402Client(TEST_PRIVATE_KEY);
     await client.request(TEST_URL, { method: 'POST', body: { query: 'test' } });
 
-    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(callOpts.body).toBe('{"query":"test"}');
-    expect((callOpts.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(requestOptions.body).toBe('{"query":"test"}');
+    expect((requestOptions.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 
-  it('passes string body through unchanged', async () => {
-    const fetchMock = mockFetch(200, 'ok', {});
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const client = new X402Client(TEST_PRIVATE_KEY);
-    await client.request(TEST_URL, { method: 'POST', body: 'raw-string' });
-
-    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(callOpts.body).toBe('raw-string');
-  });
-
-  it('auto-detects JSON string body and sets Content-Type', async () => {
-    const fetchMock = mockFetch(200, { ok: true }, { 'content-type': 'application/json' });
+  it('auto-detects JSON string bodies and preserves them on retry', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: { ok: true },
+      headers: { 'content-type': 'application/json' },
+    });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const client = new X402Client(TEST_PRIVATE_KEY);
@@ -253,33 +411,23 @@ describe('X402Client', () => {
       body: '{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}',
     });
 
-    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(callOpts.body).toBe('{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}');
-    expect((callOpts.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(requestOptions.body).toBe('{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}');
+    expect((requestOptions.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 
-  it('does not set Content-Type for non-JSON string body', async () => {
-    const fetchMock = mockFetch(200, 'ok', {});
+  it('does not set application/json for non-JSON string bodies', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: 'ok',
+    });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const client = new X402Client(TEST_PRIVATE_KEY);
     await client.request(TEST_URL, { method: 'POST', body: 'plain text body' });
 
-    const callOpts = fetchMock.mock.calls[0][1] as RequestInit;
-    expect((callOpts.headers as Record<string, string>)['Content-Type']).toBeUndefined();
-  });
-
-  // ── Constructor defaults ─────────────────────────────────────────────────
-
-  it('uses BASE_CHAIN_ID (8453) by default', async () => {
-    // Offer only on eip155:8453 — should match with default chain
-    const okBody = { result: 'ok' };
-    globalThis.fetch = mockFetch402ThenOk(sample402Body, okBody) as unknown as typeof fetch;
-
-    const client = new X402Client(TEST_PRIVATE_KEY); // no chainId specified
-    const res = await client.request(TEST_URL, { autoPay: true });
-
-    expect(res.success).toBe(true);
-    expect(res.payment?.network).toBe('eip155:8453');
+    const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(requestOptions.body).toBe('plain text body');
+    expect((requestOptions.headers as Record<string, string>)['Content-Type']).toBeUndefined();
   });
 });

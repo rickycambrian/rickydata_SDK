@@ -13,6 +13,20 @@ export const ETH_DECIMALS = 18;
 /** Default Base mainnet RPC URL */
 export const DEFAULT_RPC_URL = 'https://mainnet.base.org';
 
+/** Default public RPC URLs for common EVM payment networks. */
+export const DEFAULT_EVM_RPC_URLS: Record<number, string> = {
+  1: 'https://eth.llamarpc.com',
+  10: 'https://mainnet.optimism.io',
+  56: 'https://bsc-dataseed.binance.org',
+  137: 'https://polygon-rpc.com',
+  8453: DEFAULT_RPC_URL,
+  42161: 'https://arb1.arbitrum.io/rpc',
+  43114: 'https://api.avax.network/ext/bc/C/rpc',
+  59144: 'https://rpc.linea.build',
+  84532: 'https://base-sepolia.drpc.org',
+  11155111: 'https://rpc.sepolia.org',
+};
+
 /**
  * BIP-44 HD derivation path template for MCP Gateway spending wallets.
  * m/44'/60'/8453'/0/{index}

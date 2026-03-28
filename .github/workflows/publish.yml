@@ -16,7 +16,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - run: npm publish --provenance --access public
+      - run: npm publish -w rickydata --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # NOTE: After publishing, the monorepo's refresh-trusted-deps.yml
