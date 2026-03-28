@@ -5,20 +5,6 @@ const mocks = vi.hoisted(() => ({
   signPayment: vi.fn(),
 }));
 
-vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: () => ({
-    address: '0x1111111111111111111111111111111111111111' as `0x${string}`,
-    signTypedData: vi.fn().mockResolvedValue('0xmocksignature'),
-  }),
-}));
-
-vi.mock('viem', () => ({
-  http: (url: string) => ({ url }),
-  createPublicClient: ({ transport }: { transport: { url: string } }) => ({
-    readContract: (args: unknown) => mocks.readContract(transport.url, args),
-  }),
-}));
-
 vi.mock('../src/payment/payment-signer.js', () => ({
   signPayment: mocks.signPayment,
 }));
@@ -30,8 +16,10 @@ const TEST_PRIVATE_KEY = [
   '238ff944bacb478cbed5efcae784d7bf4f2ff80',
 ].join('');
 const TEST_URL = 'https://api.example.com/tool';
-const BASE_RPC_URL = 'https://mainnet.base.org';
-const POLYGON_RPC_URL = 'https://polygon-rpc.com';
+const TEST_ACCOUNT = {
+  address: '0x1111111111111111111111111111111111111111' as `0x${string}`,
+  signTypedData: vi.fn().mockResolvedValue('0xmocksignature'),
+};
 
 function createResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
   const normalizedHeaders = Object.fromEntries(
@@ -59,6 +47,15 @@ function mockFetchSequence(
     index += 1;
     return Promise.resolve(createResponse(response.status, response.body, response.headers));
   });
+}
+
+function createClient(options?: ConstructorParameters<typeof X402Client>[1]) {
+  const client = new X402Client(TEST_PRIVATE_KEY, options);
+  vi.spyOn(client as any, '_getAccount').mockResolvedValue(TEST_ACCOUNT);
+  vi.spyOn(client as any, 'getTokenBalance').mockImplementation(
+    async (_address: `0x${string}`, _tokenAddress: string, chainId: number) => mocks.readContract(chainId),
+  );
+  return client;
 }
 
 const baseOffer = {
@@ -111,7 +108,7 @@ describe('X402Client', () => {
       headers: { 'content-type': 'application/json' },
     }) as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL);
 
     expect(result).toMatchObject({
@@ -129,7 +126,7 @@ describe('X402Client', () => {
       body: 'Internal Server Error',
     }) as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL);
 
     expect(result).toMatchObject({
@@ -148,13 +145,13 @@ describe('X402Client', () => {
       headers: { 'content-type': 'application/json' },
     }) as unknown as typeof fetch;
 
-    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
-      if (rpcUrl === BASE_RPC_URL) return 0n;
-      if (rpcUrl === POLYGON_RPC_URL) return 750n;
-      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    mocks.readContract.mockImplementation(async (chainId: number) => {
+      if (chainId === 8453) return 0n;
+      if (chainId === 137) return 750n;
+      throw new Error(`Unexpected chain ${chainId}`);
     });
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL);
 
     expect(result).toMatchObject({
@@ -201,13 +198,13 @@ describe('X402Client', () => {
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
-      if (rpcUrl === BASE_RPC_URL) return 0n;
-      if (rpcUrl === POLYGON_RPC_URL) return 750n;
-      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    mocks.readContract.mockImplementation(async (chainId: number) => {
+      if (chainId === 8453) return 0n;
+      if (chainId === 137) return 750n;
+      throw new Error(`Unexpected chain ${chainId}`);
     });
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL, {
       autoPay: true,
       method: 'POST',
@@ -254,13 +251,13 @@ describe('X402Client', () => {
       headers: { 'content-type': 'application/json' },
     }) as unknown as typeof fetch;
 
-    mocks.readContract.mockImplementation(async (rpcUrl: string) => {
-      if (rpcUrl === BASE_RPC_URL) return 0n;
-      if (rpcUrl === POLYGON_RPC_URL) return 750n;
-      throw new Error(`Unexpected RPC ${rpcUrl}`);
+    mocks.readContract.mockImplementation(async (chainId: number) => {
+      if (chainId === 8453) return 0n;
+      if (chainId === 137) return 750n;
+      throw new Error(`Unexpected chain ${chainId}`);
     });
 
-    const client = new X402Client(TEST_PRIVATE_KEY, { chainId: 8453, strictChainId: true });
+    const client = createClient({ chainId: 8453, strictChainId: true });
     const result = await client.request(TEST_URL, { autoPay: true });
 
     expect(result).toMatchObject({
@@ -281,7 +278,7 @@ describe('X402Client', () => {
       headers: { 'content-type': 'application/json' },
     }) as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL, { autoPay: true });
 
     expect(result).toMatchObject({
@@ -305,7 +302,7 @@ describe('X402Client', () => {
 
     mocks.readContract.mockResolvedValue(100n);
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL, { autoPay: true });
 
     expect(result).toMatchObject({
@@ -328,7 +325,7 @@ describe('X402Client', () => {
 
     mocks.readContract.mockResolvedValue(750n);
 
-    const client = new X402Client(TEST_PRIVATE_KEY, { maxPaymentUsd: 0.0001 });
+    const client = createClient({ maxPaymentUsd: 0.0001 });
     const result = await client.request(TEST_URL, { autoPay: true });
 
     expect(result).toMatchObject({
@@ -362,7 +359,7 @@ describe('X402Client', () => {
 
     mocks.readContract.mockResolvedValue(750n);
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     const result = await client.request(TEST_URL, { autoPay: true });
 
     expect(result).toMatchObject({
@@ -389,7 +386,7 @@ describe('X402Client', () => {
     });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     await client.request(TEST_URL, { method: 'POST', body: { query: 'test' } });
 
     const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -405,7 +402,7 @@ describe('X402Client', () => {
     });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     await client.request(TEST_URL, {
       method: 'POST',
       body: '{"chain":"base","tokenAddress":"0xcbB7C3aD147b6F346AB4D7D29F289E4A99F50078"}',
@@ -423,7 +420,7 @@ describe('X402Client', () => {
     });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new X402Client(TEST_PRIVATE_KEY);
+    const client = createClient();
     await client.request(TEST_URL, { method: 'POST', body: 'plain text body' });
 
     const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
