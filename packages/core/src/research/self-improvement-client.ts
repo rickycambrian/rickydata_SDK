@@ -1,26 +1,21 @@
-import {
-  createDefaultResearchPolicyArms,
-  DEFAULT_RESEARCH_AGENT_SPECS,
-  DEFAULT_RESEARCH_MODEL,
-  DEFAULT_RESEARCH_PROVIDER,
-} from './defaults.js';
 import type {
-  AppendResearchRunEventRequest,
+  BacktestSkillCandidateRequest,
   CreateResearchIssueRequest,
-  CreateResearchRunRequest,
+  CreateSkillCandidateRequest,
   DismissResearchIssueRequest,
   DraftResearchIssueRequest,
   IssueEscalation,
-  PromoteResearchRunRequest,
+  PromoteSkillCandidateRequest,
   ResearchClientConfig,
   ResearchListIssuesOptions,
-  ResearchListRunsOptions,
-  ResearchRun,
-  ResearchRunEvent,
-  VerifyResearchRunRequest,
+  SelfImprovementStatus,
+  SkillCandidate,
+  SkillCandidateListOptions,
+  TriggerSelfImprovementRequest,
+  WalletSkillRecord,
 } from './types.js';
 
-export class ResearchClient {
+export class SelfImprovementClient {
   private readonly baseUrl: string;
   private readonly authToken: string;
 
@@ -29,70 +24,94 @@ export class ResearchClient {
     this.authToken = config.token ?? config.apiKey ?? '';
 
     if (!this.baseUrl) throw new Error('baseUrl is required');
-    if (!this.authToken) throw new Error('ResearchClient requires either token or apiKey');
+    if (!this.authToken) throw new Error('SelfImprovementClient requires either token or apiKey');
   }
 
-  async createRun(request: CreateResearchRunRequest): Promise<ResearchRun> {
+  async getStatus(): Promise<SelfImprovementStatus> {
+    const res = await this.request('/wallet/self-improvement/status');
+    return this.parseJson(res, 'get self-improvement status');
+  }
+
+  async trigger(request: TriggerSelfImprovementRequest = {}): Promise<Record<string, unknown>> {
+    const res = await this.request('/wallet/self-improvement/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return this.parseJson(res, 'trigger self-improvement');
+  }
+
+  async listWalletSkills(): Promise<{ skills: WalletSkillRecord[]; total: number }> {
+    const res = await this.request('/wallet/skills');
+    return this.parseJson(res, 'list wallet skills');
+  }
+
+  async getWalletSkill(name: string): Promise<WalletSkillRecord> {
+    if (!name) throw new Error('name is required');
+    const res = await this.request(`/wallet/skills/${encodeURIComponent(name)}`);
+    return this.parseJson(res, 'get wallet skill');
+  }
+
+  async upsertWalletSkill(name: string, content: string): Promise<Record<string, unknown>> {
+    if (!name) throw new Error('name is required');
+    if (!content) throw new Error('content is required');
+    const res = await this.request(`/wallet/skills/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    return this.parseJson(res, 'upsert wallet skill');
+  }
+
+  async deleteWalletSkill(name: string): Promise<Record<string, unknown>> {
+    if (!name) throw new Error('name is required');
+    const res = await this.request(`/wallet/skills/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+    return this.parseJson(res, 'delete wallet skill');
+  }
+
+  async createSkillCandidate(request: CreateSkillCandidateRequest): Promise<SkillCandidate> {
     ensurePrivacyContext(request.privacyContext);
-    const res = await this.request('/api/v1/research/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...request,
-        provider: request.provider ?? DEFAULT_RESEARCH_PROVIDER,
-        model: request.model ?? DEFAULT_RESEARCH_MODEL,
-        agentSpecs: request.agentSpecs ?? DEFAULT_RESEARCH_AGENT_SPECS,
-        policyArms: request.policyArms ?? createDefaultResearchPolicyArms(request.privacyContext),
-      }),
-    });
-    return this.parseJson<ResearchRun>(res, 'create research run');
-  }
-
-  async listRuns(options: ResearchListRunsOptions = {}): Promise<{ items: ResearchRun[]; total: number }> {
-    const res = await this.request(`/api/v1/research/runs${toQueryString(options)}`);
-    return this.parseJson(res, 'list research runs');
-  }
-
-  async getRun(runId: string): Promise<ResearchRun> {
-    if (!runId) throw new Error('runId is required');
-    const res = await this.request(`/api/v1/research/runs/${encodeURIComponent(runId)}`);
-    return this.parseJson(res, 'get research run');
-  }
-
-  async getRunEvents(runId: string): Promise<{ items: ResearchRunEvent[]; total: number }> {
-    if (!runId) throw new Error('runId is required');
-    const res = await this.request(`/api/v1/research/runs/${encodeURIComponent(runId)}/events`);
-    return this.parseJson(res, 'get research run events');
-  }
-
-  async appendRunEvent(runId: string, request: AppendResearchRunEventRequest): Promise<ResearchRunEvent> {
-    if (!runId) throw new Error('runId is required');
-    const res = await this.request(`/api/v1/research/runs/${encodeURIComponent(runId)}/events`, {
+    const res = await this.request('/api/v1/research/skill-candidates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
-    return this.parseJson(res, 'append research run event');
+    return this.parseJson(res, 'create skill candidate');
   }
 
-  async verifyRun(runId: string, request: VerifyResearchRunRequest): Promise<ResearchRun> {
-    if (!runId) throw new Error('runId is required');
-    const res = await this.request(`/api/v1/research/runs/${encodeURIComponent(runId)}/verify`, {
+  async listSkillCandidates(
+    options: SkillCandidateListOptions = {},
+  ): Promise<{ items: SkillCandidate[]; total: number }> {
+    const res = await this.request(`/api/v1/research/skill-candidates${toQueryString(options)}`);
+    return this.parseJson(res, 'list skill candidates');
+  }
+
+  async backtestSkillCandidate(
+    candidateId: string,
+    request: BacktestSkillCandidateRequest,
+  ): Promise<SkillCandidate> {
+    if (!candidateId) throw new Error('candidateId is required');
+    const res = await this.request(`/api/v1/research/skill-candidates/${encodeURIComponent(candidateId)}/backtest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
-    return this.parseJson(res, 'verify research run');
+    return this.parseJson(res, 'backtest skill candidate');
   }
 
-  async promoteRun(runId: string, request: PromoteResearchRunRequest): Promise<ResearchRun> {
-    if (!runId) throw new Error('runId is required');
-    const res = await this.request(`/api/v1/research/runs/${encodeURIComponent(runId)}/promote`, {
+  async promoteSkillCandidate(
+    candidateId: string,
+    request: PromoteSkillCandidateRequest,
+  ): Promise<SkillCandidate> {
+    if (!candidateId) throw new Error('candidateId is required');
+    const res = await this.request(`/api/v1/research/skill-candidates/${encodeURIComponent(candidateId)}/promote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
-    return this.parseJson(res, 'promote research run');
+    return this.parseJson(res, 'promote skill candidate');
   }
 
   async draftIssue(request: DraftResearchIssueRequest): Promise<IssueEscalation> {

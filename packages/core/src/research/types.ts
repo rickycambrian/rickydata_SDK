@@ -45,6 +45,18 @@ export type FrictionSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type IssueEscalationStatus = 'draft' | 'created' | 'dismissed';
 export type IssueEscalationMode = 'draft_only' | 'auto_open';
 export type SanitizationStatus = 'clean' | 'redacted' | 'blocked';
+export type SkillCandidateStage =
+  | 'wallet_candidate'
+  | 'wallet_validated'
+  | 'global_candidate'
+  | 'global'
+  | 'rejected';
+export type SkillBacktestVerdict = 'positive' | 'negative' | 'inconclusive';
+export type PromotionDecisionType =
+  | 'reject'
+  | 'validate_wallet'
+  | 'promote_global_candidate'
+  | 'promote_global';
 
 export interface ResearchPrivacyContext {
   walletAddress: string;
@@ -95,6 +107,49 @@ export interface PublicInputSnapshot {
   metadata?: Record<string, unknown>;
 }
 
+export interface TraceEpisode {
+  id: string;
+  sessionId: string;
+  projectId: string;
+  workspaceId: string;
+  source: string;
+  startedAt: string;
+  frictionType: string;
+  toolSequence: string[];
+  toolCallsInvolved: number;
+  errorTypes: string[];
+  failingTool?: string | null;
+  resolutionTool?: string | null;
+  rawEvidence?: string;
+  durationMs?: number | null;
+}
+
+export interface ToolFailureSignature {
+  id: string;
+  frictionType: string;
+  failingTool?: string | null;
+  resolutionTool?: string | null;
+  errorTypes: string[];
+  triggerLabel: string;
+  supportCount: number;
+}
+
+export interface SkillTrigger {
+  whenToUse: string;
+  doNotUse: string;
+  failureSignatures: string[];
+  correctToolCallPattern: string[];
+}
+
+export interface SkillEvidenceBundle {
+  traceEpisodeIds: string[];
+  sampleSize: number;
+  successfulRecoveries: number;
+  repoCount: number;
+  evidence: string[];
+  sourceRefs: string[];
+}
+
 export interface ResearchCandidate {
   id: string;
   title: string;
@@ -102,6 +157,52 @@ export interface ResearchCandidate {
   source: string;
   confidence?: number;
   metadata?: Record<string, unknown>;
+}
+
+export interface SkillCandidate {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  stage: SkillCandidateStage;
+  privacyContext: ResearchPrivacyContext;
+  signature: ToolFailureSignature;
+  trigger: SkillTrigger;
+  evidenceBundle: SkillEvidenceBundle;
+  skillMarkdown: string;
+  claudeRouterEntry: string;
+  provider: ResearchProvider;
+  model: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillBacktestResult {
+  candidateId: string;
+  totalEpisodes: number;
+  matchedEpisodes: number;
+  successfulMatches: number;
+  coverageRate: number;
+  consistencyRate: number;
+  beforeAvgToolCalls: number;
+  afterExpectedToolCalls: number;
+  estimatedToolCallsSaved: number;
+  verdict: SkillBacktestVerdict;
+  notes?: string[];
+  createdAt: string;
+}
+
+export interface PromotionDecision {
+  candidateId: string;
+  fromStage: SkillCandidateStage;
+  toStage: SkillCandidateStage;
+  decision: PromotionDecisionType;
+  rationale: string;
+  requiresHumanReview: boolean;
+  approvedByHuman?: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface ResearchClaim {
@@ -214,11 +315,27 @@ export interface ResearchClientConfig {
   apiKey?: string;
 }
 
+export interface WalletSkillRecord {
+  name: string;
+  description: string;
+  content: string;
+  version?: string;
+  updatedAt?: string;
+  raw?: string;
+}
+
 export interface ResearchListRunsOptions {
   projectId?: string;
   workspaceId?: string;
   status?: ResearchRunStatus;
   verdict?: ResearchVerdict;
+  limit?: number;
+}
+
+export interface SkillCandidateListOptions {
+  projectId?: string;
+  workspaceId?: string;
+  stage?: SkillCandidateStage;
   limit?: number;
 }
 
@@ -245,6 +362,16 @@ export interface CreateResearchRunRequest {
   humanInteraction?: HumanAIInteractionCard;
   metadata?: Record<string, unknown>;
   initialEvents?: Array<Omit<ResearchRunEvent, 'id' | 'createdAt'>>;
+}
+
+export type CreateSkillCandidateRequest = SkillCandidate;
+
+export interface BacktestSkillCandidateRequest {
+  backtest: SkillBacktestResult;
+}
+
+export interface PromoteSkillCandidateRequest {
+  decision: PromotionDecision;
 }
 
 export interface VerifyResearchRunRequest {
@@ -279,6 +406,21 @@ export interface CreateResearchIssueRequest {
 
 export interface DismissResearchIssueRequest {
   reason?: string;
+}
+
+export interface TriggerSelfImprovementRequest {
+  agentId?: string;
+  includeBackfill?: boolean;
+}
+
+export interface SelfImprovementStatus {
+  walletAddress?: string;
+  running?: boolean;
+  schedule?: Record<string, unknown> | null;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  history?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
 }
 
 export interface ResearchKFDBClientConfig extends Omit<KfdbClientConfig, 'defaultReadScope'> {

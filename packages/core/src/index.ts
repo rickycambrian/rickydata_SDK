@@ -1,7 +1,7 @@
 // Main client
 export { MCPGateway } from './client.js';
 export { KFDBClient } from './kfdb/index.js';
-export { ResearchClient, ResearchKFDBClient } from './research/index.js';
+export { ResearchClient, ResearchKFDBClient, SelfImprovementClient } from './research/index.js';
 
 // Auth
 export {
@@ -102,8 +102,10 @@ export type {
 } from './kfdb/index.js';
 export type {
   AppendResearchRunEventRequest,
+  BacktestSkillCandidateRequest,
   CreateResearchIssueRequest,
   CreateResearchRunRequest,
+  CreateSkillCandidateRequest,
   DismissResearchIssueRequest,
   DraftResearchIssueRequest,
   EvidenceGrade,
@@ -114,7 +116,9 @@ export type {
   IssueEscalationMode,
   IssueEscalationStatus,
   ProductFrictionFinding,
+  PromotionDecision,
   PromoteResearchRunRequest,
+  PromoteSkillCandidateRequest,
   PublicInputSnapshot,
   ResearchAgentCatalog,
   ResearchAgentCatalogEntry,
@@ -145,7 +149,19 @@ export type {
   ResearchVerdict,
   ResearchVisibility,
   SanitizationStatus,
+  SelfImprovementStatus,
+  SkillBacktestResult,
+  SkillBacktestVerdict,
+  SkillCandidate,
+  SkillCandidateListOptions,
+  SkillCandidateStage,
+  SkillEvidenceBundle,
+  SkillTrigger,
+  ToolFailureSignature,
+  TraceEpisode,
+  TriggerSelfImprovementRequest,
   VerifyResearchRunRequest,
+  WalletSkillRecord,
 } from './research/index.js';
 export {
   DEFAULT_RESEARCH_AGENT_CATALOG,

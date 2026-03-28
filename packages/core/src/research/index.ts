@@ -8,11 +8,14 @@ export {
 } from './defaults.js';
 export { ResearchKFDBClient } from './kfdb-research-client.js';
 export { ResearchClient } from './research-client.js';
+export { SelfImprovementClient } from './self-improvement-client.js';
 
 export type {
   AppendResearchRunEventRequest,
+  BacktestSkillCandidateRequest,
   CreateResearchIssueRequest,
   CreateResearchRunRequest,
+  CreateSkillCandidateRequest,
   DismissResearchIssueRequest,
   DraftResearchIssueRequest,
   EvidenceGrade,
@@ -23,7 +26,9 @@ export type {
   IssueEscalationMode,
   IssueEscalationStatus,
   ProductFrictionFinding,
+  PromotionDecision,
   PromoteResearchRunRequest,
+  PromoteSkillCandidateRequest,
   PublicInputSnapshot,
   ResearchAgentCatalog,
   ResearchAgentCatalogEntry,
@@ -54,5 +59,17 @@ export type {
   ResearchVerdict,
   ResearchVisibility,
   SanitizationStatus,
+  SelfImprovementStatus,
+  SkillBacktestResult,
+  SkillBacktestVerdict,
+  SkillCandidate,
+  SkillCandidateListOptions,
+  SkillCandidateStage,
+  SkillEvidenceBundle,
+  SkillTrigger,
+  ToolFailureSignature,
+  TraceEpisode,
+  TriggerSelfImprovementRequest,
   VerifyResearchRunRequest,
+  WalletSkillRecord,
 } from './types.js';
