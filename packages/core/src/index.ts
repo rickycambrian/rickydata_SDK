@@ -1,6 +1,7 @@
 // Main client
 export { MCPGateway } from './client.js';
 export { KFDBClient } from './kfdb/index.js';
+export { ResearchClient, ResearchKFDBClient } from './research/index.js';
 
 // Auth
 export {
@@ -99,6 +100,61 @@ export type {
   KfdbWriteRequest,
   KfdbWriteResponse,
 } from './kfdb/index.js';
+export type {
+  AppendResearchRunEventRequest,
+  CreateResearchIssueRequest,
+  CreateResearchRunRequest,
+  DismissResearchIssueRequest,
+  DraftResearchIssueRequest,
+  EvidenceGrade,
+  FrictionSeverity,
+  FrictionSourceType,
+  HumanAIInteractionCard,
+  IssueEscalation,
+  IssueEscalationMode,
+  IssueEscalationStatus,
+  ProductFrictionFinding,
+  PromoteResearchRunRequest,
+  PublicInputSnapshot,
+  ResearchAgentCatalog,
+  ResearchAgentCatalogEntry,
+  ResearchAgentSpec,
+  ResearchCandidate,
+  ResearchClaim,
+  ResearchClientConfig,
+  ResearchEntityFilterOptions,
+  ResearchEntityWriteRequest,
+  ResearchEventType,
+  ResearchGetEntityOptions,
+  ResearchKFDBClientConfig,
+  ResearchListEntityOptions,
+  ResearchListIssuesOptions,
+  ResearchListRunsOptions,
+  ResearchNodeWriteRequest,
+  ResearchPolicyArm,
+  ResearchPrivacyContext,
+  ResearchPrivacyQueryGuard,
+  ResearchProvider,
+  ResearchReadScope,
+  ResearchRun,
+  ResearchRunEvent,
+  ResearchRunStatus,
+  ResearchSnapshotWriteRequest,
+  ResearchSqlValidationOptions,
+  ResearchVerification,
+  ResearchVerdict,
+  ResearchVisibility,
+  SanitizationStatus,
+  VerifyResearchRunRequest,
+} from './research/index.js';
+export {
+  DEFAULT_RESEARCH_AGENT_CATALOG,
+  DEFAULT_RESEARCH_AGENT_SPECS,
+  DEFAULT_RESEARCH_MODEL,
+  DEFAULT_RESEARCH_PROVIDER,
+  DOGFOOD_REFERENCE_AGENT_SPECS,
+  createDefaultResearchPolicyArms,
+} from './research/index.js';
 
 // Agent Client (high-level chat helper)
 export { AgentClient } from './agent/index.js';
