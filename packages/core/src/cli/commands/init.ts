@@ -149,6 +149,54 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
+      // ─── Step 1b: Terms of Service ──────────────────────────────
+      const agentUrl = config.getAgentGatewayUrl(profile).replace(/\/$/, '');
+      if (token) {
+        try {
+          const tosRes = await fetch(`${agentUrl}/wallet/tos-status`, {
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (tosRes.ok) {
+            const tosData = await tosRes.json() as { accepted?: boolean; version?: string };
+            if (!tosData.accepted) {
+              console.log(chalk.bold('Terms of Service'));
+              console.log(chalk.dim('────────────────'));
+              console.log('By using rickydata you agree to the Terms of Service:');
+              console.log(chalk.dim('  - Your API keys are encrypted and scoped to your wallet'));
+              console.log(chalk.dim('  - Tool calls may incur x402 micropayments (USDC on Base)'));
+              console.log(chalk.dim('  - Free tier: 100 daily requests at no cost'));
+              console.log(chalk.dim('  https://marketplace.rickydata.org/#/terms'));
+              console.log();
+
+              const accepted = autoYes || await promptYesNo('Accept Terms of Service?', true);
+              if (accepted) {
+                try {
+                  const acceptRes = await fetch(`${agentUrl}/wallet/accept-tos`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    signal: AbortSignal.timeout(5000),
+                  });
+                  if (acceptRes.ok) {
+                    console.log(chalk.green('✓') + ' Terms of Service accepted');
+                  } else {
+                    console.log(chalk.yellow('Could not record ToS acceptance — continuing'));
+                  }
+                } catch {
+                  console.log(chalk.yellow('Could not record ToS acceptance — continuing'));
+                }
+              } else {
+                console.log(chalk.yellow('ToS not accepted — you can accept later at first chat'));
+              }
+              console.log();
+            }
+          }
+          // If endpoint returns non-ok (404 etc.), silently skip — endpoint may not exist yet
+        } catch {
+          // Network error or timeout — silently skip ToS check
+        }
+      }
+
       // ─── Step 2: rickydata MCP Server ─────────────────────────
       console.log(chalk.bold('Step 2/5: rickydata MCP Server'));
       console.log(chalk.dim('──────────────────────────────'));
@@ -382,6 +430,8 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log(chalk.dim('  rickydata mcp agent enable     Enable an agent as MCP tools'));
       console.log(chalk.dim('  rickydata mcp agent disable    Remove agent tools'));
       console.log(chalk.dim('  rickydata mcp agent list       Show enabled agents'));
+      console.log();
+      console.log(chalk.green('✓') + ' 100 free daily requests — no funding needed to start');
       console.log();
       console.log(chalk.dim('Optional next steps:'));
       console.log(chalk.dim('  rickydata apikey set           Enable agent chat (requires Anthropic API key)'));

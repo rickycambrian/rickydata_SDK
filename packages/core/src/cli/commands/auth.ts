@@ -437,8 +437,8 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
       }
 
       // Non-blocking balance check
+      const gatewayUrl = (config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
       try {
-        const gatewayUrl = (config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
         const balanceRes = await fetch(`${gatewayUrl}/wallet/balance`, {
           headers: { Authorization: `Bearer ${cred.token}`, 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5000),
@@ -458,6 +458,32 @@ export function createAuthCommands(config: ConfigManager, store: CredentialStore
         }
       } catch {
         // Silently ignore — auth status should work offline
+      }
+
+      // Non-blocking free tier / plan status
+      try {
+        const apikeyRes = await fetch(`${gatewayUrl}/wallet/apikey/status`, {
+          headers: { Authorization: `Bearer ${cred.token}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+        const hasByok = apikeyRes.ok && (await apikeyRes.json() as { configured?: boolean }).configured;
+
+        if (hasByok) {
+          console.log(`Plan:    ${chalk.green('BYOK')} ${chalk.dim('(unlimited, 10% platform fee)')}`);
+        } else {
+          const ftRes = await fetch(`${gatewayUrl}/wallet/free-tier/status`, {
+            headers: { Authorization: `Bearer ${cred.token}`, 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (ftRes.ok) {
+            const ft = await ftRes.json() as { dailyRemaining?: number; dailyLimit?: number };
+            const remaining = ft.dailyRemaining ?? 0;
+            const limit = ft.dailyLimit ?? 100;
+            console.log(`Plan:    ${chalk.cyan('Free Tier')} ${chalk.dim(`${remaining}/${limit} daily requests remaining`)}`);
+          }
+        }
+      } catch {
+        // Silently ignore — plan info is best-effort
       }
     });
 
