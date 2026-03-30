@@ -4,6 +4,9 @@
  * Types for the high-level AgentClient that wraps the Agent Gateway API.
  */
 
+/** Default model for free-tier users. Must start with 'MiniMax' to match backend routing. */
+export const FREE_TIER_MODEL = 'MiniMax-M2.7' as const;
+
 // ─── Configuration ──────────────────────────────────────────
 
 export interface AgentClientConfig {
@@ -61,8 +64,8 @@ export interface ImageAttachment {
 // ─── Chat ───────────────────────────────────────────────────
 
 export interface ChatOptions {
-  /** Claude model to use. Defaults to 'haiku'. */
-  model?: 'haiku' | 'sonnet' | 'opus' | 'MiniMax-M2.7';
+  /** Model to use. Named variants: 'haiku', 'sonnet', 'opus', 'MiniMax-M2.7'. Free tier uses MiniMax. */
+  model?: 'haiku' | 'sonnet' | 'opus' | 'MiniMax-M2.7' | (string & {});
   /** Reuse an existing session. Auto-creates one if omitted. */
   sessionId?: string;
   /** Maximum number of retries on transport/network errors. Defaults to 3. */

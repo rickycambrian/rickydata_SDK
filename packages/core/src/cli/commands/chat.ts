@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
 import { AgentClient } from '../../agent/agent-client.js';
+import { FREE_TIER_MODEL } from '../../agent/types.js';
 import { startChatRepl } from '../chat/chat-repl.js';
 import { fail } from '../errors.js';
 
@@ -13,36 +14,70 @@ function requireAuth(store: CredentialStore, profile: string): string {
   return cred.token;
 }
 
+/** Fetch the free-tier model from the backend, falling back to the constant. */
+async function getFreeTierModel(client: AgentClient): Promise<string> {
+  try {
+    const ft = await client.getFreeTierStatus();
+    return ft.model || FREE_TIER_MODEL;
+  } catch {
+    return FREE_TIER_MODEL;
+  }
+}
+
 /**
- * Resolve the model to use: explicit flag > wallet settings > free-tier default > haiku.
- * Matches website behavior where free-tier users get minimax and BYOK users get their preferred model.
+ * Resolve the model to use for chat.
+ *
+ * Priority: explicit flag > wallet plan > API key probe > free-tier default.
+ *
+ * Critical: the model string must start with 'MiniMax' (title case) for the
+ * backend to route through the free-tier path. Lowercase 'minimax' does NOT work.
  */
 async function resolveModel(
   token: string,
   gatewayUrl: string,
   explicitModel: string | undefined,
 ): Promise<string> {
-  // User explicitly chose a model — respect it
   if (explicitModel) return explicitModel;
 
   const client = new AgentClient({ token, gatewayUrl });
+
   try {
-    // Check wallet settings for plan + preferred model
     const settings = await client.getWalletSettings();
+
+    // Explicit free plan — also fix settings mismatch if modelProvider is wrong
     if (settings.plan === 'free') {
-      // Free tier — use free-tier model (matches website behavior)
-      try {
-        const ft = await client.getFreeTierStatus();
-        return ft.model || 'minimax';
-      } catch {
-        return 'minimax';
+      if (settings.modelProvider !== 'minimax') {
+        client.updateWalletSettings({ modelProvider: 'minimax', defaultModel: FREE_TIER_MODEL }).catch(() => {});
       }
+      return await getFreeTierModel(client);
     }
-    // BYOK — use preferred model or haiku
-    return settings.defaultModel || 'haiku';
+
+    // Explicit BYOK plan
+    if (settings.plan === 'byok') {
+      return settings.defaultModel || 'haiku';
+    }
+
+    // Plan not set — probe API key to decide
+    try {
+      const keyStatus = await client.getApiKeyStatus();
+      if (keyStatus.configured) {
+        return settings.defaultModel || 'haiku';
+      }
+    } catch {
+      // API key check failed — fall through to free tier
+    }
+
+    // No plan set + no API key → free tier
+    return await getFreeTierModel(client);
   } catch {
-    // Settings unavailable — fall back to haiku
-    return 'haiku';
+    // Wallet settings unavailable — last resort: check API key
+    try {
+      const keyStatus = await client.getApiKeyStatus();
+      if (keyStatus.configured) return 'haiku';
+    } catch {
+      // Both endpoints failed
+    }
+    return FREE_TIER_MODEL;
   }
 }
 
@@ -66,7 +101,7 @@ export function createChatCommand(config: ConfigManager, store: CredentialStore)
         agentId,
         token,
         gatewayUrl,
-        model: model as 'haiku' | 'sonnet' | 'opus',
+        model,
         sessionId: opts.session,
         verbose: opts.verbose,
       });

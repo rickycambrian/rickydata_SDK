@@ -432,9 +432,11 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log(chalk.dim('  rickydata mcp agent list       Show enabled agents'));
       console.log();
       console.log(chalk.green('✓') + ' 100 free daily requests — no funding needed to start');
+      console.log(chalk.green('✓') + ' Agent chat works immediately with free tier (MiniMax model)');
       console.log();
       console.log(chalk.dim('Optional next steps:'));
-      console.log(chalk.dim('  rickydata apikey set           Enable agent chat (requires Anthropic API key)'));
+      console.log(chalk.dim('  rickydata chat <agent-id>      Start chatting (works on free tier!)'));
+      console.log(chalk.dim('  rickydata apikey set           Upgrade to Anthropic models (BYOK — bring your own key)'));
       console.log(chalk.dim('  rickydata wallet balance       Check your USDC balance'));
       console.log();
     });

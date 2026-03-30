@@ -1,13 +1,14 @@
 import * as readline from 'readline';
 import chalk from 'chalk';
 import { AgentClient } from '../../agent/agent-client.js';
+import { FREE_TIER_MODEL } from '../../agent/types.js';
 import { StreamRenderer } from './stream-renderer.js';
 
 export interface ChatReplOptions {
   agentId: string;
   token: string;
   gatewayUrl: string;
-  model?: 'haiku' | 'sonnet' | 'opus';
+  model?: string;
   sessionId?: string;
   verbose?: boolean;
 }
@@ -43,7 +44,7 @@ export async function startChatRepl(opts: ChatReplOptions): Promise<void> {
   };
 
   let currentSessionId = opts.sessionId;
-  let currentModel = opts.model ?? 'haiku';
+  let currentModel = opts.model ?? FREE_TIER_MODEL;
 
   // Print banner
   console.log(chalk.dim('─'.repeat(50)));
@@ -107,12 +108,14 @@ export async function startChatRepl(opts: ChatReplOptions): Promise<void> {
 
           case 'model':
             if (args[0]) {
-              const m = args[0] as 'haiku' | 'sonnet' | 'opus';
-              if (!['haiku', 'sonnet', 'opus'].includes(m)) {
-                console.log(chalk.red('Invalid model. Use: haiku, sonnet, opus'));
+              const m = args[0];
+              const VALID_MODELS = ['haiku', 'sonnet', 'opus', 'minimax'];
+              if (VALID_MODELS.includes(m.toLowerCase())) {
+                // Normalize: 'minimax' → FREE_TIER_MODEL for backend compatibility
+                currentModel = m.toLowerCase() === 'minimax' ? FREE_TIER_MODEL : m;
+                console.log(chalk.green(`Model switched to ${currentModel}`));
               } else {
-                currentModel = m;
-                console.log(chalk.green(`Model switched to ${m}`));
+                console.log(chalk.red(`Invalid model. Use: ${VALID_MODELS.join(', ')}`));
               }
             } else {
               console.log(`Current model: ${chalk.cyan(currentModel)}`);
@@ -130,7 +133,7 @@ export async function startChatRepl(opts: ChatReplOptions): Promise<void> {
           case 'help':
             console.log(chalk.dim([
               '  /session         — show current session ID',
-              '  /model <name>    — switch model (haiku|sonnet|opus)',
+              '  /model <name>    — switch model (haiku|sonnet|opus|minimax)',
               '  /cost            — show accumulated session cost',
               '  /history         — view session history',
               '  /exit            — exit chat',
@@ -193,6 +196,14 @@ export async function startChatRepl(opts: ChatReplOptions): Promise<void> {
           }
         }
         console.error(chalk.red(`\nError: ${msg}`));
+
+        // Contextual recovery guidance for API key / payment errors
+        const lower = msg.toLowerCase();
+        if (['missing_secrets', 'api key', 'apikey', '402', 'payment required', 'rate_limited'].some(p => lower.includes(p))) {
+          console.error(chalk.yellow('\nThis may be a model/API key mismatch. Try one of:'));
+          console.error(chalk.dim('  /model minimax       Switch to free-tier model (no API key needed)'));
+          console.error(chalk.dim('  rickydata apikey set  Configure your Anthropic API key for haiku/sonnet/opus'));
+        }
       }
 
       prompt();

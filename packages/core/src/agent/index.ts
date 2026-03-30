@@ -6,7 +6,7 @@ export { AgentSession } from './agent-session.js';
 // import { SessionStore } from 'rickydata/agent/node' for server usage.
 
 // Error taxonomy
-export { AgentError, AgentErrorCode } from './types.js';
+export { AgentError, AgentErrorCode, FREE_TIER_MODEL } from './types.js';
 
 // Standalone SSE parsers & helpers
 export {

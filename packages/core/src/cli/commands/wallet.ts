@@ -7,6 +7,8 @@ import { CliError, fail } from '../errors.js';
 
 const ALLOWED_SETTINGS_KEYS = new Set([
   'defaultModel',
+  'modelProvider',
+  'plan',
   'persistConversations',
   'conversationRetentionDays',
   'autoImprove',

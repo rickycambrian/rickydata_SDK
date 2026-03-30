@@ -233,6 +233,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `canvas-execute` | Execute a canvas workflow | `/canvas-execute <file-or-id>` |
 | `mcp-search` | Search MCP marketplace | `/mcp-search <query>` |
 | `improvement-cycle` | Run 8-stage verification improvement pipeline | `/improvement-cycle` |
+| `claude-code-agent-setup` | Agent + MCP setup patterns for Claude Code sessions, free-tier model resolution | (manual reference) |
 | `sdk-resilience-patterns` | Reference for error taxonomy, retry, persistence, timeout patterns | (manual reference) |
 | `canvas-client-patterns` | Canvas SSE timeout/heartbeat, CanvasHttpError, getRunWithRetry, ParseFailureReason | (manual reference) |
 | `wallet-adapter-pattern` | Building wallet-agnostic auth adapters bridging Privy/MetaMask to WalletAdapter interface | (manual reference) |
