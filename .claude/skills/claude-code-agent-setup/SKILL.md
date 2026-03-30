@@ -7,7 +7,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Claude Code Agent Setup Reference
 
-Verified working 2026-03-29 (824 tests pass, erc8004-expert agent confirmed via free tier).
+Verified working 2026-03-30 (824 SDK tests pass, 4693 gateway tests pass, erc8004-expert agent confirmed via free tier through all paths).
 
 ## Quick Start — Enable an Agent in Claude Code
 
@@ -27,27 +27,18 @@ rickydata mcp agent enable <agent-id>       # e.g., erc8004-expert
 | Path | Endpoint | Free Tier | API Key Required |
 |------|----------|-----------|-----------------|
 | **Chat routes** (`/agents/{id}/sessions/{sid}/chat`) | Agent Gateway | Yes (MiniMax-M2.7-highspeed) | No (free plan uses platform key) |
-| **Agent MCP routes** (`/agents/{id}/mcp`) | Agent Gateway | **No** | Yes (BYOK or MiniMax key) |
+| **Agent MCP routes** (`/agents/{id}/mcp`) | Agent Gateway | Yes (since 2026-03-30 fix) | No (free plan uses platform key) |
 
 The rickydata-proxy (stdio) uses the **Agent MCP routes** path. The rickydata MCP server (HTTP) uses the **Chat routes** path.
 
-### Implication for Free-Tier Users
+### All Paths Work on Free Tier (as of 2026-03-30)
 
-- `rickydata chat <agent-id>` works on free tier (uses chat routes)
-- `mcp__rickydata-proxy__<agent-id>__agent_chat` **requires an API key** (uses agent MCP routes)
-- `mcp__rickydata__agent_chat` works on free tier (uses chat routes via main MCP server)
+- `rickydata chat <agent-id>` — CLI chat via chat routes
+- `mcp__rickydata-proxy__<agent-id>__agent_chat` — Claude Code proxy via agent MCP routes
+- `mcp__rickydata__agent_chat` — main MCP server via chat routes
+- Direct `AgentClient.chat()` — programmatic access via chat routes
 
-### Workaround for MCP Proxy Without API Key
-
-Use the AgentClient directly via the chat routes:
-
-```typescript
-import { AgentClient } from 'rickydata/agent';
-const client = new AgentClient({ token, gatewayUrl: 'https://agents.rickydata.org' });
-const result = await client.chat('erc8004-expert', 'Your question', {
-  model: 'MiniMax-M2.7-highspeed',  // Must start with 'MiniMax' for free tier
-});
-```
+All paths now support free-tier users without API keys. The agent MCP endpoint was fixed to mirror the same free-tier fallback pattern from `chat-routes.ts`.
 
 ## Model Resolution for Free Tier (SDK Fix — 2026-03-29)
 
