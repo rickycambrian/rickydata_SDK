@@ -3,6 +3,8 @@ export { ChatBubbleProvider, useChatBubbleConfig } from './providers/ChatBubbleP
 export type { ChatBubbleProviderProps, ChatBubbleConfig, ChatBubbleCallbacks } from './providers/ChatBubbleProvider.js';
 
 // Components
+export { AgentChatEmbed } from './components/AgentChatEmbed.js';
+export type { AgentChatEmbedProps } from './components/AgentChatEmbed.js';
 export { ChatBubble } from './components/ChatBubble.js';
 export { ChatBubbleButton } from './components/ChatBubbleButton.js';
 export { ChatBubbleWindow } from './components/ChatBubbleWindow.js';

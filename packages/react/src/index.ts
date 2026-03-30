@@ -62,6 +62,18 @@ export type { WalletChipProps } from './components/WalletChip.js';
 export { DepositPanel } from './components/DepositPanel.js';
 export type { DepositPanelProps, DepositStatus } from './components/DepositPanel.js';
 
+export { FreeTierBar } from './components/FreeTierBar.js';
+export type { FreeTierBarProps } from './components/FreeTierBar.js';
+
+export { ProviderSettingsCard } from './components/ProviderSettingsCard.js';
+export type { ProviderSettingsCardProps } from './components/ProviderSettingsCard.js';
+
+export { WalletStatusBadge } from './components/WalletStatusBadge.js';
+export type { WalletStatusBadgeProps } from './components/WalletStatusBadge.js';
+
+export { UsageDashboard } from './components/UsageDashboard.js';
+export type { UsageDashboardProps } from './components/UsageDashboard.js';
+
 // Types
 export type {
   ChatMessage, ChatImage, ToolExecution, SecretSection,
