@@ -12,18 +12,21 @@ import type {
   KfdbWriteRequest,
   KfdbWriteResponse,
 } from './types.js';
+import { encryptProperties, decryptResponseRows } from '../encryption.js';
 
 export class KFDBClient {
   private readonly baseUrl: string;
   private readonly token?: string;
   private readonly apiKey?: string;
   private readonly defaultReadScope: KfdbQueryScope;
+  private readonly encryptionKey?: CryptoKey;
 
   constructor(config: KfdbClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.token = config.token;
     this.apiKey = config.apiKey;
     this.defaultReadScope = config.defaultReadScope ?? 'global';
+    this.encryptionKey = config.encryptionKey;
 
     if (!this.token && !this.apiKey) {
       throw new Error('KFDBClient requires either token or apiKey');
@@ -36,6 +39,7 @@ export class KFDBClient {
       token: this.token,
       apiKey: this.apiKey,
       defaultReadScope: scope,
+      encryptionKey: this.encryptionKey,
     });
   }
 
@@ -56,7 +60,11 @@ export class KFDBClient {
 
     const encodedLabel = encodeURIComponent(label);
     const res = await this.request(`/api/v1/entities/${encodedLabel}?${params.toString()}`);
-    return this.parseJson<KfdbListEntitiesResponse>(res, 'list entities');
+    const data = await this.parseJson<KfdbListEntitiesResponse>(res, 'list entities');
+    if (this.encryptionKey && data.items.length > 0) {
+      data.items = await decryptResponseRows(this.encryptionKey, data.items);
+    }
+    return data;
   }
 
   async getEntity(label: string, id: string, options: KfdbGetEntityOptions = {}): Promise<KfdbEntityResponse> {
@@ -67,7 +75,12 @@ export class KFDBClient {
     const encodedLabel = encodeURIComponent(label);
     const encodedId = encodeURIComponent(id);
     const res = await this.request(`/api/v1/entities/${encodedLabel}/${encodedId}?${params.toString()}`);
-    return this.parseJson<KfdbEntityResponse>(res, 'get entity');
+    const data = await this.parseJson<KfdbEntityResponse>(res, 'get entity');
+    if (this.encryptionKey) {
+      const [decrypted] = await decryptResponseRows(this.encryptionKey, [data.properties]);
+      data.properties = decrypted;
+    }
+    return data;
   }
 
   async filterEntities(label: string, request: KfdbFilterEntitiesRequest): Promise<KfdbListEntitiesResponse> {
@@ -87,7 +100,11 @@ export class KFDBClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return this.parseJson<KfdbListEntitiesResponse>(res, 'filter entities');
+    const data = await this.parseJson<KfdbListEntitiesResponse>(res, 'filter entities');
+    if (this.encryptionKey && data.items.length > 0) {
+      data.items = await decryptResponseRows(this.encryptionKey, data.items);
+    }
+    return data;
   }
 
   async batchGetEntities(request: KfdbBatchGetEntitiesRequest): Promise<KfdbBatchGetEntitiesResponse> {
@@ -102,14 +119,43 @@ export class KFDBClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return this.parseJson<KfdbBatchGetEntitiesResponse>(res, 'batch get entities');
+    const data = await this.parseJson<KfdbBatchGetEntitiesResponse>(res, 'batch get entities');
+    if (this.encryptionKey) {
+      const entries = Object.entries(data.entities);
+      if (entries.length > 0) {
+        const props = entries.map(([, v]) => v);
+        const decrypted = await decryptResponseRows(this.encryptionKey, props);
+        for (let i = 0; i < entries.length; i++) {
+          data.entities[entries[i][0]] = decrypted[i];
+        }
+      }
+    }
+    return data;
   }
 
   async write(request: KfdbWriteRequest): Promise<KfdbWriteResponse> {
+    let payload = request;
+    if (this.encryptionKey) {
+      const encryptedOps = await Promise.all(
+        request.operations.map(async (op) => {
+          if (op.properties && typeof op.properties === 'object') {
+            return {
+              ...op,
+              properties: await encryptProperties(
+                this.encryptionKey!,
+                op.properties as Record<string, unknown>,
+              ),
+            };
+          }
+          return op;
+        }),
+      );
+      payload = { ...request, operations: encryptedOps };
+    }
     const res = await this.request('/api/v1/write', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(payload),
     });
     return this.parseJson<KfdbWriteResponse>(res, 'write');
   }

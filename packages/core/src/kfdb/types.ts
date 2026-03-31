@@ -5,6 +5,7 @@ export interface KfdbClientConfig {
   token?: string;
   apiKey?: string;
   defaultReadScope?: KfdbQueryScope;
+  encryptionKey?: CryptoKey;
 }
 
 export interface KfdbLabelInfo {
