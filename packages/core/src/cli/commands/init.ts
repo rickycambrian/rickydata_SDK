@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import * as readline from 'readline';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
 import { CLI_VERSION } from '../version.js';
@@ -99,6 +102,87 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${Math.floor(ms / (1000 * 60))}m`;
 }
 
+// ── Claude Code Wrapper Installation ─────────────────────────────────
+
+const WRAPPER_SCRIPT = `#!/usr/bin/env bash
+set -euo pipefail
+NATIVE_CLAUDE="$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")"
+TOKEN=$(node -e "try{const c=JSON.parse(require('fs').readFileSync(require('os').homedir()+'/.rickydata/credentials.json','utf8'));const profiles=c.profiles||{};console.log((profiles.default||profiles[Object.keys(profiles)[0]]||{}).token||'')}catch{}")
+exec env \\
+  ANTHROPIC_BASE_URL='https://agents.rickydata.org/claude-compat' \\
+  ANTHROPIC_AUTH_TOKEN="$TOKEN" \\
+  ANTHROPIC_CUSTOM_MODEL_OPTION='rickydata-agent' \\
+  ANTHROPIC_CUSTOM_MODEL_OPTION_NAME='rickydata TEE Agent' \\
+  ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION='Route through rickydata TEE gateway' \\
+  API_TIMEOUT_MS='3000000' \\
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC='1' \\
+  "$NATIVE_CLAUDE" "$@"
+`;
+
+async function installClaudeCodeWrapper(): Promise<'installed' | 'skipped' | 'error'> {
+  const binDir = path.join(os.homedir(), 'bin');
+  const wrapperPath = path.join(binDir, 'rickydata-claude');
+
+  try {
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(wrapperPath, WRAPPER_SCRIPT, { encoding: 'utf8', mode: 0o755 });
+    return 'installed';
+  } catch (err) {
+    console.log(chalk.dim(`  Could not write wrapper: ${err instanceof Error ? err.message : String(err)}`));
+    return 'error';
+  }
+}
+
+function isBinInPath(): boolean {
+  const binDir = path.join(os.homedir(), 'bin');
+  const pathDirs = (process.env.PATH ?? '').split(path.delimiter);
+  return pathDirs.some(d => d === binDir || path.resolve(d) === binDir);
+}
+
+async function runClaudeCodeWrapperStep(autoYes: boolean): Promise<void> {
+  const wrapperPath = path.join(os.homedir(), 'bin', 'rickydata-claude');
+  const alreadyInstalled = fs.existsSync(wrapperPath);
+
+  if (alreadyInstalled && !autoYes) {
+    console.log(chalk.dim('rickydata-claude wrapper already installed at ~/bin/rickydata-claude.'));
+    const shouldReinstall = await promptYesNo('  Reinstall?', false);
+    if (!shouldReinstall) {
+      console.log(chalk.dim('  Skipped — keeping existing wrapper'));
+      return;
+    }
+  } else if (!autoYes) {
+    const shouldInstall = await promptYesNo(
+      'Set up Claude Code to use rickydata gateway? (routes LLM calls through TEE)',
+      false,
+    );
+    if (!shouldInstall) {
+      console.log(chalk.dim('  Skipped — run `rickydata init --claude-code` anytime to install'));
+      return;
+    }
+  }
+
+  const spinner = ora('Installing rickydata-claude wrapper...').start();
+  const result = await installClaudeCodeWrapper();
+
+  if (result === 'installed') {
+    spinner.succeed(`Wrapper installed at ${chalk.cyan('~/bin/rickydata-claude')}`);
+    console.log(chalk.dim('  Reads your token dynamically — no re-install needed after re-auth'));
+
+    if (!isBinInPath()) {
+      console.log();
+      console.log(chalk.yellow('  ~/bin is not in your PATH. Add this to ~/.zshrc or ~/.bashrc:'));
+      console.log(chalk.cyan('    export PATH="$HOME/bin:$PATH"'));
+      console.log(chalk.dim('  Then open a new terminal and run: rickydata-claude'));
+    } else {
+      console.log(chalk.dim('  Usage: rickydata-claude (in place of claude)'));
+    }
+  } else {
+    spinner.fail('Failed to install wrapper');
+    console.log(chalk.dim(`  Path: ${wrapperPath}`));
+    console.log(chalk.dim('  You can install manually — see `rickydata init --claude-code`'));
+  }
+}
+
 // ── Init Command ─────────────────────────────────────────────────────
 
 export function createInitCommand(config: ConfigManager, store: CredentialStore): Command {
@@ -107,10 +191,21 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
     .option('--profile <profile>', 'Config profile')
     .option('-y, --yes', 'Auto-accept all prompts')
     .option('--skip-verify', 'Skip connection verification')
+    .option('--claude-code', 'Install the rickydata-claude wrapper only (skip other steps)')
     .action(async (opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const mcpUrl = config.getMcpGatewayUrl(profile).replace(/\/$/, '');
       const autoYes = opts.yes ?? false;
+
+      // ─── Standalone --claude-code flag ───────────────────────────
+      if (opts.claudeCode) {
+        console.log();
+        console.log(chalk.bold('rickydata Claude Code wrapper'));
+        console.log(chalk.dim('─────────────────────────────'));
+        await runClaudeCodeWrapperStep(autoYes);
+        console.log();
+        return;
+      }
 
       console.log();
       console.log(chalk.bold('Welcome to rickydata!') + ' Let\'s get you set up.');
@@ -407,8 +502,14 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
-      // ─── Step 5: Ready ───────────────────────────────────────────
-      console.log(chalk.bold('Step 5/5: Ready!'));
+      // ─── Step 5: Claude Code Wrapper ────────────────────────────
+      console.log(chalk.bold('Step 5/6: Claude Code Wrapper'));
+      console.log(chalk.dim('─────────────────────────────'));
+      await runClaudeCodeWrapperStep(autoYes);
+      console.log();
+
+      // ─── Step 6: Ready ───────────────────────────────────────────
+      console.log(chalk.bold('Step 6/6: Ready!'));
       console.log(chalk.dim('────────────────'));
 
       if (claudeInstalled) {

@@ -13,9 +13,11 @@ import { createMcpCommands } from './commands/mcp.js';
 import { createCanvasCommands } from './commands/canvas.js';
 import { createGitHubCommands } from './commands/github.js';
 import { createKfdbCommands } from './commands/kfdb.js';
+import { createTrackingCommands } from './commands/tracking.js';
 import { createInitCommand } from './commands/init.js';
 import { toCliError } from './errors.js';
 import { CLI_VERSION } from './version.js';
+import { handleResume } from './commands/resume.js';
 
 export function createProgram(configManager?: ConfigManager, credentialStore?: CredentialStore): Command {
   const config = configManager ?? new ConfigManager();
@@ -40,16 +42,32 @@ export function createProgram(configManager?: ConfigManager, credentialStore?: C
   program.addCommand(createCanvasCommands(config, store));
   program.addCommand(createGitHubCommands(config, store));
   program.addCommand(createKfdbCommands(config, store));
+  program.addCommand(createTrackingCommands(config, store));
 
   return program;
 }
 
 // Auto-run when executed directly (bin entry point calls this)
 export async function run(argv?: string[]): Promise<void> {
+  const args = argv ?? process.argv;
+
+  // Pre-parse intercept: --resume <prefix>
+  const resumeIdx = args.indexOf('--resume');
+  if (resumeIdx !== -1) {
+    const prefix = args[resumeIdx + 1];
+    if (!prefix || prefix.startsWith('-')) {
+      console.error('Usage: rickydata --resume <session-id-prefix>');
+      process.exitCode = 1;
+      return;
+    }
+    await handleResume(prefix);
+    return;
+  }
+
   const program = createProgram();
   program.exitOverride();
   try {
-    await program.parseAsync(argv ?? process.argv);
+    await program.parseAsync(args);
   } catch (error) {
     if (
       error instanceof CommanderError
