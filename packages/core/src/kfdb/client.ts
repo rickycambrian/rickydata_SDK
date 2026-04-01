@@ -20,6 +20,8 @@ export class KFDBClient {
   private readonly apiKey?: string;
   private readonly defaultReadScope: KfdbQueryScope;
   private readonly encryptionKey?: CryptoKey;
+  private deriveSessionId: string | null = null;
+  private deriveKeyHex: string | null = null;
 
   constructor(config: KfdbClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
@@ -31,6 +33,25 @@ export class KFDBClient {
     if (!this.token && !this.apiKey) {
       throw new Error('KFDBClient requires either token or apiKey');
     }
+  }
+
+  /**
+   * Set derive session credentials for user-controlled encryption.
+   * When set, X-Derive-Session-Id and X-Derive-Key headers are sent
+   * with all subsequent requests, enabling server-side user-key decryption.
+   */
+  setDeriveSession(sessionId: string, derivedKeyHex: string): void {
+    this.deriveSessionId = sessionId;
+    this.deriveKeyHex = derivedKeyHex;
+  }
+
+  /**
+   * Clear derive session credentials.
+   * Subsequent requests will not include derive session headers.
+   */
+  clearDeriveSession(): void {
+    this.deriveSessionId = null;
+    this.deriveKeyHex = null;
   }
 
   withScope(scope: KfdbQueryScope): KFDBClient {
@@ -172,6 +193,11 @@ export class KFDBClient {
 
     const headers = new Headers(init?.headers ?? {});
     headers.set('Authorization', `Bearer ${token}`);
+
+    if (this.deriveSessionId && this.deriveKeyHex) {
+      headers.set('X-Derive-Session-Id', this.deriveSessionId);
+      headers.set('X-Derive-Key', this.deriveKeyHex);
+    }
 
     return fetch(`${this.baseUrl}${path}`, {
       ...init,
