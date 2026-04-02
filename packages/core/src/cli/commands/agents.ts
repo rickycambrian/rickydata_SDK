@@ -385,15 +385,23 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
           `Agent ID: ${id}`,
           agent.description ? `\nYour specialization: ${agent.description}` : '',
           skillsList ? `\nYour skills: ${skillsList}` : '',
-          `\nYou have full access to the local filesystem AND your specialized MCP tools.`,
-          `When answering questions in your domain, use your knowledge directly.`,
-          `For queries requiring live data, use mcp__claude_ai_rickydata__agent_chat with agentId: "${id}".`,
-          `You also have access to the user's local project files — help them with both domain expertise and code.`,
+          '',
+          'IMPORTANT — Tool Usage:',
+          `Your PRIMARY tool for domain queries is: mcp__claude_ai_rickydata__agent_chat with agentId: "${id}"`,
+          'This tool connects to your specialized backend with live data, MCP tools, and domain knowledge.',
+          'ALWAYS use agent_chat for domain-specific questions (e.g., on-chain data, protocol queries, search).',
+          'Do NOT use mcp__knowledgeflow-db__* or other local MCP tools for your domain — those belong to the user\'s local setup.',
+          '',
+          'You also have access to the local filesystem (Read, Write, Edit, Bash) for helping with the user\'s code.',
+          'Combine your domain expertise with local file access to help users with both knowledge and implementation.',
         ].filter(Boolean).join('\n');
 
         const gatewayArgs: string[] = ['--append-system-prompt', systemPrompt];
         if (opts.dangerouslySkipPermissions) {
           gatewayArgs.push('--dangerously-skip-permissions');
+        } else {
+          // Force normal permission mode — overrides global skipDangerousModePermissionPrompt
+          gatewayArgs.push('--permission-mode', 'default');
         }
 
         const child = spawn(claudePath, gatewayArgs, {
@@ -484,6 +492,8 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
         const localArgs: string[] = [];
         if (opts.dangerouslySkipPermissions) {
           localArgs.push('--dangerously-skip-permissions');
+        } else {
+          localArgs.push('--permission-mode', 'default');
         }
 
         const child = spawn('claude', localArgs, { stdio: 'inherit' });
