@@ -6,6 +6,8 @@ export interface KfdbClientConfig {
   apiKey?: string;
   defaultReadScope?: KfdbQueryScope;
   encryptionKey?: CryptoKey;
+  /** Ethereum wallet address (0x-prefixed). When set, write() enforces that sign-to-derive is active. */
+  walletAddress?: string;
 }
 
 export interface KfdbLabelInfo {

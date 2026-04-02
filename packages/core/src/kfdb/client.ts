@@ -20,6 +20,7 @@ export class KFDBClient {
   private readonly apiKey?: string;
   private readonly defaultReadScope: KfdbQueryScope;
   private readonly encryptionKey?: CryptoKey;
+  private readonly walletAddress?: string;
   private deriveSessionId: string | null = null;
   private deriveKeyHex: string | null = null;
 
@@ -29,6 +30,7 @@ export class KFDBClient {
     this.apiKey = config.apiKey;
     this.defaultReadScope = config.defaultReadScope ?? 'global';
     this.encryptionKey = config.encryptionKey;
+    this.walletAddress = config.walletAddress;
 
     if (!this.token && !this.apiKey) {
       throw new Error('KFDBClient requires either token or apiKey');
@@ -61,6 +63,7 @@ export class KFDBClient {
       apiKey: this.apiKey,
       defaultReadScope: scope,
       encryptionKey: this.encryptionKey,
+      walletAddress: this.walletAddress,
     });
   }
 
@@ -155,6 +158,12 @@ export class KFDBClient {
   }
 
   async write(request: KfdbWriteRequest): Promise<KfdbWriteResponse> {
+    if (this.walletAddress && !this.deriveSessionId) {
+      throw new Error(
+        'Sign-to-derive session required for writes when walletAddress is configured. ' +
+        'Call setDeriveSession() before writing data.',
+      );
+    }
     let payload = request;
     if (this.encryptionKey) {
       const encryptedOps = await Promise.all(
