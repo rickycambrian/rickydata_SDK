@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/trace",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Trace recorder, viewer, and timeline for rickydata agent interactions",
   "type": "module",
   "main": "./dist/index.cjs",
