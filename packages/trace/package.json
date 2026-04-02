@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/trace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Trace recorder, viewer, and timeline for rickydata agent interactions",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean --external react --external react-dom --external rickydata",
     "typecheck": "tsc --noEmit",
