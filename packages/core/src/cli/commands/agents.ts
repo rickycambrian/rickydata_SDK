@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, execFileSync } from 'child_process';
@@ -100,15 +99,62 @@ async function detectProvider(token: string, gatewayUrl: string): Promise<Provid
   }
 }
 
-// ── Choice Prompt ─────────────────────────────────────────────────────
+// ── Arrow-Key Selector ───────────────────────────────────────────────
 
-function promptChoice(question: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+function promptSelector(options: { label: string; description: string }[]): Promise<number> {
+  let selected = 0;
+  let firstRender = true;
+
+  const render = () => {
+    // Move cursor up to overwrite previous render (skip on first)
+    if (!firstRender) {
+      process.stdout.write(`\x1b[${options.length + 1}A`);
+    }
+    firstRender = false;
+
+    for (let i = 0; i < options.length; i++) {
+      const prefix = i === selected ? chalk.cyan('  ❯ ') : '    ';
+      const label = i === selected ? chalk.bold.cyan(options[i].label) : options[i].label;
+      const desc = chalk.dim(options[i].description);
+      process.stdout.write(`\x1b[2K${prefix}${label} ${desc}\n`);
+    }
+    process.stdout.write(`\x1b[2K  ${chalk.dim('↑↓ to select, Enter to confirm')}\n`);
+  };
+
+  render();
+
   return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
+    if (!process.stdin.isTTY) {
+      // Non-interactive fallback — pick first option
+      resolve(0);
+      return;
+    }
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+
+    const handler = (key: Buffer) => {
+      const k = key.toString();
+      if (k === '\x1b[A' || k === 'k') { // Up arrow or k
+        selected = (selected - 1 + options.length) % options.length;
+        render();
+      } else if (k === '\x1b[B' || k === 'j') { // Down arrow or j
+        selected = (selected + 1) % options.length;
+        render();
+      } else if (k === '\r' || k === '\n') { // Enter
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', handler);
+        console.log();
+        resolve(selected);
+      } else if (k === '\x03') { // Ctrl+C
+        process.stdin.setRawMode(false);
+        process.stdout.write('\n');
+        process.exit(0);
+      }
+    };
+
+    process.stdin.on('data', handler);
   });
 }
 
@@ -254,6 +300,7 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
     .description('Use an agent with Claude Code (Gateway or Local+Teammate mode)')
     .option('--profile <profile>', 'Profile to use')
     .option('--gateway <url>', 'Override agent gateway URL')
+    .option('--dangerously-skip-permissions', 'Skip permission prompts in Claude Code')
     .action(async (id: string, opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
@@ -313,31 +360,43 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
       console.log();
       console.log(`  How would you like to use this agent?`);
       console.log();
-      console.log(`  ${chalk.bold('(1) Gateway Claude Code')} ${chalk.dim('— Run Claude Code through the')}`);
-      console.log(`      ${chalk.dim('rickydata TEE gateway. The agent\'s knowledge and tools')}`);
-      console.log(`      ${chalk.dim('are available directly. Uses your current provider.')}`);
-      console.log();
-      console.log(`  ${chalk.bold('(2) Local Claude Code + Agent Teammate')} ${chalk.dim('— Use your own')}`);
-      console.log(`      ${chalk.dim('Claude Code subscription (e.g. Claude Max). The agent')}`);
-      console.log(`      ${chalk.dim('is available as a teammate that delegates work to the')}`);
-      console.log(`      ${chalk.dim('rickydata gateway (essentially free).')}`);
-      console.log();
 
-      const choice = await promptChoice('  Choice [1/2]: ');
+      const selected = await promptSelector([
+        { label: 'Gateway Claude Code', description: '— agent runs through rickydata TEE gateway' },
+        { label: 'Local Claude Code + Agent Teammate', description: '— your subscription + free agent delegate' },
+      ]);
 
-      if (choice === '1') {
+      if (selected === 0) {
         // Option 1: Gateway Claude Code
         const claudePath = findClaude() ?? 'claude';
 
         console.log();
         console.log(chalk.green('  ✓') + ' Launching Gateway Claude Code...');
-        console.log(chalk.dim(`  Routing through rickydata TEE gateway with agent: ${id}`));
+        console.log(chalk.dim(`  Routing through rickydata TEE gateway as: ${agent.name ?? id}`));
         console.log();
 
-        const child = spawn(claudePath, [
-          '--append-system-prompt',
-          `You have access to the ${id} agent. Use mcp__claude_ai_rickydata__agent_chat with agentId: "${id}" to delegate work to this specialist agent (${agent.name ?? id}). When a task requires specialized knowledge, always delegate to this agent first.`,
-        ], {
+        // Build rich identity prompt so Claude Code acts AS the agent
+        const agentName = agent.name ?? id;
+        const skillsList = (agent.skills ?? []).map((s: string | SkillInfo) =>
+          typeof s === 'string' ? s : s.name,
+        ).join(', ');
+        const systemPrompt = [
+          `You ARE the ${agentName} agent, provided by rickydata.`,
+          `Agent ID: ${id}`,
+          agent.description ? `\nYour specialization: ${agent.description}` : '',
+          skillsList ? `\nYour skills: ${skillsList}` : '',
+          `\nYou have full access to the local filesystem AND your specialized MCP tools.`,
+          `When answering questions in your domain, use your knowledge directly.`,
+          `For queries requiring live data, use mcp__claude_ai_rickydata__agent_chat with agentId: "${id}".`,
+          `You also have access to the user's local project files — help them with both domain expertise and code.`,
+        ].filter(Boolean).join('\n');
+
+        const gatewayArgs: string[] = ['--append-system-prompt', systemPrompt];
+        if (opts.dangerouslySkipPermissions) {
+          gatewayArgs.push('--dangerously-skip-permissions');
+        }
+
+        const child = spawn(claudePath, gatewayArgs, {
           env: {
             ...process.env,
             ANTHROPIC_BASE_URL: 'https://agents.rickydata.org/claude-compat',
@@ -359,7 +418,7 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
           process.exit(code ?? 0);
         });
 
-      } else if (choice === '2') {
+      } else {
         // Option 2: Local Claude Code + Agent Teammate
         console.log();
 
@@ -421,8 +480,13 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
         console.log(chalk.cyan(`    "Use agent_chat to ask ${id} about <topic>"`));
         console.log();
 
-        // Launch claude normally
-        const child = spawn('claude', [], { stdio: 'inherit' });
+        // Launch claude normally (user's own subscription)
+        const localArgs: string[] = [];
+        if (opts.dangerouslySkipPermissions) {
+          localArgs.push('--dangerously-skip-permissions');
+        }
+
+        const child = spawn('claude', localArgs, { stdio: 'inherit' });
 
         child.on('error', (err) => {
           // claude may not be installed — still succeed since file was written
@@ -434,11 +498,6 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
         child.on('exit', (code) => {
           process.exit(code ?? 0);
         });
-
-      } else {
-        console.log();
-        console.log(chalk.yellow('  Invalid choice. Run the command again and enter 1 or 2.'));
-        process.exit(1);
       }
     });
 
