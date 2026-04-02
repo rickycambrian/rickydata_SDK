@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/github",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "GitHub integration hooks, providers, and components for the rickydata Agent Gateway SDK",
   "type": "module",
   "main": "./dist/index.cjs",

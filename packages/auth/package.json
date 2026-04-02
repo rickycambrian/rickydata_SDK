@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/auth",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Shared authentication types, token caching, and wallet adapters for rickydata apps",
   "type": "module",
   "main": "dist/index.js",

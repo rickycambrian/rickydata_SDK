@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/react",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "React hooks, providers, and components for the rickydata Agent Gateway SDK",
   "type": "module",
   "main": "./dist/index.cjs",
