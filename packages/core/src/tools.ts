@@ -8,6 +8,18 @@ import {
   extractReceiptFromPaymentData,
 } from './payment/offer-receipt-verifier.js';
 
+/** Only Base mainnet is supported for payments */
+const TRUSTED_CHAIN_IDS = new Set([8453]);
+
+/** Trusted USDC contract addresses per chain */
+const TRUSTED_USDC_ADDRESSES: Record<number, string> = {
+  8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+};
+
+/** Maximum payment amount per tool call in USDC base units ($0.001 = 1000 base units).
+ *  Prevents spoofed 402 responses from requesting excessive amounts. */
+const MAX_TOOL_PAYMENT_AMOUNT = 1000n;
+
 // Minimal interface for receipt recording — avoids tight coupling to SpendingWallet
 interface ReceiptRecordable {
   recordServerReceipt(receipt: ServerReceipt): void;
@@ -19,6 +31,9 @@ export class ToolsManager {
     private auth: AuthManager,
     private wallet: SpendingWallet | null,
     private autoSign: boolean,
+    /** Expected payment recipient address. When set, 402 responses with a different
+     *  payTo are rejected to prevent spoofed payment redirection. */
+    private expectedRecipient?: string,
   ) {}
 
   getSpending(): SpendingSummary {
@@ -99,10 +114,30 @@ export class ToolsManager {
         chainId = 8453;
       }
 
+      // Validate chain ID against trusted set (prevents spoofed 402 redirecting to wrong chain)
+      if (!TRUSTED_CHAIN_IDS.has(chainId)) {
+        throw new Error(`Untrusted chain ID ${chainId} in payment requirements. Only Base mainnet (8453) is supported.`);
+      }
+
+      // Override USDC contract with trusted value (prevents spoofed 402 redirecting to wrong token)
+      const trustedUsdc = TRUSTED_USDC_ADDRESSES[chainId];
+
+      // Validate payment amount does not exceed cap (prevents spoofed 402 inflating charges)
+      const rawAmount = accept.maxAmountRequired ?? accept.amount ?? '0';
+      if (BigInt(rawAmount) > MAX_TOOL_PAYMENT_AMOUNT) {
+        throw new Error(`Payment amount ${rawAmount} exceeds maximum allowed ${MAX_TOOL_PAYMENT_AMOUNT} for tool calls`);
+      }
+
+      // Validate payment recipient against expected operator (prevents spoofed 402 redirecting funds)
+      const recipient = accept.payTo ?? '';
+      if (this.expectedRecipient && recipient && recipient.toLowerCase() !== this.expectedRecipient.toLowerCase()) {
+        throw new Error(`Payment recipient ${recipient} does not match expected operator ${this.expectedRecipient}`);
+      }
+
       const requirements: PaymentRequirements = {
-        amount: accept.maxAmountRequired ?? accept.amount ?? '0',
-        recipient: accept.payTo ?? '',
-        usdcContract: accept.asset ?? '',
+        amount: rawAmount,
+        recipient,
+        usdcContract: trustedUsdc ?? accept.asset ?? '',
         network: networkStr,
         chainId,
         tokenName: accept.extra?.name ?? 'USD Coin',

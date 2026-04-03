@@ -177,8 +177,8 @@ describe('ToolsManager', () => {
     expect(retryHeaders.get('x-payment')).toBe('signed-payment-header');
   });
 
-  it('parses CAIP-2 network format from 402 response', async () => {
-    // 402 response uses CAIP-2 network "eip155:8453"
+  it('rejects non-Base-mainnet chain IDs from 402 response', async () => {
+    // 402 response uses Base Sepolia (testnet) — must be rejected
     const mock402 = {
       ok: false,
       status: 402,
@@ -187,6 +187,39 @@ describe('ToolsManager', () => {
           scheme: 'exact', network: 'eip155:84532', amount: '1000',
           payTo: '0x0000000000000000000000000000000000000002',
           asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          extra: { name: 'USD Coin', version: '2' },
+        }],
+        x402Version: 2,
+      }),
+    } as unknown as Response;
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(mock402);
+
+    const mockWallet = {
+      signPayment: vi.fn().mockResolvedValue({ header: 'h', receipt: {} }),
+      recordFailure: vi.fn(),
+      getSpending: vi.fn().mockReturnValue({ totalSpent: 0, sessionSpent: 0, daySpent: 0, weekSpent: 0, callCount: 0 }),
+    } as any;
+
+    const tools = new ToolsManager(BASE, auth, mockWallet, true);
+    await expect(tools.callTool('server-1', 'search', {}))
+      .rejects.toThrow('Untrusted chain ID 84532');
+
+    // signPayment should NOT have been called
+    expect(mockWallet.signPayment).not.toHaveBeenCalled();
+  });
+
+  it('parses CAIP-2 Base mainnet network from 402 response', async () => {
+    // 402 response uses Base mainnet — should be accepted
+    const mock402 = {
+      ok: false,
+      status: 402,
+      json: () => Promise.resolve({
+        accepts: [{
+          scheme: 'exact', network: 'eip155:8453', amount: '500',
+          payTo: '0x0000000000000000000000000000000000000002',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
           extra: { name: 'USD Coin', version: '2' },
         }],
         x402Version: 2,
@@ -211,13 +244,13 @@ describe('ToolsManager', () => {
     const tools = new ToolsManager(BASE, auth, mockWallet, true);
     await tools.callTool('server-1', 'search', {});
 
-    // Verify signPayment was called with correct chainId parsed from CAIP-2
+    // Verify signPayment was called with correct chainId and trusted USDC
     const callArgs = mockWallet.signPayment.mock.calls[0];
     const requirements = callArgs[0];
-    expect(requirements.chainId).toBe(84532); // Base Sepolia from "eip155:84532"
-    expect(requirements.network).toBe('eip155:84532');
-    expect(requirements.amount).toBe('1000');
-    expect(requirements.usdcContract).toBe('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+    expect(requirements.chainId).toBe(8453);
+    expect(requirements.network).toBe('eip155:8453');
+    expect(requirements.amount).toBe('500');
+    expect(requirements.usdcContract).toBe('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
   });
 
   it('throws on fetch timeout (AbortError)', async () => {
