@@ -502,14 +502,75 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
 
       console.log();
 
-      // ─── Step 5: Claude Code Wrapper ────────────────────────────
-      console.log(chalk.bold('Step 5/6: Claude Code Wrapper'));
+      // ─── Step 5: Default Provider ─────────────────────────────────
+      console.log(chalk.bold('Step 5/7: Default Provider'));
+      console.log(chalk.dim('──────────────────────────'));
+      console.log('Choose your default AI model for agent chat:');
+      console.log();
+      console.log(chalk.cyan('  1.') + chalk.bold(' OpenRouter — Gemma 4') + chalk.dim(' (50 free/day, zero data retention)') + chalk.green(' [recommended]'));
+      console.log(chalk.cyan('  2.') + chalk.bold(' MiniMax — M2.7') + chalk.dim(' (100 free/day)'));
+      console.log(chalk.cyan('  3.') + chalk.bold(' Anthropic — Claude') + chalk.dim(' (bring your own key)'));
+      console.log();
+
+      let providerChoice = '1';  // Default: OpenRouter
+      if (!autoYes) {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        providerChoice = await new Promise<string>((resolve) => {
+          rl.question('Your choice [1]: ', (answer) => {
+            rl.close();
+            resolve(answer.trim() || '1');
+          });
+        });
+      }
+
+      const providerMap: Record<string, { plan: string; modelProvider: string; defaultModel: string; label: string }> = {
+        '1': { plan: 'free', modelProvider: 'openrouter', defaultModel: 'google/gemma-4-26b-a4b-it', label: 'OpenRouter (Gemma 4)' },
+        '2': { plan: 'free', modelProvider: 'minimax', defaultModel: 'MiniMax-M2.7-highspeed', label: 'MiniMax (M2.7)' },
+        '3': { plan: 'byok', modelProvider: 'anthropic', defaultModel: 'claude-haiku-4-5-20251001', label: 'Anthropic (Claude)' },
+      };
+      const chosen = providerMap[providerChoice] ?? providerMap['1'];
+
+      if (token) {
+        const settingsSpinner = ora(`Setting default provider to ${chosen.label}...`).start();
+        try {
+          const settingsRes = await fetch(`${agentUrl}/wallet/settings`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              plan: chosen.plan,
+              modelProvider: chosen.modelProvider,
+              defaultModel: chosen.defaultModel,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+          if (settingsRes.ok) {
+            settingsSpinner.succeed(`Default provider: ${chalk.cyan(chosen.label)}`);
+            if (chosen.modelProvider === 'openrouter') {
+              console.log(chalk.dim('  Zero data retention — your prompts are not stored by the provider'));
+            }
+            if (chosen.modelProvider === 'anthropic') {
+              console.log(chalk.dim('  Run `rickydata apikey set` to add your Anthropic API key'));
+            }
+          } else {
+            settingsSpinner.fail('Could not update provider settings');
+            console.log(chalk.dim('  You can change this later at https://marketplace.rickydata.org/#/wallet'));
+          }
+        } catch {
+          settingsSpinner.fail('Could not reach gateway to update settings');
+          console.log(chalk.dim('  You can change this later at https://marketplace.rickydata.org/#/wallet'));
+        }
+      }
+
+      console.log();
+
+      // ─── Step 6: Claude Code Wrapper ────────────────────────────
+      console.log(chalk.bold('Step 6/7: Claude Code Wrapper'));
       console.log(chalk.dim('─────────────────────────────'));
       await runClaudeCodeWrapperStep(autoYes);
       console.log();
 
-      // ─── Step 6: Ready ───────────────────────────────────────────
-      console.log(chalk.bold('Step 6/6: Ready!'));
+      // ─── Step 7: Ready ───────────────────────────────────────────
+      console.log(chalk.bold('Step 7/7: Ready!'));
       console.log(chalk.dim('────────────────'));
 
       if (claudeInstalled) {
@@ -532,12 +593,17 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log(chalk.dim('  rickydata mcp agent disable    Remove agent tools'));
       console.log(chalk.dim('  rickydata mcp agent list       Show enabled agents'));
       console.log();
-      console.log(chalk.green('✓') + ' 100 free daily requests — no funding needed to start');
-      console.log(chalk.green('✓') + ' Agent chat works immediately with free tier (MiniMax model)');
+      const freeTierMsg = chosen.modelProvider === 'openrouter'
+        ? '50 free daily requests with Gemma 4 (zero data retention)'
+        : chosen.modelProvider === 'minimax'
+          ? '100 free daily requests with MiniMax M2.7'
+          : 'Unlimited with your Anthropic API key (10% platform fee)';
+      console.log(chalk.green('✓') + ` ${freeTierMsg}`);
+      console.log(chalk.green('✓') + ' Agent chat works immediately — no funding needed to start');
       console.log();
       console.log(chalk.dim('Optional next steps:'));
       console.log(chalk.dim('  rickydata chat <agent-id>      Start chatting (works on free tier!)'));
-      console.log(chalk.dim('  rickydata apikey set           Upgrade to Anthropic models (BYOK — bring your own key)'));
+      console.log(chalk.dim('  rickydata apikey set           Upgrade to Anthropic/OpenRouter (BYOK)'));
       console.log(chalk.dim('  rickydata wallet balance       Check your USDC balance'));
       console.log();
     });

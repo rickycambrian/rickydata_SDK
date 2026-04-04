@@ -44,8 +44,11 @@ async function resolveModel(
   try {
     const settings = await client.getWalletSettings();
 
-    // Explicit free plan — also fix settings mismatch if modelProvider is wrong
+    // Explicit free plan — use the configured model provider (OpenRouter or MiniMax)
     if (settings.plan === 'free') {
+      if (settings.modelProvider === 'openrouter') {
+        return settings.defaultModel || 'google/gemma-4-26b-a4b-it';
+      }
       if (settings.modelProvider !== 'minimax') {
         client.updateWalletSettings({ modelProvider: 'minimax', defaultModel: FREE_TIER_MODEL }).catch(() => {});
       }
@@ -55,6 +58,11 @@ async function resolveModel(
     // Explicit BYOK plan
     if (settings.plan === 'byok') {
       return settings.defaultModel || 'haiku';
+    }
+
+    // OpenRouter BYOK plan
+    if (settings.plan === 'openrouter_byok') {
+      return settings.defaultModel || 'google/gemma-4-26b-a4b-it';
     }
 
     // Plan not set — probe API key to decide
