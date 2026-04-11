@@ -214,6 +214,8 @@ Scope model:
 
 Run `rickydata kfdb init` to configure direct API access with an API key.
 
+If you are building a non-TypeScript client that implements HTTP calls directly, use the cross-language auth + KFDB wire contract at [docs/contracts/cross-language-auth-kfdb.yaml](/Users/riccardoesclapon/Documents/github/rickydata_SDK/docs/contracts/cross-language-auth-kfdb.yaml). That artifact is the supported reference for wallet-token creation, canonical `mcpwt_` payload fields, and KFDB sign-to-derive session setup.
+
 ## Next Steps
 
 - **Import a GitHub repo**: `rickydata mcp call knowledgeflow-db import_github_repo --args '{"url": "https://github.com/owner/repo"}'`

@@ -1,0 +1,317 @@
+openapi: 3.1.0
+info:
+  title: RickyData Cross-Language Auth + KFDB Contract
+  version: 1.0.0
+  summary: Non-runtime wire contract for cross-language clients such as rickydatascience.
+  description: |
+    This artifact documents the HTTP-level contract that cross-language clients should
+    mirror without importing the TypeScript SDK at runtime.
+
+    Normative scope:
+    - wallet-token creation via `/api/auth/token-message` and `/api/auth/create-token`
+    - KFDB sign-to-derive session establishment via `/api/v1/auth/derive-challenge` and
+      `/api/v1/auth/derive-key`
+    - canonical `mcpwt_` token payload fields
+    - derive-session cache shape and request headers
+
+    Non-normative notes:
+    - challenge/verify JWT auth is a fallback or legacy flow and should not be the primary
+      path for new cross-language clients
+    - browser login UX remains out-of-band: obtain an `mcpwt_` token elsewhere, then pass
+      that token into the client directly
+    - `~/.rickydata/credentials.json`, browser `localStorage`, and CLI prompts are local
+      implementation details, not part of this contract
+servers:
+  - url: https://mcp.rickydata.org
+    description: MCP Gateway
+  - url: https://agents.rickydata.org
+    description: Agent Gateway
+paths:
+  /api/auth/token-message:
+    get:
+      summary: Get the canonical wallet-token signing message
+      description: |
+        Cross-language clients sign the returned message with EIP-191 `personal_sign`,
+        then exchange the signature at `/api/auth/create-token`.
+      parameters:
+        - in: query
+          name: walletAddress
+          required: true
+          schema:
+            type: string
+          description: Lowercase or checksummed 0x-prefixed Ethereum wallet address.
+        - in: query
+          name: expiresAt
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Requested wallet-token expiry as an ISO 8601 timestamp.
+        - in: query
+          name: permissions
+          required: false
+          schema:
+            type: string
+          description: Comma-separated permission list such as `telegram:read,kfdb:write`.
+        - in: query
+          name: serverId
+          required: false
+          schema:
+            type: string
+          description: Optional server restriction for the issued token.
+      responses:
+        '200':
+          description: Canonical message to sign
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+              example:
+                message: |-
+                  MCP Gateway Auth
+                  Wallet: 0x1234567890abcdef1234567890abcdef12345678
+                  Expires: 2027-01-01T00:00:00Z
+  /api/auth/create-token:
+    post:
+      summary: Create a long-lived self-verifying wallet token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletTokenCreateRequest'
+            examples:
+              default:
+                value:
+                  walletAddress: 0x1234567890abcdef1234567890abcdef12345678
+                  signature: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1b
+                  expiresAt: '2027-01-01T00:00:00Z'
+                  permissions:
+                    - telegram:read
+                    - kfdb:write
+                  serverId: srv-123
+      responses:
+        '200':
+          description: Wallet token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTokenCreateResponse'
+              example:
+                token: mcpwt_eyJzdWIiOiIweDEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2NzgiLCJpc3MiOiJyaWNreWRhdGEiLCJleHAiOjE4OTM0NTYwMDAsImlhdCI6MTcxMjc5MzYwMCwicGVybWlzc2lvbnMiOlsidGVsZWdyYW06cmVhZCIsImtmZGI6d3JpdGUiXSwic2VydmVyX2lkIjoic3J2LTEyMyJ9
+                walletAddress: 0x1234567890abcdef1234567890abcdef12345678
+                expiresAt: '2027-01-01T00:00:00Z'
+  /api/v1/auth/derive-challenge:
+    get:
+      summary: Start KFDB sign-to-derive session setup
+      description: |
+        Requires `Authorization: Bearer <token>`. The returned `typed_data` is signed with
+        EIP-712. Cross-language clients should treat the full object as opaque typed data
+        supplied by the server.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Derive challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeriveChallenge'
+              example:
+                challenge_id: challenge-abc
+                typed_data:
+                  types:
+                    EIP712Domain:
+                      - name: name
+                        type: string
+                  primaryType: Derive
+                  domain:
+                    name: KFDB
+                  message:
+                    wallet: 0x1234567890abcdef1234567890abcdef12345678
+  /api/v1/auth/derive-key:
+    post:
+      summary: Exchange a signed derive challenge for a KFDB derive session
+      description: |
+        Clients compute the local encryption key as `SHA-256(signature bytes)` and store it
+        alongside the returned session metadata. The server response does not contain the key.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeriveKeyRequest'
+            example:
+              challenge_id: challenge-abc
+              signature: 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1c
+              address: 0x1234567890abcdef1234567890abcdef12345678
+      responses:
+        '200':
+          description: Derive session established
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeriveKeyResult'
+              example:
+                session_id: session-123
+                expires_at: 1712800000000
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: mcpwt_ or JWT
+  schemas:
+    WalletTokenCreateRequest:
+      type: object
+      required:
+        - walletAddress
+        - signature
+        - expiresAt
+      properties:
+        walletAddress:
+          type: string
+        signature:
+          type: string
+          description: 0x-prefixed EIP-191 personal_sign signature.
+        expiresAt:
+          type: string
+          format: date-time
+        permissions:
+          type: array
+          items:
+            type: string
+        serverId:
+          type: string
+    WalletTokenCreateResponse:
+      type: object
+      required:
+        - token
+        - walletAddress
+        - expiresAt
+      properties:
+        token:
+          type: string
+          description: Self-verifying wallet token beginning with `mcpwt_`.
+        walletAddress:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    McpwtPayload:
+      type: object
+      description: |
+        Canonical payload embedded after the `mcpwt_` prefix. New clients should treat
+        `sub` as the canonical wallet identity field.
+      required:
+        - sub
+        - iss
+        - exp
+        - iat
+      properties:
+        sub:
+          type: string
+          description: Canonical wallet address field.
+        iss:
+          type: string
+        exp:
+          type: integer
+          description: Unix timestamp in seconds.
+        iat:
+          type: integer
+          description: Unix timestamp in seconds.
+        tid:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        server_id:
+          type: string
+      example:
+        sub: 0x1234567890abcdef1234567890abcdef12345678
+        iss: rickydata
+        exp: 1893456000
+        iat: 1712793600
+        permissions:
+          - telegram:read
+          - kfdb:write
+        server_id: srv-123
+    LegacyTokenDecodeNote:
+      type: object
+      description: |
+        `wallet` is legacy decode compatibility only. New cross-language clients should not
+        depend on `wallet` as the canonical field when decoding `mcpwt_` payloads.
+      properties:
+        wallet:
+          type: string
+          deprecated: true
+    DeriveChallenge:
+      type: object
+      required:
+        - challenge_id
+        - typed_data
+      properties:
+        challenge_id:
+          type: string
+        typed_data:
+          type: object
+          additionalProperties: true
+    DeriveKeyRequest:
+      type: object
+      required:
+        - challenge_id
+        - signature
+        - address
+      properties:
+        challenge_id:
+          type: string
+        signature:
+          type: string
+        address:
+          type: string
+    DeriveKeyResult:
+      type: object
+      required:
+        - session_id
+        - expires_at
+      properties:
+        session_id:
+          type: string
+        expires_at:
+          type: integer
+          description: Unix timestamp in milliseconds.
+    DeriveSessionCache:
+      type: object
+      description: |
+        Suggested persisted cache shape for cross-language clients. Key entries by lowercase
+        wallet address and refresh when within 60 seconds of `expiresAt`.
+      required:
+        - sessionId
+        - keyHex
+        - expiresAt
+        - address
+      properties:
+        sessionId:
+          type: string
+        keyHex:
+          type: string
+          description: SHA-256(signature bytes), typically stored as a 0x-prefixed 32-byte hex string.
+        expiresAt:
+          type: integer
+          description: Unix timestamp in milliseconds.
+        address:
+          type: string
+x-rickydata-notes:
+  requestHeadersAfterDerive:
+    - X-Derive-Session-Id
+    - X-Derive-Key
+  implementationNotes:
+    - Browser login is out-of-band; obtain an mcpwt_ token elsewhere, then inject it into the client.
+    - Do not require cross-language clients to read JS credential files or browser storage.

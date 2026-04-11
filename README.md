@@ -138,6 +138,8 @@ rickydata auth login
 
 Opens your browser to sign in with email, Google, GitHub, Discord, or any Web3 wallet. Produces a `mcpwt_` wallet token valid for 30 days that works with both the MCP Gateway and Agent Gateway.
 
+Cross-language clients that implement raw HTTP calls directly should mirror the wire contract in [docs/contracts/cross-language-auth-kfdb.yaml](/Users/riccardoesclapon/Documents/github/rickydata_SDK/docs/contracts/cross-language-auth-kfdb.yaml) rather than depend on the TypeScript SDK at runtime.
+
 ### Other Methods
 
 | Method | Command | When to Use |
@@ -315,6 +317,8 @@ await kfdb.write({
   ],
 });
 ```
+
+For non-TS clients that need wallet-token auth or KFDB sign-to-derive session setup, use the shared contract artifact at [docs/contracts/cross-language-auth-kfdb.yaml](/Users/riccardoesclapon/Documents/github/rickydata_SDK/docs/contracts/cross-language-auth-kfdb.yaml). It documents the stable HTTP shapes without requiring JS storage, CLI UX, or runtime coupling.
 
 ### Agent Chat
 
