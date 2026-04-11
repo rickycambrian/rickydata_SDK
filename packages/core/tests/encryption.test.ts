@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   deriveKeyFromSignature,
+  deriveKeyFromSignatureLegacy,
   getDeriveKeyMessage,
   importKeyFromHex,
   encryptValue,
@@ -29,11 +30,19 @@ describe('getDeriveKeyMessage', () => {
 });
 
 describe('deriveKeyFromSignature', () => {
-  it('produces a deterministic 32-byte hex key', () => {
+  it('produces a deterministic 32-byte hex key using SHA-256', () => {
     const key1 = deriveKeyFromSignature(TEST_SIG);
     const key2 = deriveKeyFromSignature(TEST_SIG);
     expect(key1).toBe(key2);
     expect(key1).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it('produces a different key than legacy keccak256 derivation', () => {
+    const sha256Key = deriveKeyFromSignature(TEST_SIG);
+    const keccakKey = deriveKeyFromSignatureLegacy(TEST_SIG);
+    expect(sha256Key).not.toBe(keccakKey);
+    // Both should be valid 32-byte hex keys
+    expect(keccakKey).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
   it('accepts signatures without 0x prefix', () => {
@@ -44,6 +53,15 @@ describe('deriveKeyFromSignature', () => {
 
   it('rejects invalid signature length', () => {
     expect(() => deriveKeyFromSignature('0xabcd')).toThrow('Invalid signature length');
+  });
+});
+
+describe('deriveKeyFromSignatureLegacy', () => {
+  it('produces a deterministic 32-byte hex key using keccak256', () => {
+    const key1 = deriveKeyFromSignatureLegacy(TEST_SIG);
+    const key2 = deriveKeyFromSignatureLegacy(TEST_SIG);
+    expect(key1).toBe(key2);
+    expect(key1).toMatch(/^0x[0-9a-f]{64}$/);
   });
 });
 

@@ -4,12 +4,12 @@
  * Provides cryptographic utilities for sign-to-derive key derivation
  * and AES-256-GCM client-side encryption/decryption.
  *
- * Uses viem's keccak256 for Ethereum-compatible hashing.
+ * Uses SHA-256 for key derivation (matching the Go/SiYuan client).
  * All encryption/decryption happens client-side via WebCrypto —
  * the server never sees plaintext property values.
  */
 
-import { keccak256, hexToBytes } from 'viem';
+import { sha256, keccak256, hexToBytes } from 'viem';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -37,19 +37,41 @@ export function getDeriveKeyMessage(_walletAddress: string): string {
 }
 
 /**
- * Derives an encryption key from an Ethereum signature.
+ * Derives an encryption key from an Ethereum signature using SHA-256.
  *
  * This enables true user-controlled encryption:
  * - User signs a deterministic message with their wallet
  * - Signature is used to derive the encryption key
  * - Only the user can encrypt/decrypt (operator cannot read)
  *
- * Uses keccak256 hash of the signature to derive a 32-byte key.
+ * Uses SHA-256 hash of the signature to derive a 32-byte key.
+ * This matches the Go client (SiYuan) for cross-client interop.
  *
  * @param signature - Ethereum signature (65 bytes: r, s, v)
  * @returns Hex string of the derived key (32 bytes)
  */
 export function deriveKeyFromSignature(signature: string): string {
+  return deriveKeyFromSignatureBytes(signature, sha256);
+}
+
+/**
+ * Legacy key derivation using keccak256.
+ *
+ * Use this only to decrypt data encrypted with keys derived before
+ * the SHA-256 migration. New code should use deriveKeyFromSignature().
+ *
+ * @param signature - Ethereum signature (65 bytes: r, s, v)
+ * @returns Hex string of the derived key (32 bytes)
+ */
+export function deriveKeyFromSignatureLegacy(signature: string): string {
+  return deriveKeyFromSignatureBytes(signature, keccak256);
+}
+
+/** Shared implementation for key derivation with pluggable hash function. */
+function deriveKeyFromSignatureBytes(
+  signature: string,
+  hashFn: (bytes: Uint8Array) => string,
+): string {
   const normalizedSig = signature.startsWith('0x') ? signature.slice(2) : signature;
 
   if (normalizedSig.length !== 130) {
@@ -67,9 +89,8 @@ export function deriveKeyFromSignature(signature: string): string {
   signatureBytes.set(rBytes, 0);
   signatureBytes.set(sBytes, rBytes.length);
   signatureBytes.set(vBytes, rBytes.length + sBytes.length);
-  const derivedKey = keccak256(signatureBytes);
 
-  return derivedKey;
+  return hashFn(signatureBytes);
 }
 
 /**

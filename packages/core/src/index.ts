@@ -27,6 +27,7 @@ export type {
 // Encryption utilities (sign-to-derive + AES-256-GCM client-side encryption)
 export {
   deriveKeyFromSignature,
+  deriveKeyFromSignatureLegacy,
   getDeriveKeyMessage,
   importKeyFromHex,
   encryptValue,
@@ -84,7 +85,13 @@ export type {
   VaultSecretStatus,
   VaultSecretEntry,
 } from './types/index.js';
+export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './kfdb/index.js';
 export type {
+  AutoDeriveOptions,
+  DeriveChallenge,
+  DeriveKeyResult,
+  DeriveSession,
+  DeriveSessionStore,
   KfdbBatchGetEntitiesRequest,
   KfdbBatchGetEntitiesResponse,
   KfdbClientConfig,

@@ -1,6 +1,12 @@
 export { KFDBClient } from './client.js';
+export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './derive-session-store.js';
 
 export type {
+  AutoDeriveOptions,
+  DeriveChallenge,
+  DeriveKeyResult,
+  DeriveSession,
+  DeriveSessionStore,
   KfdbBatchGetEntitiesRequest,
   KfdbBatchGetEntitiesResponse,
   KfdbClientConfig,

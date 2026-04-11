@@ -87,3 +87,40 @@ export interface KfdbWriteResponse {
   execution_time_ms: number;
   affected_ids: string[];
 }
+
+// ── Sign-to-Derive Types ────────────────────────────────────────────
+
+/** Cached derive session credentials. */
+export interface DeriveSession {
+  sessionId: string;
+  keyHex: string;
+  expiresAt: number;
+  address: string;
+}
+
+/** Pluggable session persistence for sign-to-derive. */
+export interface DeriveSessionStore {
+  get(walletAddress: string): Promise<DeriveSession | null>;
+  set(walletAddress: string, session: DeriveSession): Promise<void>;
+  clear(walletAddress: string): Promise<void>;
+}
+
+/** Options for KFDBClient.autoDerive(). */
+export interface AutoDeriveOptions {
+  /** Session cache — skips challenge/sign when a valid session exists. */
+  sessionStore?: DeriveSessionStore;
+  /** Safety margin in ms before session expiry to trigger re-derive. Default: 60_000 (60s). */
+  refreshMarginMs?: number;
+}
+
+/** Server response from /api/v1/auth/derive-challenge. */
+export interface DeriveChallenge {
+  challenge_id: string;
+  typed_data: Record<string, unknown>;
+}
+
+/** Server response from /api/v1/auth/derive-key. */
+export interface DeriveKeyResult {
+  session_id: string;
+  expires_at: number;
+}
