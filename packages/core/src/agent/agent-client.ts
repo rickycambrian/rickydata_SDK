@@ -53,6 +53,7 @@ export class AgentClient {
   private readonly tokenGetter: (() => Promise<string | undefined>) | null;
   private token: string | null = null;
   private sessions: SessionStoreType | null = null;
+  private readonly sessionCache = new Map<string, string>();
 
   constructor(options: AgentClientConfig) {
     if (!options.privateKey && !options.token && !options.tokenGetter) {
@@ -78,6 +79,9 @@ export class AgentClient {
       ) => Promise<{ SessionStore: new (filePath?: string | null) => SessionStoreType }>;
       dynamicImport('./session-store.js').then(({ SessionStore }) => {
         this.sessions = new SessionStore(options.sessionStorePath);
+        for (const [agentId, sessionId] of this.sessionCache.entries()) {
+          this.sessions.set(agentId, sessionId);
+        }
       }).catch(() => {});
     }
   }
@@ -279,7 +283,7 @@ export class AgentClient {
     // Get or create session
     const sessionId = options?.sessionId ?? await this.getOrCreateSession(agentId, options?.model);
     if (options?.sessionId) {
-      this.sessions?.set(agentId, options.sessionId);
+      this.cacheSession(agentId, options.sessionId);
     }
 
     const sendChatRequest = async (): Promise<Response> => {
@@ -363,7 +367,7 @@ export class AgentClient {
    * Useful for CLI recovery after transient stream disconnects.
    */
   getCachedSessionId(agentId: string): string | undefined {
-    return this.sessions?.get(agentId);
+    return this.getCachedSession(agentId);
   }
 
   // ─── Discovery ───────────────────────────────────────────
@@ -408,7 +412,7 @@ export class AgentClient {
       throw err;
     }
     const data: SessionCreateResponse = await res.json();
-    this.sessions?.set(agentId, data.id);
+    this.cacheSession(agentId, data.id);
     return data;
   }
 
@@ -799,7 +803,7 @@ export class AgentClient {
   }
 
   private async getOrCreateSession(agentId: string, model?: string): Promise<string> {
-    const existing = this.sessions?.get(agentId);
+    const existing = this.getCachedSession(agentId);
     if (existing) return existing;
 
     let res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
@@ -827,8 +831,24 @@ export class AgentClient {
       throw AgentError.fromHttpStatus(res.status, body, { agentId, operation: 'createSession' });
     }
     const data = await res.json();
-    this.sessions?.set(agentId, data.id);
+    this.cacheSession(agentId, data.id);
     return data.id;
+  }
+
+  private getCachedSession(agentId: string): string | undefined {
+    const inMemory = this.sessionCache.get(agentId);
+    if (inMemory) return inMemory;
+
+    const persisted = this.sessions?.get(agentId);
+    if (persisted) {
+      this.sessionCache.set(agentId, persisted);
+    }
+    return persisted;
+  }
+
+  private cacheSession(agentId: string, sessionId: string): void {
+    this.sessionCache.set(agentId, sessionId);
+    this.sessions?.set(agentId, sessionId);
   }
 
   private authHeaders(): Record<string, string> {
