@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WalletSettings, WalletPlan } from 'rickydata/agent';
-import { useRickyData } from '../providers/RickyDataProvider.js';
+import { useRickyData, useRickyDataWalletTransport } from '../providers/RickyDataProvider.js';
 import { useWalletSettings, walletSettingsKeys } from './wallet-settings.js';
 
 export function useWalletPlan() {
   const client = useRickyData();
+  const walletTransport = useRickyDataWalletTransport();
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useWalletSettings();
 
@@ -19,7 +20,9 @@ export function useWalletPlan() {
         updates.modelProvider = 'minimax';
         updates.defaultModel = 'MiniMax-M2.7';
       }
-      return client.updateWalletSettings(updates);
+      return walletTransport?.updateWalletSettings
+        ? walletTransport.updateWalletSettings(updates)
+        : client.updateWalletSettings(updates);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(walletSettingsKeys.settings(), data);

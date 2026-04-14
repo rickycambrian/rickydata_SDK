@@ -1,13 +1,32 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { AgentClient, type AgentClientConfig } from 'rickydata/agent';
+import {
+  AgentClient,
+  type AgentClientConfig,
+  type FreeTierStatus,
+  type WalletBalanceResponse,
+  type WalletSettings,
+} from 'rickydata/agent';
 
-const RickyDataContext = createContext<AgentClient | null>(null);
+export interface RickyDataWalletTransport {
+  getWalletSettings?: () => Promise<WalletSettings>;
+  updateWalletSettings?: (settings: Partial<WalletSettings>) => Promise<WalletSettings>;
+  getWalletBalance?: () => Promise<WalletBalanceResponse>;
+  getFreeTierStatus?: () => Promise<FreeTierStatus>;
+}
+
+interface RickyDataContextValue {
+  client: AgentClient;
+  walletTransport?: RickyDataWalletTransport;
+}
+
+const RickyDataContext = createContext<RickyDataContextValue | null>(null);
 
 export interface RickyDataProviderProps {
   /** Config to auto-create an AgentClient. Provide `getAuthToken` for browser use. */
   config?: {
     gatewayUrl?: string;
     getAuthToken: () => Promise<string | undefined>;
+    walletTransport?: RickyDataWalletTransport;
   };
   /** Pre-built client (for testing/mocks). Mutually exclusive with `config`. */
   client?: AgentClient;
@@ -25,19 +44,22 @@ export interface RickyDataProviderProps {
  * ```
  */
 export function RickyDataProvider({ config, client, children }: RickyDataProviderProps) {
-  const agentClient = useMemo(() => {
-    if (client) return client;
+  const contextValue = useMemo<RickyDataContextValue>(() => {
+    if (client) return { client, walletTransport: config?.walletTransport };
     if (!config) throw new Error('RickyDataProvider requires either `config` or `client`');
     const opts: AgentClientConfig = {
       gatewayUrl: config.gatewayUrl,
     };
     // Wire the provider's getAuthToken callback to the SDK's tokenGetter
     opts.tokenGetter = config.getAuthToken;
-    return new AgentClient(opts);
-  }, [client, config?.getAuthToken, config?.gatewayUrl]);
+    return {
+      client: new AgentClient(opts),
+      walletTransport: config.walletTransport,
+    };
+  }, [client, config?.getAuthToken, config?.gatewayUrl, config?.walletTransport]);
 
   return (
-    <RickyDataContext.Provider value={agentClient}>
+    <RickyDataContext.Provider value={contextValue}>
       {children}
     </RickyDataContext.Provider>
   );
@@ -51,5 +73,13 @@ export function useRickyData(): AgentClient {
   if (!ctx) {
     throw new Error('useRickyData must be used within a <RickyDataProvider>');
   }
-  return ctx;
+  return ctx.client;
+}
+
+export function useRickyDataWalletTransport(): RickyDataWalletTransport | undefined {
+  const ctx = useContext(RickyDataContext);
+  if (!ctx) {
+    throw new Error('useRickyDataWalletTransport must be used within a <RickyDataProvider>');
+  }
+  return ctx.walletTransport;
 }

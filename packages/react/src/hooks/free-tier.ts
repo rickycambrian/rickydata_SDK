@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { FreeTierStatus } from 'rickydata/agent';
-import { useRickyData } from '../providers/RickyDataProvider.js';
+import { useRickyData, useRickyDataWalletTransport } from '../providers/RickyDataProvider.js';
 
 export const freeTierKeys = {
   all: ['free-tier'] as const,
@@ -15,11 +15,14 @@ export interface UseFreeTierStatusOptions {
 
 export function useFreeTierStatus(opts?: UseFreeTierStatusOptions) {
   const client = useRickyData();
+  const walletTransport = useRickyDataWalletTransport();
   const enabled = opts?.enabled !== false;
 
   const query = useQuery<FreeTierStatus>({
     queryKey: freeTierKeys.status(),
-    queryFn: () => client.getFreeTierStatus(),
+    queryFn: () => walletTransport?.getFreeTierStatus
+      ? walletTransport.getFreeTierStatus()
+      : client.getFreeTierStatus(),
     enabled,
     staleTime: 30_000,
     refetchInterval: enabled ? POLL_INTERVAL : false,

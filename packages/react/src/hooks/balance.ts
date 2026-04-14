@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { WalletBalanceResponse, WalletTransactionsResponse } from 'rickydata/agent';
-import { useRickyData } from '../providers/RickyDataProvider.js';
+import { useRickyData, useRickyDataWalletTransport } from '../providers/RickyDataProvider.js';
 
 export const balanceKeys = {
   all: ['wallet-balance'] as const,
@@ -18,9 +18,12 @@ interface UseWalletBalanceOptions {
 /** Fetch wallet balance with formatted display value. */
 export function useWalletBalance(opts?: UseWalletBalanceOptions) {
   const client = useRickyData();
+  const walletTransport = useRickyDataWalletTransport();
   const query = useQuery<WalletBalanceResponse>({
     queryKey: balanceKeys.balance(),
-    queryFn: () => client.getWalletBalance(),
+    queryFn: () => walletTransport?.getWalletBalance
+      ? walletTransport.getWalletBalance()
+      : client.getWalletBalance(),
     staleTime: opts?.staleTime ?? 60_000,
     enabled: opts?.enabled !== false,
   });

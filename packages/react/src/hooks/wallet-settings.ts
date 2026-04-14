@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WalletSettings } from 'rickydata/agent';
-import { useRickyData } from '../providers/RickyDataProvider.js';
+import { useRickyData, useRickyDataWalletTransport } from '../providers/RickyDataProvider.js';
 
 export const walletSettingsKeys = {
   all: ['wallet-settings'] as const,
@@ -10,16 +10,21 @@ export const walletSettingsKeys = {
 /** Fetch wallet settings. */
 export function useWalletSettings() {
   const client = useRickyData();
+  const walletTransport = useRickyDataWalletTransport();
   const queryClient = useQueryClient();
 
   const query = useQuery<WalletSettings>({
     queryKey: walletSettingsKeys.settings(),
-    queryFn: () => client.getWalletSettings(),
+    queryFn: () => walletTransport?.getWalletSettings
+      ? walletTransport.getWalletSettings()
+      : client.getWalletSettings(),
     staleTime: 60_000,
   });
 
   const mutation = useMutation({
-    mutationFn: (settings: Partial<WalletSettings>) => client.updateWalletSettings(settings),
+    mutationFn: (settings: Partial<WalletSettings>) => walletTransport?.updateWalletSettings
+      ? walletTransport.updateWalletSettings(settings)
+      : client.updateWalletSettings(settings),
     onSuccess: (data) => {
       queryClient.setQueryData(walletSettingsKeys.settings(), data);
     },

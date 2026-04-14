@@ -1,6 +1,6 @@
 // Provider
-export { RickyDataProvider, useRickyData } from './providers/RickyDataProvider.js';
-export type { RickyDataProviderProps } from './providers/RickyDataProvider.js';
+export { RickyDataProvider, useRickyData, useRickyDataWalletTransport } from './providers/RickyDataProvider.js';
+export type { RickyDataProviderProps, RickyDataWalletTransport } from './providers/RickyDataProvider.js';
 
 // Hooks — Agents
 export { useAgents, useAgent, agentKeys } from './hooks/agents.js';

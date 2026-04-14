@@ -34,12 +34,13 @@ export function createMockClient() {
     getAgent: vi.fn().mockResolvedValue({ id: 'agent-1', name: 'test', title: 'Test', description: '', model: 'haiku', tools: [], skills: [] }),
 
     // Balance
-    getBalance: vi.fn().mockResolvedValue({ availableBalance: '10.00', unifiedDepositAddress: '0x', agentSpends: {} }),
-    getTransactions: vi.fn().mockResolvedValue({ transactions: [], total: 0 }),
+    getWalletBalance: vi.fn().mockResolvedValue({ availableBalance: '10.00', unifiedDepositAddress: '0x', agentSpends: {} }),
+    getWalletTransactions: vi.fn().mockResolvedValue({ transactions: [], total: 0 }),
 
     // Settings
-    getSettings: vi.fn().mockResolvedValue({}),
-    updateSettings: vi.fn().mockResolvedValue({}),
+    getWalletSettings: vi.fn().mockResolvedValue({}),
+    updateWalletSettings: vi.fn().mockResolvedValue({}),
+    getFreeTierStatus: vi.fn().mockResolvedValue({ dailyLimit: 0, dailyUsed: 0, dailyRemaining: 0, resetAt: '' }),
   };
 }
 
