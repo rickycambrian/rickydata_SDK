@@ -78,6 +78,10 @@ export interface CostMetrics {
   output_tokens: number;
   total_tokens: number;
   estimated_cost_usd: number;
+  seat_adjusted_cost_usd?: number;
+  monthly_seat_fraction?: number;
+  concurrency_slots?: number;
+  orchestrator_context_tokens?: number;
   cost_per_quality_point: number;
   tokens_per_file_changed: number;
 }
@@ -88,6 +92,16 @@ export interface BenchmarkRun {
   task_id: string;
   provider: string;
   model: string;
+  runtime_family?: string;
+  execution_mode?: string;
+  orchestrator_provider?: string;
+  orchestrator_model?: string;
+  teammate_provider_models?: string[];
+  attempt_policy?: string;
+  trace_ref?: string;
+  reproduce_command?: string;
+  evo_experiment_id?: string;
+  public_summary_ref?: string;
   thinking_mode: string;
   context_strategy: string;
   generated_diff?: string;
@@ -105,6 +119,16 @@ export interface RecordRunRequest {
   task_id: string;
   provider: string;
   model: string;
+  runtime_family?: string;
+  execution_mode?: string;
+  orchestrator_provider?: string;
+  orchestrator_model?: string;
+  teammate_provider_models?: string[];
+  attempt_policy?: string;
+  trace_ref?: string;
+  reproduce_command?: string;
+  evo_experiment_id?: string;
+  public_summary_ref?: string;
   thinking_mode?: string;
   context_strategy?: string;
   generated_diff?: string;
