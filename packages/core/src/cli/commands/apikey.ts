@@ -17,6 +17,36 @@ function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+async function signToDeriveApiKey(
+  gatewayUrl: string, token: string, privateKey: string, anthropicApiKey: string,
+): Promise<{ encryptionMode: string }> {
+  const { privateKeyToAccount } = await import('viem/accounts');
+  const key = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+  const account = privateKeyToAccount(key as `0x${string}`);
+
+  // 1. Fetch derive-challenge
+  const challengeRes = await fetch(`${gatewayUrl}/wallet/apikey/derive-challenge`, {
+    headers: authHeaders(token),
+  });
+  if (!challengeRes.ok) {
+    throw new Error(`derive-challenge failed: ${challengeRes.status} ${await challengeRes.text()}`);
+  }
+  const { message, nonce } = await challengeRes.json() as { message: string; nonce: string };
+
+  // 2. Sign the deterministic message
+  const signature = await account.signMessage({ message });
+
+  // 3. Store with S2D encryption
+  const res = await fetch(`${gatewayUrl}/wallet/apikey`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ anthropicApiKey, signature, nonce }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  const data = await res.json() as { encryptionMode?: string };
+  return { encryptionMode: data.encryptionMode ?? 'sign-to-derive' };
+}
+
 function promptSecret(prompt: string): Promise<string> {
   return new Promise((resolve) => {
     process.stdout.write(prompt);
@@ -95,14 +125,28 @@ export function createApiKeyCommands(config: ConfigManager, store: CredentialSto
       }
 
       try {
-        const res = await fetch(`${gatewayUrl}/wallet/apikey`, {
-          method: 'PUT',
-          headers: authHeaders(token),
-          body: JSON.stringify({ anthropicApiKey: apiKey }),
-        });
-        if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-        console.log(chalk.green('Anthropic API key configured successfully.'));
-        console.log(chalk.dim('BYOK pricing is now active (10% markup only).'));
+        const privateKey = store.getPrivateKey(profile);
+
+        if (privateKey) {
+          // S2D path — zero-knowledge encryption
+          const result = await signToDeriveApiKey(gatewayUrl, token, privateKey, apiKey);
+          console.log(chalk.green('Anthropic API key configured with zero-knowledge encryption.'));
+          console.log(chalk.dim(`Encryption: ${result.encryptionMode}`));
+          console.log(chalk.dim('BYOK pricing is now active (10% markup only).'));
+        } else {
+          // HKDF fallback for browser-auth users
+          const res = await fetch(`${gatewayUrl}/wallet/apikey`, {
+            method: 'PUT',
+            headers: authHeaders(token),
+            body: JSON.stringify({ anthropicApiKey: apiKey }),
+          });
+          if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+          console.log(chalk.green('Anthropic API key configured successfully.'));
+          console.log(chalk.dim('BYOK pricing is now active (10% markup only).'));
+          console.log(chalk.yellow(
+            'Tip: Use `rickydata auth login --private-key` to enable zero-knowledge encryption.'
+          ));
+        }
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));
       }
