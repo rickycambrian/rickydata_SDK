@@ -109,4 +109,33 @@ describe('wallet transport overrides', () => {
     expect(transport.getWalletBalance).toHaveBeenCalled();
     expect(transport.getFreeTierStatus).toHaveBeenCalled();
   });
+
+  it('preserves a free-plan zai provider when switching plans', async () => {
+    const transport = {
+      getWalletSettings: vi.fn().mockResolvedValue({
+        plan: 'free',
+        modelProvider: 'zai',
+        defaultModel: 'glm-5.1',
+      }),
+      updateWalletSettings: vi.fn().mockImplementation(async (settings) => ({
+        plan: settings.plan || 'free',
+        modelProvider: settings.modelProvider || 'zai',
+        defaultModel: settings.defaultModel || 'glm-5.1',
+      })),
+    } satisfies RickyDataWalletTransport;
+
+    const { result } = renderWalletHook(() => useWalletPlan(), transport);
+
+    await waitFor(() => {
+      expect(result.current.modelProvider).toBe('zai');
+    });
+
+    await result.current.switchPlan('free');
+
+    expect(transport.updateWalletSettings).toHaveBeenCalledWith({
+      plan: 'free',
+      modelProvider: 'zai',
+      defaultModel: 'glm-5.1',
+    });
+  });
 });

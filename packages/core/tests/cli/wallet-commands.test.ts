@@ -50,6 +50,32 @@ describe('wallet commands', () => {
       expect(output).toContain('0xdepositaddr');
     });
 
+    it('formats estimated messages for openclaude-style models without leaving the engine prefix', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          balance: '10.50',
+          depositAddress: '0xdepositaddr',
+          walletAddress: '0xmywallet',
+          estimatedMessages: {
+            'openclaude-glm-5.1': 42,
+            'claude-sonnet-4-6': 8,
+          },
+        }),
+        text: async () => '',
+      } as Partial<Response>);
+      vi.stubGlobal('fetch', mockFetch);
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const program = createProgram(config, store);
+      await program.parseAsync(['node', 'rickydata', 'wallet', 'balance']);
+
+      const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(output).toContain('42 (glm');
+      expect(output).toContain('8 (sonnet');
+      expect(output).not.toContain('openclaude-glm');
+    });
+
     it('shows balance in JSON format', async () => {
       const balanceData = { balance: '5.00', depositAddress: '0xaddr' };
       const mockFetch = vi.fn().mockResolvedValue({

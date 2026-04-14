@@ -3,6 +3,12 @@ import type { WalletSettings, WalletPlan } from 'rickydata/agent';
 import { useRickyData, useRickyDataWalletTransport } from '../providers/RickyDataProvider.js';
 import { useWalletSettings, walletSettingsKeys } from './wallet-settings.js';
 
+function defaultModelForPlanProvider(provider: WalletSettings['modelProvider'] | undefined): string {
+  if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
+  if (provider === 'zai') return 'glm-5.1';
+  return 'MiniMax-M2.7';
+}
+
 export function useWalletPlan() {
   const client = useRickyData();
   const walletTransport = useRickyDataWalletTransport();
@@ -17,8 +23,11 @@ export function useWalletPlan() {
     mutationFn: async (newPlan: WalletPlan) => {
       const updates: Partial<WalletSettings> = { plan: newPlan };
       if (newPlan === 'free') {
-        updates.modelProvider = 'minimax';
-        updates.defaultModel = 'MiniMax-M2.7';
+        const provider = settings?.modelProvider === 'openrouter' || settings?.modelProvider === 'zai'
+          ? settings.modelProvider
+          : 'minimax';
+        updates.modelProvider = provider;
+        updates.defaultModel = defaultModelForPlanProvider(provider);
       }
       return walletTransport?.updateWalletSettings
         ? walletTransport.updateWalletSettings(updates)

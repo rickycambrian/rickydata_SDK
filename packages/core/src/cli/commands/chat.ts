@@ -24,6 +24,12 @@ async function getFreeTierModel(client: AgentClient): Promise<string> {
   }
 }
 
+function defaultModelForProvider(provider: unknown): string {
+  if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
+  if (provider === 'zai') return 'glm-5.1';
+  return FREE_TIER_MODEL;
+}
+
 /**
  * Resolve the model to use for chat.
  *
@@ -46,8 +52,8 @@ async function resolveModel(
 
     // Explicit free plan — use the configured model provider (OpenRouter or MiniMax)
     if (settings.plan === 'free') {
-      if (settings.modelProvider === 'openrouter') {
-        return settings.defaultModel || 'google/gemma-4-26b-a4b-it';
+      if (settings.modelProvider === 'openrouter' || settings.modelProvider === 'zai') {
+        return settings.defaultModel || defaultModelForProvider(settings.modelProvider);
       }
       if (settings.modelProvider !== 'minimax') {
         client.updateWalletSettings({ modelProvider: 'minimax', defaultModel: FREE_TIER_MODEL }).catch(() => {});
@@ -63,6 +69,10 @@ async function resolveModel(
     // OpenRouter BYOK plan
     if (settings.plan === 'openrouter_byok') {
       return settings.defaultModel || 'google/gemma-4-26b-a4b-it';
+    }
+
+    if (settings.plan === 'zai_byok') {
+      return settings.defaultModel || 'glm-5.1';
     }
 
     // Plan not set — probe API key to decide

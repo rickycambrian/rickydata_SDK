@@ -128,6 +128,13 @@ function formatTxDate(raw: unknown): string {
   return `${mon} ${day} ${hr}:${min}`;
 }
 
+function formatEstimatedMessageModel(model: string): string {
+  return model
+    .replace(/^claude-/, '')
+    .replace(/^openclaude-/, '')
+    .replace(/-\d+.*/, '');
+}
+
 export function createWalletCommands(config: ConfigManager, store: CredentialStore): Command {
   const wallet = new Command('wallet').description('Manage wallet balance and transactions');
 
@@ -165,7 +172,7 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
           const em = data.estimatedMessages as Record<string, number> | number;
           if (typeof em === 'object') {
             const parts = Object.entries(em)
-              .map(([model, count]) => `${count} (${model.replace('claude-', '').replace(/-\d+.*/, '')})`)
+              .map(([model, count]) => `${count} (${formatEstimatedMessageModel(model)})`)
               .join(', ');
             displayData['Est. Messages'] = parts;
           } else {

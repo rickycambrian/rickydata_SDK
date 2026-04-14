@@ -9,7 +9,7 @@ import type {
 
 export type ResearchVisibility = 'private';
 export type ResearchReadScope = Extract<KfdbQueryScope, 'private'>;
-export type ResearchProvider = 'minimax' | 'anthropic' | 'claude';
+export type ResearchProvider = 'minimax' | 'anthropic' | 'claude' | 'zai' | 'openclaude';
 export type ResearchRunStatus =
   | 'draft'
   | 'registered'

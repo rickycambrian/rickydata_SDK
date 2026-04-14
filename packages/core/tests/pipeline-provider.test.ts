@@ -47,6 +47,7 @@ describe('PipelineClient provider resolution', () => {
     it('auto-detects zai from glm model prefix', () => {
       expect(client._resolveProvider(undefined, GLM_MODEL)).toBe('zai');
       expect(client._resolveProvider(undefined, 'glm-4.5')).toBe('zai');
+      expect(client._resolveProvider(undefined, 'glm-5.1-thinking')).toBe('zai');
     });
 
     it('explicit provider wins over model prefix', () => {
@@ -54,6 +55,7 @@ describe('PipelineClient provider resolution', () => {
     });
 
     it('auto-detects claude for claude-family aliases', () => {
+      expect(client._resolveProvider(undefined, 'claude-sonnet-4-6')).toBe('claude');
       expect(client._resolveProvider(undefined, 'claude-sonnet')).toBe('claude');
       expect(client._resolveProvider(undefined, 'sonnet')).toBe('claude');
       expect(client._resolveProvider(undefined, 'haiku')).toBe('claude');
@@ -98,6 +100,19 @@ describe('PipelineClient provider resolution', () => {
 
       const sentBody = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
       expect(sentBody.options.provider).toBe('claude');
+    });
+
+    it('auto-detects zai from GLM model', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        okResponse({ run_id: 'r3b', accepted: true }),
+      );
+
+      const client = mockClient();
+      await client.resolve('owner/repo', 1, { model: GLM_MODEL });
+
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
+      expect(sentBody.options.provider).toBe('zai');
+      expect(sentBody.options.model).toBe(GLM_MODEL);
     });
 
     it('preserves other options alongside provider', async () => {

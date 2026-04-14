@@ -7,6 +7,7 @@ import type {
 
 export const DEFAULT_RESEARCH_PROVIDER = 'minimax' as const;
 export const DEFAULT_RESEARCH_MODEL = 'MiniMax-M2.7' as const;
+export const DEFAULT_RESEARCH_GLM_MODEL = 'glm-5.1' as const;
 
 const JSON_SCHEMA_OBJECT = {
   type: 'object',
@@ -218,6 +219,18 @@ export function createDefaultResearchPolicyArms(
       provider: 'claude',
       model: 'claude-sonnet-4-6',
       strategy: 'premium_control',
+    },
+    {
+      id: 'glm-openclaude-one-pass',
+      label: 'GLM 5.1 OpenClaude',
+      provider: 'openclaude',
+      model: DEFAULT_RESEARCH_GLM_MODEL,
+      strategy: 'one_pass',
+      metadata: {
+        billingProfile: 'zai',
+        runtimeFamily: 'openclaude-cli',
+        executionEngine: 'openclaude',
+      },
     },
   ];
 }
