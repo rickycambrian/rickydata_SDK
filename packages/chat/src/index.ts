@@ -39,6 +39,8 @@ export { useChatBubbleEngine } from './hooks/useChatBubbleEngine.js';
 export type { UseChatBubbleEngineOptions, UseChatBubbleEngineReturn } from './hooks/useChatBubbleEngine.js';
 export { useHostCopilotEngine, createHostActionHandler } from './hooks/useHostCopilotEngine.js';
 export type { UseHostCopilotEngineOptions, UseHostCopilotEngineReturn } from './hooks/useHostCopilotEngine.js';
+export { useCompanionContext } from './hooks/useCompanionContext.js';
+export type { UseCompanionContextOptions } from './hooks/useCompanionContext.js';
 export { useWalletAuth } from './hooks/useWalletAuth.js';
 export type { WalletAuthStatus } from './hooks/useWalletAuth.js';
 export { useBubble } from './hooks/useBubble.js';
@@ -71,6 +73,7 @@ export type {
   CompanionPointerState,
   CompanionReadinessState,
   CompanionContextSnapshot,
+  CompanionCursorStatus,
   CompanionCursorShadow,
 } from './types/chat.js';
 export type { Thread, ThreadListItem } from './types/thread.js';
@@ -84,4 +87,6 @@ export type {
   AgentHostContextSnapshot,
   AgentTargetDescriptor,
 } from './types/host.js';
+export { applyHostEvent } from './host/apply.js';
+export type { ApplyHostEventOptions } from './host/apply.js';
 export { buildHostContextMessage, extractHostDirectives } from './host/protocol.js';

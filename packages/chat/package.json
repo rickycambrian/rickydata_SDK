@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/chat",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -27,8 +27,8 @@
     "remark-gfm": "^4.0.0"
   },
   "peerDependencies": {
-    "rickydata": ">=1.2.0",
-    "@rickydata/react": ">=0.1.0",
+    "rickydata": ">=1.5.2",
+    "@rickydata/react": ">=0.1.9",
     "zustand": ">=5.0.0",
     "react": "^18.0.0 || ^19.0.0"
   },

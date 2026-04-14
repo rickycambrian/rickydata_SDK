@@ -96,12 +96,20 @@ function normalizeShadowCursor(value: unknown): CompanionCursorShadow | null {
   const active = toBoolean(record.active);
   if (active == null) return null;
   const pointerRecord = toRecord(record.pointer);
+  const status = toString(record.status);
   return {
     active,
     label: toString(record.label),
     status:
-      record.status === 'idle' || record.status === 'thinking' || record.status === 'guiding' || record.status === 'ready'
-        ? record.status
+      status === 'idle'
+      || status === 'thinking'
+      || status === 'guiding'
+      || status === 'ready'
+      || status === 'listening'
+      || status === 'processing'
+      || status === 'responding'
+      || status === 'pointing'
+        ? status
         : undefined,
     tooltip: toString(record.tooltip),
     pointer: pointerRecord
@@ -135,8 +143,7 @@ function normalizeContextSnapshot(value: unknown): CompanionContextSnapshot | nu
   const record = toRecord(value);
   if (!record) return null;
   const route = toString(record.route);
-  const stage = toString(record.stage);
-  if (!route || !stage) return null;
+  if (!route) return null;
   const visibleAnchors: DocumentAnchor[] = Array.isArray(record.visibleAnchors)
     ? record.visibleAnchors
         .map((entry): DocumentAnchor | null => {
@@ -160,7 +167,29 @@ function normalizeContextSnapshot(value: unknown): CompanionContextSnapshot | nu
     : [];
   return {
     route,
-    stage,
+    stage: toString(record.stage),
+    view: toString(record.view),
+    title: toString(record.title),
+    entityId: toString(record.entityId),
+    selection: toRecord(record.selection) ?? undefined,
+    execution: toRecord(record.execution) ?? undefined,
+    visibleTargets: Array.isArray(record.visibleTargets)
+      ? record.visibleTargets
+          .map((entry) => {
+            const target = toRecord(entry);
+            const id = toString(target?.id);
+            const label = toString(target?.label);
+            if (!id || !label) return null;
+            return {
+              id,
+              label,
+              description: toString(target?.description),
+              role: toString(target?.role),
+              visible: toBoolean(target?.visible),
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      : [],
     readingMode:
       record.readingMode === 'pdf' || record.readingMode === 'markdown' || record.readingMode === 'split'
         ? record.readingMode
@@ -193,6 +222,7 @@ function normalizeContextSnapshot(value: unknown): CompanionContextSnapshot | nu
     pendingReviewCount: toNumber(record.pendingReviewCount),
     reviewReady: toBoolean(record.reviewReady),
     packageReady: toBoolean(record.packageReady),
+    openPanel: toString(record.openPanel) ?? null,
     threadId: toString(record.threadId) ?? null,
     sessionId: toString(record.sessionId) ?? null,
     metadata: toRecord(record.metadata) ?? undefined,

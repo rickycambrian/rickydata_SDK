@@ -19,6 +19,12 @@ jobs:
       - run: npm publish -w rickydata --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish -w @rickydata/react --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish -w @rickydata/chat --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # NOTE: After publishing, the monorepo's refresh-trusted-deps.yml
       # (runs every 6h + manual dispatch) detects the new version and
       # invalidates MCP server Docker images. Admin tokens are kept

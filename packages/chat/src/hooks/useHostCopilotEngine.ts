@@ -5,6 +5,7 @@ import { useAgentActions } from '../stores/actions.js';
 import type { ChatEngine, ChatMessage, ToolExecution } from '../types/chat.js';
 import type { ChatBubbleEvent } from '../types/events.js';
 import type { AgentActionRequest, AgentHostAdapter } from '../types/host.js';
+import { applyHostEvent } from '../host/apply.js';
 import { buildHostContextMessage, extractHostDirectives } from '../host/protocol.js';
 
 export interface UseHostCopilotEngineOptions {
@@ -25,64 +26,7 @@ export interface UseHostCopilotEngineReturn extends ChatEngine {
 
 function dispatchHostEvent(event: ChatBubbleEvent, host: AgentHostAdapter, onEvent?: (event: ChatBubbleEvent) => void) {
   onEvent?.(event);
-
-  if (event.type === 'ui_highlight') {
-    useAgentActions.getState().addHighlight(event.data);
-    host.scrollToTarget?.(event.data.target);
-    return;
-  }
-
-  if (event.type === 'ui_navigate') {
-    host.navigate?.(event.data.path);
-    return;
-  }
-
-  if (event.type === 'agent_action_proposed') {
-    useAgentActions.getState().addPendingAction(event.data);
-    return;
-  }
-
-  if (event.type === 'focus_target') {
-    useAgentActions.getState().setFocusedTarget(event.data);
-    const targetId = event.data.target || event.data.anchorId || event.data.id;
-    if (targetId) {
-      host.scrollToTarget?.(targetId);
-    }
-    return;
-  }
-
-  if (event.type === 'scroll_to_anchor') {
-    host.scrollToAnchor?.(event.data.anchorId, event.data.behavior);
-    return;
-  }
-
-  if (event.type === 'shadow_cursor') {
-    useAgentActions.getState().setShadowCursor(event.data);
-    return;
-  }
-
-  if (event.type === 'open_panel') {
-    useAgentActions.getState().setOpenPanel(event.data.panel);
-    host.openPanel?.(event.data.panel);
-    if (event.data.target) {
-      useAgentActions.getState().setFocusedTarget(event.data.target);
-    }
-    return;
-  }
-
-  if (event.type === 'review_ready') {
-    useAgentActions.getState().setReviewReady(event.data);
-    return;
-  }
-
-  if (event.type === 'package_ready') {
-    useAgentActions.getState().setPackageReady(event.data);
-    return;
-  }
-
-  if (event.type === 'app_context') {
-    useAgentActions.getState().setLatestContext(event.data);
-  }
+  applyHostEvent(event as Parameters<typeof applyHostEvent>[0], { host });
 }
 
 export function createHostActionHandler(host: AgentHostAdapter) {

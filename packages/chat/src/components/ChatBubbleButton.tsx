@@ -44,6 +44,7 @@ export function ChatBubbleButton() {
     <button
       type="button"
       onClick={open}
+      data-testid="chat-bubble-button"
       style={styles.button}
       aria-label="Open chat"
       onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}

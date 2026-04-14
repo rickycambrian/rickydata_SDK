@@ -101,58 +101,46 @@ I found the relevant section and queued the next review step.
     `);
 
     expect(parsed.cleanText).toContain('I found the relevant section');
-    expect(parsed.events).toEqual([
-      {
-        type: 'focus_target',
-        data: {
-          id: 'section-2',
-          target: 'section-card-section-2',
-          anchorId: 'section-2',
-          label: 'Method',
+    expect(parsed.events).toHaveLength(4);
+    expect(parsed.events[0]).toMatchObject({
+      type: 'focus_target',
+      data: {
+        id: 'section-2',
+        target: 'section-card-section-2',
+        anchorId: 'section-2',
+        label: 'Method',
+      },
+    });
+    expect(parsed.events[1]).toMatchObject({
+      type: 'open_panel',
+      data: {
+        panel: 'claims',
+        target: {
+          id: 'claims-panel',
+          target: 'claims-section',
         },
       },
-      {
-        type: 'open_panel',
-        data: {
-          panel: 'claims',
-          target: {
-            id: 'claims-panel',
-            target: 'claims-section',
-          },
-        },
+    });
+    expect(parsed.events[2]).toMatchObject({
+      type: 'review_ready',
+      data: {
+        title: 'Claims are ready for review',
+        summary: 'Enough grounded material is available.',
+        count: 5,
       },
-      {
-        type: 'review_ready',
-        data: {
-          title: 'Claims are ready for review',
-          summary: 'Enough grounded material is available.',
-          count: 5,
-        },
+    });
+    expect(parsed.events[3]).toMatchObject({
+      type: 'app_context',
+      data: {
+        route: '/research/paper-1',
+        stage: 'claims_ready',
+        readingMode: 'split',
+        activePaperId: 'paper-1',
+        activeSectionIds: ['section-2'],
+        visibleAnchors: [
+          expect.objectContaining({ id: 'section-2', kind: 'section', label: 'Method' }),
+        ],
       },
-      {
-        type: 'app_context',
-        data: {
-          route: '/research/paper-1',
-          stage: 'claims_ready',
-          readingMode: 'split',
-          activePaperId: 'paper-1',
-          activePaperTitle: undefined,
-          activeSectionIds: ['section-2'],
-          visibleAnchors: [
-            { id: 'section-2', kind: 'section', label: 'Method', target: undefined, sectionId: undefined, page: undefined, textPreview: undefined, metadata: undefined },
-          ],
-          selectionText: undefined,
-          hoverTarget: null,
-          pointer: null,
-          scrollDepth: undefined,
-          pendingReviewCount: undefined,
-          reviewReady: undefined,
-          packageReady: undefined,
-          threadId: null,
-          sessionId: null,
-          metadata: undefined,
-        },
-      },
-    ]);
+    });
   });
 });

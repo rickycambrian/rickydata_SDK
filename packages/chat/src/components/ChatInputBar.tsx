@@ -36,6 +36,7 @@ export function ChatInputBar({ value, onChange, onSend, disabled, placeholder }:
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
         <textarea
           ref={textareaRef}
+          data-testid="chat-input"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -60,6 +61,7 @@ export function ChatInputBar({ value, onChange, onSend, disabled, placeholder }:
           type="button"
           onClick={onSend}
           disabled={disabled || !value.trim()}
+          data-testid="chat-send-button"
           aria-label="Send message"
           style={{
             display: 'flex',

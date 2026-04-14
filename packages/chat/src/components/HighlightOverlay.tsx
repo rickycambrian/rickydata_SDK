@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAgentActions } from '../stores/actions.js';
 
@@ -11,9 +11,75 @@ interface OverlayRect {
   tooltip?: string;
 }
 
+function clampBubbleLeft(pointerX: number, bubbleWidth: number) {
+  const min = window.scrollX + 16;
+  const max = window.scrollX + window.innerWidth - bubbleWidth - 16;
+  return Math.max(min, Math.min(pointerX + 28, max));
+}
+
+function resolveTargetElement(targetId: string | null | undefined) {
+  if (!targetId) return null;
+  return (
+    document.querySelector<HTMLElement>(`[data-agent-id="${CSS.escape(targetId)}"]`)
+    || document.querySelector<HTMLElement>(`[data-document-anchor="${CSS.escape(targetId)}"]`)
+    || document.getElementById(targetId)
+  );
+}
+
+function getBuddyRotationDegrees(
+  cursorX: number,
+  cursorY: number,
+  focusRect: OverlayRect | null,
+  status?: string,
+) {
+  if (!focusRect || status !== 'pointing') {
+    return -35;
+  }
+
+  const targetX = focusRect.left + (focusRect.width / 2);
+  const targetY = focusRect.top + (focusRect.height / 2);
+  return (Math.atan2(targetY - cursorY, targetX - cursorX) * 180) / Math.PI + 90;
+}
+
+function renderBuddyFace(status?: string) {
+  switch (status) {
+    case 'listening':
+      return (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="flex items-end gap-[3px]">
+            {[0, 1, 2].map((index) => (
+              <span
+                key={index}
+                className="block w-[3px] rounded-full bg-white/95"
+                style={{
+                  height: `${10 + (index % 2 === 0 ? 6 : 12)}px`,
+                  animation: `rickydata-companion-wave ${0.7 + (index * 0.08)}s ease-in-out ${index * 0.08}s infinite`,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    case 'processing':
+      return (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="block h-5 w-5 rounded-full border-2 border-white/20 border-t-white/95 animate-spin" />
+        </div>
+      );
+    case 'responding':
+      return (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="block h-3.5 w-3.5 rounded-full bg-white/95 shadow-[0_0_20px_rgba(255,255,255,0.9)] animate-pulse" />
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
 /**
  * Portal-based UI highlight overlay.
- * Targets elements with data-agent-id attribute.
+ * Targets elements with data-agent-id or data-document-anchor attributes.
  */
 export function HighlightOverlay() {
   const activeHighlights = useAgentActions((s) => s.activeHighlights);
@@ -30,7 +96,6 @@ export function HighlightOverlay() {
     return () => setMounted(false);
   }, []);
 
-  // Position overlays based on data-agent-id elements
   useEffect(() => {
     if (activeHighlights.size === 0) {
       setRects([]);
@@ -39,7 +104,7 @@ export function HighlightOverlay() {
     const computeRects = () => {
       const nextRects: OverlayRect[] = [];
       activeHighlights.forEach((highlight) => {
-        const el = document.querySelector(`[data-agent-id="${highlight.target}"]`);
+        const el = resolveTargetElement(highlight.target);
         if (!el) return;
         const rect = el.getBoundingClientRect();
         nextRects.push({
@@ -62,7 +127,7 @@ export function HighlightOverlay() {
 
     const observer = new ResizeObserver(() => computeRects());
     activeHighlights.forEach((highlight) => {
-      const el = document.querySelector(`[data-agent-id="${highlight.target}"]`);
+      const el = resolveTargetElement(highlight.target);
       if (el) observer.observe(el);
     });
 
@@ -77,31 +142,32 @@ export function HighlightOverlay() {
   }, [activeHighlights]);
 
   useEffect(() => {
-    if (!focusedTarget?.target) {
+    const targetId = focusedTarget?.target || focusedTarget?.anchorId || focusedTarget?.id;
+    if (!targetId) {
       setFocusRect(null);
       return;
     }
 
     const computeFocusRect = () => {
-      const el = document.querySelector(`[data-agent-id="${focusedTarget.target}"]`);
+      const el = resolveTargetElement(targetId);
       if (!el) {
         setFocusRect(null);
         return;
       }
       const rect = el.getBoundingClientRect();
       setFocusRect({
-        target: focusedTarget.target || focusedTarget.id,
+        target: targetId,
         top: rect.top + window.scrollY,
         left: rect.left + window.scrollX,
         width: rect.width,
         height: rect.height,
-        tooltip: focusedTarget.tooltip || focusedTarget.label,
+        tooltip: focusedTarget?.tooltip || focusedTarget?.label,
       });
     };
 
     computeFocusRect();
 
-    const el = document.querySelector(`[data-agent-id="${focusedTarget.target}"]`);
+    const el = resolveTargetElement(targetId);
     const observer = new ResizeObserver(() => computeFocusRect());
     if (el) observer.observe(el);
     window.addEventListener('scroll', computeFocusRect, true);
@@ -114,7 +180,6 @@ export function HighlightOverlay() {
     };
   }, [focusedTarget]);
 
-  // Auto-dismiss timers
   useEffect(() => {
     activeHighlights.forEach((highlight) => {
       if (timersRef.current.has(highlight.target)) return;
@@ -135,7 +200,6 @@ export function HighlightOverlay() {
     });
   }, [activeHighlights, removeHighlight]);
 
-  // Cleanup all timers on unmount
   useEffect(() => {
     return () => {
       timersRef.current.forEach((timer) => clearTimeout(timer));
@@ -144,6 +208,18 @@ export function HighlightOverlay() {
   }, []);
 
   const hasCursor = shadowCursor?.active && shadowCursor.pointer;
+  const cursorX = shadowCursor?.pointer?.documentX ?? shadowCursor?.pointer?.viewportX ?? 0;
+  const cursorY = shadowCursor?.pointer?.documentY ?? shadowCursor?.pointer?.viewportY ?? 0;
+  const visualStatus = focusRect ? 'pointing' : shadowCursor?.status;
+  const bubbleText = useMemo(() => {
+    if (focusRect?.tooltip) return focusRect.tooltip;
+    return shadowCursor?.tooltip || shadowCursor?.label;
+  }, [focusRect?.tooltip, shadowCursor?.label, shadowCursor?.tooltip]);
+  const bubbleWidth = bubbleText ? Math.min(288, Math.max(190, bubbleText.length * 6.6)) : 0;
+  const bubbleLeft = bubbleText ? clampBubbleLeft(cursorX, bubbleWidth) : cursorX + 28;
+  const bubbleTop = cursorY + 10;
+  const cursorRotation = getBuddyRotationDegrees(cursorX, cursorY, focusRect, visualStatus);
+
   if (!mounted || (rects.length === 0 && !focusRect && !hasCursor)) return null;
 
   return createPortal(
@@ -151,16 +227,14 @@ export function HighlightOverlay() {
       {rects.map((rect) => (
         <div
           key={rect.target}
+          className="pointer-events-none absolute z-50"
           style={{
-            position: 'absolute',
-            zIndex: 50,
-            pointerEvents: 'none',
             top: rect.top - 4,
             left: rect.left - 4,
             width: rect.width + 8,
             height: rect.height + 8,
             border: '2px solid var(--chat-warning, #facc15)',
-            borderRadius: 'var(--chat-radius)',
+            borderRadius: '18px',
             boxShadow: '0 0 12px rgba(250, 204, 21, 0.4)',
             animation: 'rickydata-chat-highlight-pulse 1.5s ease-in-out infinite',
           }}
@@ -173,15 +247,14 @@ export function HighlightOverlay() {
                 transform: 'translateX(-50%)',
                 top: rect.height + 12,
                 whiteSpace: 'nowrap',
-                borderRadius: 'var(--chat-radius)',
-                backgroundColor: 'var(--chat-bg-secondary)',
-                border: '1px solid rgba(250, 204, 21, 0.4)',
-                padding: '4px 8px',
+                borderRadius: '999px',
+                backgroundColor: 'rgba(16, 20, 24, 0.94)',
+                border: '1px solid rgba(250, 204, 21, 0.35)',
+                padding: '6px 10px',
                 fontSize: '11px',
                 fontFamily: 'var(--chat-font-family)',
-                color: 'var(--chat-warning)',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)',
-                pointerEvents: 'none',
+                color: 'var(--chat-warning, #facc15)',
+                boxShadow: '0 8px 28px rgba(0,0,0,0.22)',
               }}
             >
               {rect.tooltip}
@@ -189,64 +262,65 @@ export function HighlightOverlay() {
           )}
         </div>
       ))}
+
       {focusRect && (
         <div
+          className="pointer-events-none absolute z-[55]"
           style={{
-            position: 'absolute',
-            zIndex: 55,
-            pointerEvents: 'none',
             top: focusRect.top - 10,
             left: focusRect.left - 10,
             width: focusRect.width + 20,
             height: focusRect.height + 20,
             border: '1px dashed rgba(255,255,255,0.75)',
-            borderRadius: '16px',
+            borderRadius: '20px',
             boxShadow: '0 0 0 1px rgba(255,255,255,0.12)',
             animation: 'rickydata-chat-focus-ring 1.2s ease-in-out infinite',
           }}
         />
       )}
+
       {hasCursor && (
-        <div
-          style={{
-            position: 'absolute',
-            zIndex: 60,
-            pointerEvents: 'none',
-            top: (shadowCursor.pointer?.documentY ?? shadowCursor.pointer?.viewportY ?? 0) - 18,
-            left: (shadowCursor.pointer?.documentX ?? shadowCursor.pointer?.viewportX ?? 0) + 18,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
+        <>
           <div
+            className="pointer-events-none absolute z-[60] h-10 w-10 rounded-full border border-white/40"
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: 999,
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(152,240,205,0.9))',
-              boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
-              border: '1px solid rgba(255,255,255,0.4)',
+              top: cursorY - 18,
+              left: cursorX - 18,
+              background: 'linear-gradient(135deg, rgba(74, 201, 255, 0.98), rgba(32, 102, 255, 0.88))',
+              boxShadow: '0 16px 32px rgba(9, 18, 36, 0.34)',
             }}
-          />
-          {(shadowCursor.label || shadowCursor.tooltip) && (
+          >
             <div
+              className="absolute left-1/2 top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/95 transition-transform duration-300"
+              style={{ transform: `translate(-50%, -50%) rotate(${cursorRotation}deg)` }}
+            />
+            {renderBuddyFace(visualStatus)}
+          </div>
+
+          {bubbleText && (
+            <div
+              className="pointer-events-none absolute z-[61]"
               style={{
-                borderRadius: '999px',
-                backgroundColor: 'rgba(16, 20, 24, 0.92)',
-                border: '1px solid rgba(152,240,205,0.28)',
+                top: bubbleTop,
+                left: bubbleLeft,
+                maxWidth: '18rem',
+                borderRadius: '18px',
+                backgroundColor: 'rgba(16, 20, 24, 0.94)',
+                border: '1px solid rgba(143, 210, 255, 0.3)',
                 color: 'var(--chat-text-primary)',
                 fontFamily: 'var(--chat-font-family)',
-                fontSize: '11px',
-                padding: '6px 10px',
-                boxShadow: '0 8px 28px rgba(0,0,0,0.22)',
+                fontSize: '12px',
+                lineHeight: 1.45,
+                padding: '9px 12px',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
               }}
             >
-              {shadowCursor.label || shadowCursor.tooltip}
+              {bubbleText}
             </div>
           )}
-        </div>
+        </>
       )}
+
       <style>{`
         @keyframes rickydata-chat-highlight-pulse {
           0%, 100% { box-shadow: 0 0 12px rgba(250, 204, 21, 0.4); }
@@ -255,6 +329,10 @@ export function HighlightOverlay() {
         @keyframes rickydata-chat-focus-ring {
           0%, 100% { transform: scale(1); opacity: 0.7; }
           50% { transform: scale(1.015); opacity: 1; }
+        }
+        @keyframes rickydata-companion-wave {
+          0%, 100% { transform: scaleY(0.55); opacity: 0.7; }
+          50% { transform: scaleY(1); opacity: 1; }
         }
       `}</style>
     </>,

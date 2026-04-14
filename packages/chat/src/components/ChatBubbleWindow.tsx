@@ -98,7 +98,9 @@ export function ChatBubbleWindow() {
       boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
       fontFamily: 'var(--chat-font-family)',
       overflow: 'hidden',
-    }}>
+    }}
+    data-testid="chat-bubble-window"
+    >
       <ChatWindowHeader />
 
       {/* Gateway auth status indicators (hidden when external engine handles auth) */}

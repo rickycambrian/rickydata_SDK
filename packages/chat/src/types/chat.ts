@@ -83,7 +83,19 @@ export interface CompanionReadinessState {
 
 export interface CompanionContextSnapshot {
   route: string;
-  stage: string;
+  stage?: string;
+  view?: string;
+  title?: string;
+  entityId?: string;
+  selection?: Record<string, unknown>;
+  execution?: Record<string, unknown>;
+  visibleTargets?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    role?: string;
+    visible?: boolean;
+  }>;
   readingMode?: 'pdf' | 'markdown' | 'split';
   activePaperId?: string;
   activePaperTitle?: string;
@@ -96,15 +108,26 @@ export interface CompanionContextSnapshot {
   pendingReviewCount?: number;
   reviewReady?: boolean;
   packageReady?: boolean;
+  openPanel?: string | null;
   threadId?: string | null;
   sessionId?: string | null;
   metadata?: Record<string, unknown>;
 }
 
+export type CompanionCursorStatus =
+  | 'idle'
+  | 'thinking'
+  | 'guiding'
+  | 'ready'
+  | 'listening'
+  | 'processing'
+  | 'responding'
+  | 'pointing';
+
 export interface CompanionCursorShadow {
   active: boolean;
   label?: string;
-  status?: 'idle' | 'thinking' | 'guiding' | 'ready';
+  status?: CompanionCursorStatus;
   pointer?: CompanionPointerState | null;
   tooltip?: string;
 }

@@ -73,7 +73,10 @@ export class AgentClient {
     }
     // SessionStore uses Node.js fs/path — only import in Node.js environments
     if (typeof globalThis.process !== 'undefined' && globalThis.process.versions?.node) {
-      import(/* @vite-ignore */ './session-store.js').then(({ SessionStore }) => {
+      const dynamicImport = new Function('specifier', 'return import(specifier)') as (
+        specifier: string,
+      ) => Promise<{ SessionStore: new (filePath?: string | null) => SessionStoreType }>;
+      dynamicImport('./session-store.js').then(({ SessionStore }) => {
         this.sessions = new SessionStore(options.sessionStorePath);
       }).catch(() => {});
     }
