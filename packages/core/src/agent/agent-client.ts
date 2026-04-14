@@ -992,11 +992,11 @@ export class AgentClient {
                   break;
                 case 'done':
                   model = event.data.model;
-                  executionEngine = event.data.executionEngine;
-                  engineUsed = event.data.engineUsed;
                   cost = event.data.cost;
                   toolCallCount = event.data.toolCallCount;
                   usage = event.data.usage;
+                  executionEngine = event.data.executionEngine;
+                  engineUsed = event.data.engineUsed;
                   break;
                 case 'error':
                   throw new AgentError(AgentErrorCode.AGENT_ERROR, event.data.message ?? JSON.stringify(event.data), { sessionId });
@@ -1022,11 +1022,11 @@ export class AgentClient {
               options?.onText?.(event.data);
             } else if (event.type === 'done') {
               model = event.data.model;
-              executionEngine = event.data.executionEngine;
-              engineUsed = event.data.engineUsed;
               cost = event.data.cost;
               toolCallCount = event.data.toolCallCount;
               usage = event.data.usage;
+              executionEngine = event.data.executionEngine;
+              engineUsed = event.data.engineUsed;
             }
           } catch {
             // Skip malformed JSON
