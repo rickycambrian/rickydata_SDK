@@ -1,4 +1,10 @@
 import type { ActionProposal, HighlightTarget } from './actions.js';
+import type {
+  CompanionContextSnapshot,
+  CompanionCursorShadow,
+  CompanionReadinessState,
+  CompanionTarget,
+} from './chat.js';
 
 /** Discriminated union of events the chat bubble can emit. */
 export type ChatBubbleEvent =
@@ -11,4 +17,11 @@ export type ChatBubbleEvent =
   | { type: 'agent_action_completed'; data: { proposalId: string; actionType: string; revalidateKeys?: string[] } }
   | { type: 'agent_action_failed'; data: { proposalId: string } }
   | { type: 'ui_highlight'; data: HighlightTarget }
-  | { type: 'ui_navigate'; data: { path: string } };
+  | { type: 'ui_navigate'; data: { path: string } }
+  | { type: 'focus_target'; data: CompanionTarget }
+  | { type: 'scroll_to_anchor'; data: { anchorId: string; behavior?: ScrollBehavior } }
+  | { type: 'shadow_cursor'; data: CompanionCursorShadow }
+  | { type: 'open_panel'; data: { panel: string; target?: CompanionTarget } }
+  | { type: 'review_ready'; data: CompanionReadinessState }
+  | { type: 'package_ready'; data: CompanionReadinessState }
+  | { type: 'app_context'; data: CompanionContextSnapshot };

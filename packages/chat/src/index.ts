@@ -37,6 +37,8 @@ export type { ChatInputProps } from './components/ChatInput.js';
 // Hooks
 export { useChatBubbleEngine } from './hooks/useChatBubbleEngine.js';
 export type { UseChatBubbleEngineOptions, UseChatBubbleEngineReturn } from './hooks/useChatBubbleEngine.js';
+export { useHostCopilotEngine, createHostActionHandler } from './hooks/useHostCopilotEngine.js';
+export type { UseHostCopilotEngineOptions, UseHostCopilotEngineReturn } from './hooks/useHostCopilotEngine.js';
 export { useWalletAuth } from './hooks/useWalletAuth.js';
 export type { WalletAuthStatus } from './hooks/useWalletAuth.js';
 export { useBubble } from './hooks/useBubble.js';
@@ -58,8 +60,28 @@ export { injectThemeTokens } from './theme/inject.js';
 
 // Types
 export type { WalletAdapter } from './types/wallet.js';
-export type { ChatMessage, ToolExecution, ChatContext, ChatEngine } from './types/chat.js';
+export type {
+  ChatMessage,
+  ToolExecution,
+  ChatContext,
+  ChatEngine,
+  DocumentAnchor,
+  DocumentAnchorKind,
+  CompanionTarget,
+  CompanionPointerState,
+  CompanionReadinessState,
+  CompanionContextSnapshot,
+  CompanionCursorShadow,
+} from './types/chat.js';
 export type { Thread, ThreadListItem } from './types/thread.js';
 export type { ActionProposal, HighlightTarget } from './types/actions.js';
 export type { ChatBubbleEvent } from './types/events.js';
 export type { ThemeConfig, ThemeTokens } from './types/theme.js';
+export type {
+  AgentActionRequest,
+  AgentActionResult,
+  AgentHostAdapter,
+  AgentHostContextSnapshot,
+  AgentTargetDescriptor,
+} from './types/host.js';
+export { buildHostContextMessage, extractHostDirectives } from './host/protocol.js';

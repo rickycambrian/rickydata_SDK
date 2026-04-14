@@ -32,6 +32,83 @@ export interface ChatContext {
   metadata?: Record<string, unknown>;
 }
 
+export type DocumentAnchorKind =
+  | 'section'
+  | 'quote'
+  | 'claim_source'
+  | 'citation'
+  | 'review_card'
+  | 'panel';
+
+export interface DocumentAnchor {
+  id: string;
+  kind: DocumentAnchorKind;
+  label: string;
+  target?: string;
+  sectionId?: string;
+  page?: number;
+  textPreview?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CompanionTarget {
+  id: string;
+  target?: string;
+  anchorId?: string;
+  label?: string;
+  panel?: string;
+  path?: string;
+  tooltip?: string;
+  x?: number;
+  y?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CompanionPointerState {
+  viewportX: number;
+  viewportY: number;
+  documentX?: number;
+  documentY?: number;
+  insideApp?: boolean;
+  updatedAt: string;
+}
+
+export interface CompanionReadinessState {
+  title: string;
+  summary?: string;
+  count?: number;
+  target?: CompanionTarget;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CompanionContextSnapshot {
+  route: string;
+  stage: string;
+  readingMode?: 'pdf' | 'markdown' | 'split';
+  activePaperId?: string;
+  activePaperTitle?: string;
+  activeSectionIds?: string[];
+  visibleAnchors: DocumentAnchor[];
+  selectionText?: string;
+  hoverTarget?: CompanionTarget | null;
+  pointer?: CompanionPointerState | null;
+  scrollDepth?: number;
+  pendingReviewCount?: number;
+  reviewReady?: boolean;
+  packageReady?: boolean;
+  threadId?: string | null;
+  sessionId?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CompanionCursorShadow {
+  active: boolean;
+  label?: string;
+  status?: 'idle' | 'thinking' | 'guiding' | 'ready';
+  pointer?: CompanionPointerState | null;
+  tooltip?: string;
+}
+
 /** External engine interface — apps provide their own chat state machine. */
 export interface ChatEngine {
   messages: ChatMessage[];
