@@ -6,7 +6,7 @@ export { AgentSession } from './agent-session.js';
 // import { SessionStore } from 'rickydata/agent/node' for server usage.
 
 // Error taxonomy
-export { AgentError, AgentErrorCode, FREE_TIER_MODEL } from './types.js';
+export { AgentError, AgentErrorCode, FREE_TIER_MODEL, FREE_TIER_ZAI_MODEL } from './types.js';
 
 // Standalone SSE parsers & helpers
 export {
@@ -61,6 +61,8 @@ export type {
   // Wallet
   WalletSettings,
   WalletPlan,
+  TeamExecutionEngine,
+  MarketplaceProvider,
   FreeTierStatus,
   GroupConversationMeta,
   WalletBalanceResponse,

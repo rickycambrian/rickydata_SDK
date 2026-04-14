@@ -1,9 +1,10 @@
 export { PipelineClient } from './pipeline-client.js';
-export { MINIMAX_MODEL } from './types.js';
+export { MINIMAX_MODEL, GLM_MODEL } from './types.js';
 
 export type {
   // Provider
   PipelineProvider,
+  PipelineExecutionEngine,
 
   // Core operations
   PipelineResolveRequest,

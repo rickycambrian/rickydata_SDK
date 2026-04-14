@@ -310,11 +310,17 @@ export class PipelineClient {
    * Derive the provider from explicit value, model prefix, or default.
    *  1. Explicit provider wins.
    *  2. Model starting with "MiniMax" -> 'minimax'.
-   *  3. Default -> 'minimax'.
+   *  3. Model starting with "glm-" -> 'zai'.
+   *  4. Claude-family aliases -> 'claude'.
+   *  5. Default -> 'minimax'.
    */
   _resolveProvider(provider?: PipelineProvider, model?: string): PipelineProvider {
     if (provider) return provider;
     if (model?.startsWith('MiniMax')) return 'minimax';
+    if (model && /^glm-/i.test(model)) return 'zai';
+    if (model === 'haiku' || model === 'sonnet' || model === 'opus' || model?.startsWith('claude-')) {
+      return 'claude';
+    }
     return 'minimax';
   }
 

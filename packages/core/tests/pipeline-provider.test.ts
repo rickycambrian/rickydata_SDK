@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PipelineClient } from '../src/pipeline/pipeline-client.js';
-import { MINIMAX_MODEL } from '../src/pipeline/types.js';
+import { GLM_MODEL, MINIMAX_MODEL } from '../src/pipeline/types.js';
 
 const BASE = 'https://agents.rickydata.org';
 const API_KEY = 'test-key-123';
@@ -31,6 +31,8 @@ describe('PipelineClient provider resolution', () => {
     it('returns explicit provider when given', () => {
       expect(client._resolveProvider('claude')).toBe('claude');
       expect(client._resolveProvider('minimax')).toBe('minimax');
+      expect(client._resolveProvider('openrouter')).toBe('openrouter');
+      expect(client._resolveProvider('openclaude')).toBe('openclaude');
     });
 
     it('auto-detects minimax from model prefix', () => {
@@ -42,12 +44,19 @@ describe('PipelineClient provider resolution', () => {
       expect(client._resolveProvider(undefined, undefined)).toBe('minimax');
     });
 
+    it('auto-detects zai from glm model prefix', () => {
+      expect(client._resolveProvider(undefined, GLM_MODEL)).toBe('zai');
+      expect(client._resolveProvider(undefined, 'glm-4.5')).toBe('zai');
+    });
+
     it('explicit provider wins over model prefix', () => {
       expect(client._resolveProvider('claude', 'MiniMax-M2.7')).toBe('claude');
     });
 
-    it('defaults to minimax for non-MiniMax model without explicit provider', () => {
-      expect(client._resolveProvider(undefined, 'claude-sonnet')).toBe('minimax');
+    it('auto-detects claude for claude-family aliases', () => {
+      expect(client._resolveProvider(undefined, 'claude-sonnet')).toBe('claude');
+      expect(client._resolveProvider(undefined, 'sonnet')).toBe('claude');
+      expect(client._resolveProvider(undefined, 'haiku')).toBe('claude');
     });
   });
 
@@ -111,11 +120,34 @@ describe('PipelineClient provider resolution', () => {
         provider: 'minimax',
       });
     });
+
+    it('passes through executionEngine alongside inferred provider', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        okResponse({ run_id: 'r5', accepted: true }),
+      );
+
+      const client = mockClient();
+      await client.resolve('owner/repo', 9, {
+        model: GLM_MODEL,
+        executionEngine: 'openclaude',
+      });
+
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
+      expect(sentBody.options).toEqual({
+        model: 'glm-5.1',
+        executionEngine: 'openclaude',
+        provider: 'zai',
+      });
+    });
   });
 
   // ── MINIMAX_MODEL constant ───────────────────────────────────────────────
 
   it('MINIMAX_MODEL equals MiniMax-M2.7', () => {
     expect(MINIMAX_MODEL).toBe('MiniMax-M2.7');
+  });
+
+  it('GLM_MODEL equals glm-5.1', () => {
+    expect(GLM_MODEL).toBe('glm-5.1');
   });
 });

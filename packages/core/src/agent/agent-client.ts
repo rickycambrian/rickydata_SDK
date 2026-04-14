@@ -933,6 +933,9 @@ export class AgentClient {
     const decoder = new TextDecoder();
     let buffer = '';
     let text = '';
+    let model: string | undefined;
+    let executionEngine: 'claude' | 'openclaude' | undefined;
+    let engineUsed: 'claude' | 'openclaude' | undefined;
     let cost: string | undefined;
     let toolCallCount: number | undefined;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
@@ -988,6 +991,9 @@ export class AgentClient {
                   });
                   break;
                 case 'done':
+                  model = event.data.model;
+                  executionEngine = event.data.executionEngine;
+                  engineUsed = event.data.engineUsed;
                   cost = event.data.cost;
                   toolCallCount = event.data.toolCallCount;
                   usage = event.data.usage;
@@ -1015,6 +1021,9 @@ export class AgentClient {
               text += event.data;
               options?.onText?.(event.data);
             } else if (event.type === 'done') {
+              model = event.data.model;
+              executionEngine = event.data.executionEngine;
+              engineUsed = event.data.engineUsed;
               cost = event.data.cost;
               toolCallCount = event.data.toolCallCount;
               usage = event.data.usage;
@@ -1028,7 +1037,7 @@ export class AgentClient {
       reader.releaseLock();
     }
 
-    return { text, sessionId, cost, toolCallCount, usage };
+    return { text, sessionId, model, executionEngine, engineUsed, cost, toolCallCount, usage };
   }
 }
 

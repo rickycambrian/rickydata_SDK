@@ -12,9 +12,11 @@
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 
-export type PipelineProvider = 'claude' | 'minimax';
+export type PipelineProvider = 'claude' | 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'openclaude';
+export type PipelineExecutionEngine = 'claude' | 'openclaude';
 
 export const MINIMAX_MODEL = 'MiniMax-M2.7' as const;
+export const GLM_MODEL = 'glm-5.1' as const;
 
 // ── Resolve Request / Response ───────────────────────────────────────────────
 
@@ -25,6 +27,8 @@ export interface PipelineResolveOptions {
   model?: string;
   /** AI provider. Defaults to 'minimax'. */
   provider?: PipelineProvider;
+  /** Execution engine to request from compatible gateway runtimes. */
+  executionEngine?: PipelineExecutionEngine;
   /** Maximum spend in USD for this resolution */
   budget_usd?: number;
   /** Subprocess timeout in seconds (default: 600) */
@@ -60,6 +64,8 @@ export interface PipelineResolveResponse {
 export interface PipelineRouting {
   /** Selected model config (e.g. "claude-haiku", "claude-sonnet") */
   model: string;
+  /** Execution engine actually used when the backend reports it. */
+  engineUsed?: PipelineExecutionEngine;
   /** Expected success rate from ROI data [0, 1] */
   expected_success_rate: number;
   /** Expected cost in USD */
@@ -118,6 +124,10 @@ export interface PipelineOutcomeReport {
   run_id: string;
   /** What happened to the resolution */
   outcome: PipelineOutcomeType;
+  /** Requested execution engine for compatible gateway runtimes. */
+  executionEngine?: PipelineExecutionEngine;
+  /** Actual execution engine used when the backend reports it. */
+  engineUsed?: PipelineExecutionEngine;
   /** Actual cost incurred in USD */
   actual_cost_usd?: number;
   /** Actual quality score (0.0 - 1.0) from scoring engine */

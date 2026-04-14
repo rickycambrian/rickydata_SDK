@@ -184,6 +184,41 @@ describe('AgentClient', () => {
       expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
     });
 
+    it('returns model and execution engine metadata from done events', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'sess-1', agentId: 'test-agent', model: 'glm-5.1', executionEngine: 'openclaude' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          body: createSSEStream([
+            {
+              type: 'done',
+              data: {
+                model: 'glm-5.1',
+                executionEngine: 'openclaude',
+                engineUsed: 'openclaude',
+                cost: '$0.002',
+                toolCallCount: 0,
+                usage: { inputTokens: 12, outputTokens: 7 },
+              },
+            },
+          ]),
+        } as unknown as Response);
+
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      const result = await client.chat('test-agent', 'hi');
+
+      expect(result.model).toBe('glm-5.1');
+      expect(result.executionEngine).toBe('openclaude');
+      expect(result.engineUsed).toBe('openclaude');
+    });
+
     it('fires onText callback for each text chunk', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
       fetchSpy
@@ -357,6 +392,31 @@ describe('AgentClient', () => {
       expect(result.sessionId).toBe('my-session');
       // Only 3 calls: auth challenge + verify + chat (no session creation)
       expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('createSession', () => {
+    it('returns execution engine metadata when the gateway includes it', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'sess-2',
+            agentId: 'test-agent',
+            model: 'glm-5.1',
+            createdAt: '2026-04-14T00:00:00.000Z',
+            executionEngine: 'openclaude',
+          }),
+        } as Response);
+
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      const session = await client.createSession('test-agent', 'glm-5.1');
+
+      expect(session.executionEngine).toBe('openclaude');
     });
   });
 

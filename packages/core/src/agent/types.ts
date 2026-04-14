@@ -6,6 +6,11 @@
 
 /** Default model for free-tier users. Must start with 'MiniMax' to match backend routing. */
 export const FREE_TIER_MODEL = 'MiniMax-M2.7' as const;
+export const FREE_TIER_ZAI_MODEL = 'glm-5.1' as const;
+
+export type TeamExecutionEngine = 'claude' | 'openclaude';
+export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai';
+export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok';
 
 // ─── Configuration ──────────────────────────────────────────
 
@@ -83,6 +88,12 @@ export interface ChatResult {
   text: string;
   /** Session ID (reuse for follow-up messages). */
   sessionId: string;
+  /** Model reported by the gateway when the turn completed. */
+  model?: string;
+  /** Requested execution engine for the session/turn. */
+  executionEngine?: TeamExecutionEngine;
+  /** Actual execution engine reported by the gateway for the turn. */
+  engineUsed?: TeamExecutionEngine;
   /** Total cost in USDC display format (e.g. "$0.014"). */
   cost?: string;
   /** Number of MCP tool calls made. */
@@ -129,6 +140,9 @@ export interface SSEToolResultEvent {
 export interface SSEDoneEvent {
   type: 'done';
   data: {
+    model?: string;
+    executionEngine?: TeamExecutionEngine;
+    engineUsed?: TeamExecutionEngine;
     cost?: string;
     costRaw?: string;
     balanceRemaining?: string;
@@ -242,6 +256,7 @@ export interface SessionCreateResponse {
   agentId: string;
   model: string;
   createdAt: string;
+  executionEngine?: TeamExecutionEngine;
 }
 
 export interface SessionListEntry {
@@ -260,6 +275,7 @@ export interface SessionDetail {
   id: string;
   agentId: string;
   model: string;
+  executionEngine?: TeamExecutionEngine;
   messages: Array<{
     role: 'user' | 'assistant';
     content: string;
@@ -296,20 +312,27 @@ export interface AgentSecretStatus {
 
 export interface WalletSettings {
   defaultModel?: string;
+  defaultVoiceModel?: string;
   persistConversations?: boolean;
   conversationRetentionDays?: number;
   favoriteAgentIds?: string[];
   groupConversations?: GroupConversationMeta[];
   kfdbTenantId?: string;
   kfdbApiKey?: string;
-  plan?: 'free' | 'byok';
-  modelProvider?: string;
+  plan?: WalletPlan;
+  modelProvider?: MarketplaceProvider | (string & {});
+  anthropicApiKeyConfigured?: boolean;
+  minimaxApiKeyConfigured?: boolean;
+  openrouterApiKeyConfigured?: boolean;
+  zaiApiKeyConfigured?: boolean;
+  teamEngine?: TeamExecutionEngine;
+  executionEngine?: TeamExecutionEngine;
+  engineUsed?: TeamExecutionEngine;
+  enabledProviders?: MarketplaceProvider[];
   onboardingComplete?: boolean;
   autoImprove?: boolean;
   [key: string]: unknown;
 }
-
-export type WalletPlan = 'free' | 'byok';
 
 export interface FreeTierStatus {
   plan: 'free';

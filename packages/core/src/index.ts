@@ -207,6 +207,9 @@ export type {
   CustomAgentUpsertResult,
   ChatOptions,
   ChatResult,
+  TeamExecutionEngine,
+  MarketplaceProvider,
+  WalletPlan,
   // Sessions
   SessionCreateResponse,
   SessionListEntry,
@@ -449,7 +452,10 @@ export type {
 
 // Pipeline Client (autonomous issue resolution)
 export { PipelineClient } from './pipeline/index.js';
+export { MINIMAX_MODEL, GLM_MODEL } from './pipeline/index.js';
 export type {
+  PipelineProvider,
+  PipelineExecutionEngine,
   PipelineResolveRequest,
   PipelineResolveResponse,
   PipelineResolveOptions,
