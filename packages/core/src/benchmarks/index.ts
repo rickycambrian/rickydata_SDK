@@ -6,6 +6,7 @@ export type {
   BenchmarkRun,
   DiffQualityScore,
   CostMetrics,
+  TestDeltaRecord,
 
   // Tasks
   CreateTaskRequest,
@@ -26,6 +27,8 @@ export type {
   // Stats
   ConfigStatEntry,
   BenchmarkStats,
+  PublishBenchmarkCampaignRequest,
+  PublishBenchmarkCampaignResult,
 
   // Config
   BenchmarkClientConfig,

@@ -481,6 +481,7 @@ export type {
   BenchmarkRun,
   DiffQualityScore,
   CostMetrics,
+  TestDeltaRecord,
   CreateTaskRequest,
   TaskSearchOptions,
   TaskListResult,
@@ -493,6 +494,8 @@ export type {
   CacheROIRequest,
   ConfigStatEntry,
   BenchmarkStats,
+  PublishBenchmarkCampaignRequest,
+  PublishBenchmarkCampaignResult,
   BenchmarkClientConfig,
 } from './benchmarks/index.js';
 

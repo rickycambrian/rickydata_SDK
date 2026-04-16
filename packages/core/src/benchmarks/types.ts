@@ -12,6 +12,20 @@
 
 // ── Benchmark Task ──────────────────────────────────────────────────────
 
+export interface TestDeltaRecord {
+  pre_passing: number;
+  pre_failing: number;
+  post_passing: number;
+  post_failing: number;
+  tests_fixed: number;
+  regressions: number;
+  functional_score: number;
+  gold_tests_applied: boolean;
+  gold_test_files: number;
+  pre_output: string;
+  post_output: string;
+}
+
 export interface BenchmarkTask {
   task_id: string;
   tenant_id: string;
@@ -21,6 +35,7 @@ export interface BenchmarkTask {
   issue_title: string;
   /** Issue text with solution references stripped */
   sanitized_prompt: string;
+  campaign_id?: string;
   /** Commit before the fix (checkout point) */
   base_commit: string;
   /** The known-good resolution diff */
@@ -32,14 +47,22 @@ export interface BenchmarkTask {
   /** simple, moderate, complex */
   complexity: string;
   labels: string[];
+  test_command?: string;
+  test_framework?: string;
+  prompt_hash?: string;
+  prompt_template_id?: string;
+  task_manifest_id?: string;
+  task_version?: string;
   created_at: string;
 }
 
 export interface CreateTaskRequest {
+  task_id?: string;
   source_repo: string;
   issue_number: number;
   issue_title: string;
   sanitized_prompt: string;
+  campaign_id?: string;
   base_commit?: string;
   gold_diff?: string;
   gold_files_changed?: string[];
@@ -47,6 +70,12 @@ export interface CreateTaskRequest {
   issue_type?: string;
   complexity?: string;
   labels?: string[];
+  test_command?: string;
+  test_framework?: string;
+  prompt_hash?: string;
+  prompt_template_id?: string;
+  task_manifest_id?: string;
+  task_version?: string;
 }
 
 export interface TaskSearchOptions {
@@ -54,6 +83,7 @@ export interface TaskSearchOptions {
   language?: string;
   issue_type?: string;
   complexity?: string;
+  campaign_id?: string;
   limit?: number;
 }
 
@@ -90,6 +120,7 @@ export interface BenchmarkRun {
   run_id: string;
   tenant_id: string;
   task_id: string;
+  campaign_id?: string;
   provider: string;
   model: string;
   runtime_family?: string;
@@ -102,6 +133,12 @@ export interface BenchmarkRun {
   reproduce_command?: string;
   evo_experiment_id?: string;
   public_summary_ref?: string;
+  config_name?: string;
+  execution_backend?: string;
+  billing_profile?: string;
+  actual_cost_usd?: number;
+  stop_reason?: string;
+  evidence_class?: string;
   thinking_mode: string;
   context_strategy: string;
   generated_diff?: string;
@@ -109,6 +146,9 @@ export interface BenchmarkRun {
   cost_metrics?: CostMetrics;
   duration_seconds: number;
   success: boolean;
+  verification_level?: string;
+  test_passed?: boolean;
+  test_delta?: TestDeltaRecord;
   error?: string;
   user_id?: string;
   repo?: string;
@@ -116,7 +156,9 @@ export interface BenchmarkRun {
 }
 
 export interface RecordRunRequest {
+  run_id?: string;
   task_id: string;
+  campaign_id?: string;
   provider: string;
   model: string;
   runtime_family?: string;
@@ -129,6 +171,12 @@ export interface RecordRunRequest {
   reproduce_command?: string;
   evo_experiment_id?: string;
   public_summary_ref?: string;
+  config_name?: string;
+  execution_backend?: string;
+  billing_profile?: string;
+  actual_cost_usd?: number;
+  stop_reason?: string;
+  evidence_class?: string;
   thinking_mode?: string;
   context_strategy?: string;
   generated_diff?: string;
@@ -136,6 +184,9 @@ export interface RecordRunRequest {
   cost_metrics?: CostMetrics;
   duration_seconds?: number;
   success?: boolean;
+  verification_level?: string;
+  test_passed?: boolean;
+  test_delta?: TestDeltaRecord;
   error?: string;
   user_id?: string;
   repo?: string;
@@ -143,6 +194,7 @@ export interface RecordRunRequest {
 
 export interface RunSearchOptions {
   task_id?: string;
+  campaign_id?: string;
   model?: string;
   user_id?: string;
   repo?: string;
@@ -211,6 +263,32 @@ export interface BenchmarkStats {
   repos: string[];
   models: string[];
   config_stats: ConfigStatEntry[];
+}
+
+export interface PublishBenchmarkCampaignRequest {
+  campaign_id: string;
+  title: string;
+  summary?: string;
+  methodology_refs?: string[];
+  provenance_refs?: string[];
+  manifest_hash?: string;
+  notebook_ref?: string;
+  export_refs?: string[];
+  report_title?: string;
+  report_summary_markdown?: string;
+  report_author?: string;
+  release_ready?: boolean;
+}
+
+export interface PublishBenchmarkCampaignResult {
+  success: boolean;
+  campaign_id: string;
+  tasks_published: number;
+  runs_published: number;
+  report_id?: string;
+  public_note_id?: string;
+  transaction_id?: string;
+  block_height?: number;
 }
 
 // ── Client Config ───────────────────────────────────────────────────────

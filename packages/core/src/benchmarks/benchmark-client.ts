@@ -22,6 +22,8 @@ import type {
   ROIResult,
   CacheROIRequest,
   BenchmarkStats,
+  PublishBenchmarkCampaignRequest,
+  PublishBenchmarkCampaignResult,
 } from './types.js';
 
 export class BenchmarkClient {
@@ -64,6 +66,7 @@ export class BenchmarkClient {
     if (options?.language) params.set('language', options.language);
     if (options?.issue_type) params.set('issue_type', options.issue_type);
     if (options?.complexity) params.set('complexity', options.complexity);
+    if (options?.campaign_id) params.set('campaign_id', options.campaign_id);
     if (options?.limit != null) params.set('limit', String(options.limit));
 
     const qs = params.toString();
@@ -108,6 +111,7 @@ export class BenchmarkClient {
   async searchRuns(options?: RunSearchOptions): Promise<RunListResult> {
     const params = new URLSearchParams();
     if (options?.task_id) params.set('task_id', options.task_id);
+    if (options?.campaign_id) params.set('campaign_id', options.campaign_id);
     if (options?.model) params.set('model', options.model);
     if (options?.user_id) params.set('user_id', options.user_id);
     if (options?.repo) params.set('repo', options.repo);
@@ -203,6 +207,28 @@ export class BenchmarkClient {
 
     if (!res.ok) {
       await this.throwFromResponse(res, 'initialize benchmark schema');
+    }
+
+    return res.json();
+  }
+
+  /**
+   * Publish a sanitized benchmark campaign into public_chain tables.
+   */
+  async publishCampaign(
+    data: PublishBenchmarkCampaignRequest,
+  ): Promise<PublishBenchmarkCampaignResult> {
+    if (!data.campaign_id) throw new Error('campaign_id is required');
+    if (!data.title) throw new Error('title is required');
+
+    const res = await this.request('/api/v1/benchmark/campaigns/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      await this.throwFromResponse(res, 'publish benchmark campaign');
     }
 
     return res.json();
