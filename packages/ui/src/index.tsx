@@ -16,6 +16,12 @@ import {
   type RickyDataThemeName,
 } from '@rickydata/design-tokens';
 export {
+  OrganizedBubbleAtlas,
+  type OrganizedBubbleAtlasEdge,
+  type OrganizedBubbleAtlasNode,
+  type OrganizedBubbleAtlasProps,
+} from './OrganizedBubbleAtlas';
+export {
   RelationshipGraph,
   type RelationshipGraphEdge,
   type RelationshipGraphEdgeKindAppearance,

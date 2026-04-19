@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/ui",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reusable RickyData UI primitives and layout components",
   "type": "module",
   "main": "./dist/index.cjs",
