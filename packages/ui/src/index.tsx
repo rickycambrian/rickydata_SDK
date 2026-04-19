@@ -15,6 +15,14 @@ import {
   type RickyDataTheme,
   type RickyDataThemeName,
 } from '@rickydata/design-tokens';
+export {
+  RelationshipGraph,
+  type RelationshipGraphEdge,
+  type RelationshipGraphEdgeKindAppearance,
+  type RelationshipGraphNode,
+  type RelationshipGraphNodeKindAppearance,
+  type RelationshipGraphProps,
+} from './RelationshipGraph';
 
 export interface RickyDataThemeProviderProps {
   theme?: RickyDataThemeName | Partial<RickyDataTheme>;
