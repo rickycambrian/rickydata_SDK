@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/tailwind-preset",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tailwind preset for RickyData design tokens",
   "type": "module",
   "main": "./dist/index.cjs",
