@@ -14,17 +14,91 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm run build
-      - run: npm test
-      - run: npm publish -w rickydata --provenance --access public
+      - name: Detect packages with unpublished versions
+        id: publish-targets
+        run: |
+          set -euo pipefail
+
+          workspaces=(
+            "packages/core"
+            "packages/react"
+            "packages/chat"
+            "packages/design-tokens"
+            "packages/tailwind-preset"
+            "packages/ui"
+          )
+
+          publish_names=()
+
+          for workspace in "${workspaces[@]}"; do
+            name=$(node -p "require('./${workspace}/package.json').name")
+            version=$(node -p "require('./${workspace}/package.json').version")
+
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "Skipping ${name}@${version}; already published"
+            else
+              publish_names+=("${name}")
+            fi
+          done
+
+          if [ "${#publish_names[@]}" -eq 0 ]; then
+            echo "has_targets=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf 'targets=%s\n' "$(IFS=,; echo "${publish_names[*]}")" >> "$GITHUB_OUTPUT"
+          echo "has_targets=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build unpublished packages
+        if: steps.publish-targets.outputs.has_targets == 'true'
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a targets <<< "${{ steps.publish-targets.outputs.targets }}"
+          filter_args=()
+          for target in "${targets[@]}"; do
+            filter_args+=("--filter=${target}")
+          done
+          npx turbo run build "${filter_args[@]}"
+
+      - name: Test unpublished packages
+        if: steps.publish-targets.outputs.has_targets == 'true'
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a targets <<< "${{ steps.publish-targets.outputs.targets }}"
+          filter_args=()
+          for target in "${targets[@]}"; do
+            filter_args+=("--filter=${target}")
+          done
+          npx turbo run test "${filter_args[@]}"
+
+      - name: Typecheck unpublished packages
+        if: steps.publish-targets.outputs.has_targets == 'true'
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a targets <<< "${{ steps.publish-targets.outputs.targets }}"
+          filter_args=()
+          for target in "${targets[@]}"; do
+            filter_args+=("--filter=${target}")
+          done
+          npx turbo run typecheck "${filter_args[@]}"
+
+      - name: Publish packages if version is new
+        if: steps.publish-targets.outputs.has_targets == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish -w @rickydata/react --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish -w @rickydata/chat --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          IFS=',' read -r -a targets <<< "${{ steps.publish-targets.outputs.targets }}"
+
+          publish_if_needed() {
+            local name="$1"
+            npm publish -w "${name}" --provenance --access public
+          }
+
+          for target in "${targets[@]}"; do
+            publish_if_needed "${target}"
+          done
       # NOTE: After publishing, the monorepo's refresh-trusted-deps.yml
       # (runs every 6h + manual dispatch) detects the new version and
       # invalidates MCP server Docker images. Admin tokens are kept
