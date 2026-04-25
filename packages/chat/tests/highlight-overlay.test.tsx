@@ -3,6 +3,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HighlightOverlay } from '../src/components/HighlightOverlay.js';
+import { applyHostEvent } from '../src/host/apply.js';
 import { useAgentActions } from '../src/stores/actions.js';
 
 class ResizeObserverStub {
@@ -94,8 +95,11 @@ describe('HighlightOverlay', () => {
 
     const clicky = await screen.findByTestId('rickydata-companion-clicky');
     expect(clicky).toBeTruthy();
-    expect(clicky.getAttribute('style')).toContain('top: 175px');
-    expect(clicky.getAttribute('style')).toContain('left: 239px');
+    expect(clicky.getAttribute('style')).toContain('top: 197px');
+    expect(clicky.getAttribute('style')).toContain('left: 247px');
+    expect(clicky.getAttribute('style')).toContain('width: 16px');
+    expect(clicky.getAttribute('style')).toContain('height: 16px');
+    expect(screen.getByTestId('rickydata-companion-clicky-triangle').getAttribute('style')).toContain('background: rgb(51, 128, 255)');
   });
 
   it('renders the clicky companion from browser pointer movement without store context', async () => {
@@ -108,9 +112,46 @@ describe('HighlightOverlay', () => {
     }));
 
     const clicky = await screen.findByTestId('rickydata-companion-clicky');
-    expect(clicky.getAttribute('style')).toContain('top: 115px');
-    expect(clicky.getAttribute('style')).toContain('left: 119px');
+    expect(clicky.getAttribute('style')).toContain('top: 137px');
+    expect(clicky.getAttribute('style')).toContain('left: 127px');
     expect(screen.queryByText('Ready')).toBeNull();
+  });
+
+  it('applies host highlight and focus events to visible page targets', async () => {
+    addTarget('claims-section', { top: 44, left: 52, width: 320, height: 96 });
+
+    applyHostEvent({
+      type: 'ui_highlight',
+      data: {
+        target: 'claims-section',
+        tooltip: 'Claims section',
+        durationMs: 5000,
+      },
+    });
+    applyHostEvent({
+      type: 'focus_target',
+      data: {
+        id: 'claims-section',
+        target: 'claims-section',
+        label: 'Claims section',
+      },
+    });
+
+    render(<HighlightOverlay companionVariant="clicky" showCompanion={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rickydata-highlight-ring')).toBeTruthy();
+      expect(screen.getByTestId('rickydata-focus-ring')).toBeTruthy();
+    });
+    expect(screen.getByText('Claims section')).toBeTruthy();
+    expect(useAgentActions.getState().activeHighlights.get('claims-section')).toMatchObject({
+      target: 'claims-section',
+      tooltip: 'Claims section',
+    });
+    expect(useAgentActions.getState().focusedTarget).toMatchObject({
+      target: 'claims-section',
+      label: 'Claims section',
+    });
   });
 
   it('resolves focused targets and shows the clicky focus ring', async () => {

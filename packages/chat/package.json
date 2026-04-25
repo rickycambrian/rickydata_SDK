@@ -1,6 +1,6 @@
 {
   "name": "@rickydata/chat",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming",
   "type": "module",
   "main": "./dist/index.cjs",

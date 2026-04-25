@@ -145,7 +145,17 @@ function renderBuddyFace(status?: string) {
   switch (status) {
     case 'listening':
       return (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className="pointer-events-none absolute flex items-center justify-center rounded-full"
+          style={{
+            top: -6,
+            left: -6,
+            width: 28,
+            height: 28,
+            background: 'rgba(51, 128, 255, 0.94)',
+            boxShadow: '0 0 14px rgba(51, 128, 255, 0.62)',
+          }}
+        >
           <div className="flex items-end gap-[3px]">
             {[0, 1, 2].map((index) => (
               <span
@@ -162,13 +172,33 @@ function renderBuddyFace(status?: string) {
       );
     case 'processing':
       return (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className="pointer-events-none absolute flex items-center justify-center rounded-full"
+          style={{
+            top: -6,
+            left: -6,
+            width: 28,
+            height: 28,
+            background: 'rgba(51, 128, 255, 0.94)',
+            boxShadow: '0 0 14px rgba(51, 128, 255, 0.62)',
+          }}
+        >
           <span className="block h-5 w-5 rounded-full border-2 border-white/20 border-t-white/95 animate-spin" />
         </div>
       );
     case 'responding':
       return (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className="pointer-events-none absolute flex items-center justify-center rounded-full"
+          style={{
+            top: -6,
+            left: -6,
+            width: 28,
+            height: 28,
+            background: 'rgba(51, 128, 255, 0.94)',
+            boxShadow: '0 0 14px rgba(51, 128, 255, 0.62)',
+          }}
+        >
           <span className="block h-3.5 w-3.5 rounded-full bg-white/95 shadow-[0_0_20px_rgba(255,255,255,0.9)] animate-pulse" />
         </div>
       );
@@ -186,7 +216,7 @@ function ClickyTriangle({
   rotation: number;
   status?: string;
 }) {
-  const pulseScale = mode === 'flying' || mode === 'returning' ? 1.14 : 1;
+  const pulseScale = mode === 'flying' || mode === 'returning' ? 1.3 : 1;
   return (
     <div
       className="absolute"
@@ -195,24 +225,15 @@ function ClickyTriangle({
         transform: `rotate(${rotation}deg) scale(${pulseScale})`,
         transformOrigin: '50% 58%',
         transition: mode === 'flying' || mode === 'returning' ? 'none' : 'transform 180ms ease-out',
-        filter: 'drop-shadow(0 0 12px rgba(51,128,255,0.72)) drop-shadow(0 12px 26px rgba(5,12,26,0.34))',
+        filter: 'drop-shadow(0 0 8px rgba(51,128,255,0.72))',
       }}
     >
       <div
         className="absolute inset-0"
+        data-testid="rickydata-companion-clicky-triangle"
         style={{
-          clipPath: 'polygon(50% 0%, 2% 82%, 98% 82%)',
-          background: 'linear-gradient(180deg, rgba(218,244,255,0.98) 0%, rgba(75,168,255,0.98) 44%, rgba(25,111,255,0.98) 100%)',
-          border: '1px solid rgba(238, 250, 255, 0.86)',
-          borderRadius: '12px',
-          boxShadow: 'inset 0 0 12px rgba(255,255,255,0.48), inset 0 -12px 18px rgba(0,0,0,0.14)',
-        }}
-      />
-      <div
-        className="absolute inset-[5px]"
-        style={{
-          clipPath: 'polygon(50% 3%, 8% 76%, 92% 76%)',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(130,214,255,0.12))',
+          clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+          background: '#3380ff',
         }}
       />
       {renderBuddyFace(status)}
@@ -396,27 +417,15 @@ function ClickyCompanion({
         className="pointer-events-none absolute z-[70]"
         data-testid="rickydata-companion-clicky"
         style={{
-          top: position.y - 30,
-          left: position.x - 16,
-          width: 52,
-          height: 52,
+          top: position.y - 8,
+          left: position.x - 8,
+          width: 16,
+          height: 16,
           animation: mode === 'following' || mode === 'pointing' ? 'rickydata-clicky-float 2.2s ease-in-out infinite' : undefined,
         }}
       >
         <ClickyTriangle mode={mode} rotation={rotation} status={visualStatus} />
       </div>
-
-      <div
-        className="pointer-events-none absolute z-[68] rounded-full"
-        style={{
-          top: position.y - 18,
-          left: position.x - 18,
-          width: 44,
-          height: 44,
-          background: 'radial-gradient(circle, rgba(51,128,255,0.32) 0%, rgba(51,128,255,0.10) 55%, rgba(51,128,255,0) 100%)',
-          animation: 'rickydata-clicky-glow 2.1s ease-in-out infinite',
-        }}
-      />
 
       {resolvedBubbleText && (
         <div
@@ -426,15 +435,15 @@ function ClickyCompanion({
             left: bubbleLeft,
             width: bubbleWidth,
             maxWidth: 300,
-            borderRadius: 10,
-            backgroundColor: 'rgba(17, 19, 22, 0.94)',
-            border: '1px solid rgba(111, 172, 255, 0.32)',
+            borderRadius: 6,
+            backgroundColor: 'rgba(24, 31, 39, 0.94)',
+            border: '1px solid rgba(0, 0, 0, 0.18)',
             color: 'var(--chat-text-primary, #f7fbff)',
             fontFamily: 'var(--chat-font-family, system-ui, sans-serif)',
-            fontSize: 12,
-            lineHeight: 1.45,
-            padding: '8px 10px',
-            boxShadow: '0 16px 38px rgba(5, 12, 24, 0.32)',
+            fontSize: 11,
+            lineHeight: 1.35,
+            padding: '6px 8px',
+            boxShadow: '0 10px 24px rgba(5, 12, 24, 0.22)',
           }}
         >
           {resolvedBubbleText}
@@ -705,10 +714,6 @@ export function HighlightOverlay({
         @keyframes rickydata-clicky-float {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-3px); }
-        }
-        @keyframes rickydata-clicky-glow {
-          0%, 100% { opacity: 0.55; transform: scale(0.95); }
-          50% { opacity: 1; transform: scale(1.08); }
         }
       `}</style>
     </>,
