@@ -57,6 +57,7 @@ export type {
   ServerRequirement,
   McpRequirementsResponse,
   AgentSecretStatus,
+  CodexAuthStatus,
 
   // Wallet
   WalletSettings,

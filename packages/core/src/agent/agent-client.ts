@@ -42,6 +42,8 @@ import type {
   TeamSSEEvent,
   TeamWorkflowOptions,
   FreeTierStatus,
+  TeamExecutionEngine,
+  CodexAuthStatus,
 } from './types.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
@@ -153,6 +155,66 @@ export class AgentClient {
       headers: this.authHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to delete API key: ${res.status}`);
+  }
+
+  // ─── OpenAI BYOK + Codex Subscription Auth ───────────────────
+
+  /** Get OpenAI BYOK key status for Codex execution. */
+  async getOpenAIApiKeyStatus(): Promise<{ configured: boolean; encryptionMode?: string; unlocked?: boolean }> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey/status`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) return { configured: false };
+    return res.json();
+  }
+
+  /** Delete stored OpenAI BYOK key for this wallet. */
+  async deleteOpenAIApiKey(): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete OpenAI API key: ${res.status}`);
+  }
+
+  /** Get wallet Codex subscription auth status. */
+  async getCodexAuthStatus(): Promise<CodexAuthStatus> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/status`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get Codex auth status: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Upload a local Codex CLI auth.json object for subscription-backed Codex execution. */
+  async setCodexAuth(authJson: unknown): Promise<CodexAuthStatus> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth`, {
+      method: 'PUT',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ authJson }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to set Codex auth: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Delete wallet Codex subscription auth. */
+  async deleteCodexAuth(): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete Codex auth: ${res.status}`);
   }
 
   // ─── Reflect & KB Tools (Builder) ─────────────────────────
@@ -934,8 +996,9 @@ export class AgentClient {
     let buffer = '';
     let text = '';
     let model: string | undefined;
-    let executionEngine: 'claude' | 'openclaude' | undefined;
-    let engineUsed: 'claude' | 'openclaude' | undefined;
+    let executionEngine: TeamExecutionEngine | undefined;
+    let engineUsed: TeamExecutionEngine | undefined;
+    let codexAuthSource: 'openai_api_key' | 'subscription' | undefined;
     let cost: string | undefined;
     let toolCallCount: number | undefined;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
@@ -997,6 +1060,7 @@ export class AgentClient {
                   usage = event.data.usage;
                   executionEngine = event.data.executionEngine;
                   engineUsed = event.data.engineUsed;
+                  codexAuthSource = event.data.codexAuthSource;
                   break;
                 case 'error':
                   throw new AgentError(AgentErrorCode.AGENT_ERROR, event.data.message ?? JSON.stringify(event.data), { sessionId });
@@ -1027,6 +1091,7 @@ export class AgentClient {
               usage = event.data.usage;
               executionEngine = event.data.executionEngine;
               engineUsed = event.data.engineUsed;
+              codexAuthSource = event.data.codexAuthSource;
             }
           } catch {
             // Skip malformed JSON
@@ -1037,7 +1102,7 @@ export class AgentClient {
       reader.releaseLock();
     }
 
-    return { text, sessionId, model, executionEngine, engineUsed, cost, toolCallCount, usage };
+    return { text, sessionId, model, executionEngine, engineUsed, codexAuthSource, cost, toolCallCount, usage };
   }
 }
 

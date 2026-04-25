@@ -8,9 +8,9 @@
 export const FREE_TIER_MODEL = 'MiniMax-M2.7' as const;
 export const FREE_TIER_ZAI_MODEL = 'glm-5.1' as const;
 
-export type TeamExecutionEngine = 'claude' | 'openclaude';
-export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai';
-export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok';
+export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex';
+export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'openai';
+export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'openai_byok';
 
 // ─── Configuration ──────────────────────────────────────────
 
@@ -94,6 +94,8 @@ export interface ChatResult {
   executionEngine?: TeamExecutionEngine;
   /** Actual execution engine reported by the gateway for the turn. */
   engineUsed?: TeamExecutionEngine;
+  /** Codex auth source reported by the gateway for Codex turns. */
+  codexAuthSource?: 'openai_api_key' | 'subscription';
   /** Total cost in USDC display format (e.g. "$0.014"). */
   cost?: string;
   /** Number of MCP tool calls made. */
@@ -148,6 +150,7 @@ export interface SSEDoneEvent {
     balanceRemaining?: string;
     usage?: { inputTokens: number; outputTokens: number };
     toolCallCount?: number;
+    codexAuthSource?: 'openai_api_key' | 'subscription';
   };
 }
 
@@ -306,6 +309,14 @@ export interface AgentSecretStatus {
   configuredSecrets: string[];
   missingRequired: string[];
   ready: boolean;
+}
+
+export interface CodexAuthStatus {
+  configured: boolean;
+  authMode?: string;
+  hasTokens?: boolean;
+  hasOpenAIApiKey?: boolean;
+  updatedAt?: string;
 }
 
 // ─── Wallet ─────────────────────────────────────────────────
