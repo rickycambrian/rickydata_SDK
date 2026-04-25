@@ -18,6 +18,7 @@ export type { ActionConfirmationCardProps } from './components/ActionConfirmatio
 export { ThreadDrawer } from './components/ThreadDrawer.js';
 export type { ThreadDrawerProps } from './components/ThreadDrawer.js';
 export { HighlightOverlay } from './components/HighlightOverlay.js';
+export type { HighlightOverlayProps, HighlightOverlayCompanionVariant } from './components/HighlightOverlay.js';
 
 // Full-page chat components (Tailwind-styled, marketplace-style)
 export { ChatPage } from './components/ChatPage.js';
