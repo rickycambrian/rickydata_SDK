@@ -94,8 +94,23 @@ describe('HighlightOverlay', () => {
 
     const clicky = await screen.findByTestId('rickydata-companion-clicky');
     expect(clicky).toBeTruthy();
-    expect(clicky.getAttribute('style')).toContain('top: 150px');
-    expect(clicky.getAttribute('style')).toContain('left: 204px');
+    expect(clicky.getAttribute('style')).toContain('top: 175px');
+    expect(clicky.getAttribute('style')).toContain('left: 239px');
+  });
+
+  it('renders the clicky companion from browser pointer movement without store context', async () => {
+    render(<HighlightOverlay companionVariant="clicky" />);
+
+    document.dispatchEvent(new MouseEvent('pointermove', {
+      bubbles: true,
+      clientX: 100,
+      clientY: 120,
+    }));
+
+    const clicky = await screen.findByTestId('rickydata-companion-clicky');
+    expect(clicky.getAttribute('style')).toContain('top: 115px');
+    expect(clicky.getAttribute('style')).toContain('left: 119px');
+    expect(screen.queryByText('Ready')).toBeNull();
   });
 
   it('resolves focused targets and shows the clicky focus ring', async () => {

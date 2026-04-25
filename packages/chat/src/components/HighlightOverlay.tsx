@@ -26,6 +26,11 @@ interface Point {
 
 type ClickyMode = 'following' | 'flying' | 'pointing' | 'returning';
 
+const CLICKY_CURSOR_OFFSET = {
+  x: 35,
+  y: 25,
+};
+
 function clampBubbleLeft(pointerX: number, bubbleWidth: number) {
   const min = window.scrollX + 16;
   const max = window.scrollX + window.innerWidth - bubbleWidth - 16;
@@ -72,6 +77,68 @@ function targetPoint(rect: OverlayRect): Point {
 
 function distance(a: Point, b: Point) {
   return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function toClickyCompanionPoint(pointerX: number, pointerY: number): Point {
+  return {
+    x: pointerX + CLICKY_CURSOR_OFFSET.x,
+    y: pointerY + CLICKY_CURSOR_OFFSET.y,
+  };
+}
+
+function useBrowserPointerFallback(enabled: boolean) {
+  const [pointer, setPointer] = useState<Point | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const latestPointRef = useRef<Point | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setPointer(null);
+      return;
+    }
+
+    const publish = () => {
+      frameRef.current = null;
+      setPointer(latestPointRef.current);
+    };
+
+    const schedule = () => {
+      if (frameRef.current != null) return;
+      frameRef.current = window.requestAnimationFrame(publish);
+    };
+
+    const handlePointerMove = (event: MouseEvent | PointerEvent) => {
+      latestPointRef.current = {
+        x: event.clientX + window.scrollX,
+        y: event.clientY + window.scrollY,
+      };
+      schedule();
+    };
+
+    const handleWindowBlur = () => {
+      latestPointRef.current = null;
+      if (frameRef.current != null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+      setPointer(null);
+    };
+
+    document.addEventListener('pointermove', handlePointerMove, { passive: true });
+    document.addEventListener('mousemove', handlePointerMove, { passive: true });
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('blur', handleWindowBlur);
+      if (frameRef.current != null) {
+        window.cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, [enabled]);
+
+  return pointer;
 }
 
 function renderBuddyFace(status?: string) {
@@ -227,11 +294,12 @@ function ClickyCompanion({
   focusRect: OverlayRect | null;
   status?: string;
 }) {
-  const [position, setPosition] = useState<Point>({ x: cursorX, y: cursorY });
+  const companionPoint = toClickyCompanionPoint(cursorX, cursorY);
+  const [position, setPosition] = useState<Point>(companionPoint);
   const [rotation, setRotation] = useState(-35);
   const [mode, setMode] = useState<ClickyMode>('following');
   const positionRef = useRef(position);
-  const latestPointerRef = useRef<Point>({ x: cursorX, y: cursorY });
+  const latestPointerRef = useRef<Point>(companionPoint);
   const targetKeyRef = useRef<string | null>(null);
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,9 +309,10 @@ function ClickyCompanion({
   }, [position]);
 
   useEffect(() => {
-    latestPointerRef.current = { x: cursorX, y: cursorY };
+    const nextPoint = toClickyCompanionPoint(cursorX, cursorY);
+    latestPointerRef.current = nextPoint;
     if (mode === 'following') {
-      setPosition({ x: cursorX, y: cursorY });
+      setPosition(nextPoint);
     }
   }, [cursorX, cursorY, mode]);
 
@@ -388,6 +457,7 @@ export function HighlightOverlay({
   const removeHighlight = useAgentActions((s) => s.removeHighlight);
   const focusedTarget = useAgentActions((s) => s.focusedTarget);
   const shadowCursor = useAgentActions((s) => s.shadowCursor);
+  const browserPointer = useBrowserPointerFallback(showCompanion && companionVariant === 'clicky');
   const [rects, setRects] = useState<OverlayRect[]>([]);
   const [focusRect, setFocusRect] = useState<OverlayRect | null>(null);
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -513,14 +583,22 @@ export function HighlightOverlay({
     };
   }, []);
 
-  const hasCursor = showCompanion && shadowCursor?.active && shadowCursor.pointer;
-  const cursorX = shadowCursor?.pointer?.documentX ?? shadowCursor?.pointer?.viewportX ?? 0;
-  const cursorY = shadowCursor?.pointer?.documentY ?? shadowCursor?.pointer?.viewportY ?? 0;
+  const storePointer = shadowCursor?.active && shadowCursor.pointer
+    ? {
+        x: shadowCursor.pointer.documentX ?? shadowCursor.pointer.viewportX,
+        y: shadowCursor.pointer.documentY ?? shadowCursor.pointer.viewportY,
+      }
+    : null;
+  const resolvedPointer = storePointer || browserPointer;
+  const hasCursor = showCompanion && Boolean(resolvedPointer);
+  const cursorX = resolvedPointer?.x ?? 0;
+  const cursorY = resolvedPointer?.y ?? 0;
   const visualStatus = focusRect ? 'pointing' : shadowCursor?.status;
   const bubbleText = useMemo(() => {
     if (focusRect?.tooltip) return focusRect.tooltip;
+    if (companionVariant === 'clicky') return shadowCursor?.tooltip;
     return shadowCursor?.tooltip || shadowCursor?.label;
-  }, [focusRect?.tooltip, shadowCursor?.label, shadowCursor?.tooltip]);
+  }, [companionVariant, focusRect?.tooltip, shadowCursor?.label, shadowCursor?.tooltip]);
   const bubbleWidth = bubbleText ? Math.min(288, Math.max(190, bubbleText.length * 6.6)) : 0;
   const bubbleLeft = bubbleText ? clampBubbleLeft(cursorX, bubbleWidth) : cursorX + 28;
   const bubbleTop = cursorY + 10;
