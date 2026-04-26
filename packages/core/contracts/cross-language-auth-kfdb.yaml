@@ -310,6 +310,7 @@ components:
           type: string
 x-rickydata-notes:
   requestHeadersAfterDerive:
+    - X-Wallet-Address
     - X-Derive-Session-Id
     - X-Derive-Key
   implementationNotes:

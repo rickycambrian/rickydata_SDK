@@ -85,8 +85,15 @@ export type {
   VaultSecretStatus,
   VaultSecretEntry,
 } from './types/index.js';
-export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './kfdb/index.js';
+export {
+  MemoryDeriveSessionStore,
+  FileDeriveSessionStore,
+  buildAgentChatTraceOperations,
+  createAgentChatTraceFixture,
+} from './kfdb/index.js';
 export type {
+  AgentChatTraceEvent,
+  AgentChatTurnTrace,
   AutoDeriveOptions,
   DeriveChallenge,
   DeriveKeyResult,

@@ -45,6 +45,7 @@ describe('cross-language auth contract artifact', () => {
     expect(contract).toContain('SHA-256(signature bytes)');
     expect(contract).toContain('X-Derive-Session-Id');
     expect(contract).toContain('X-Derive-Key');
+    expect(contract).toContain('X-Wallet-Address');
     expect(contract).toContain('sessionId');
     expect(contract).toContain('keyHex');
     expect(contract).toContain('expiresAt');
@@ -53,6 +54,7 @@ describe('cross-language auth contract artifact', () => {
 
     expect(kfdbTypes).toContain('challenge_id: string;');
     expect(kfdbTypes).toContain('session_id: string;');
+    expect(kfdbClient).toContain("headers.set('X-Wallet-Address', this.walletAddress);");
     expect(kfdbClient).toContain("headers.set('X-Derive-Session-Id', this.deriveSessionId);");
     expect(kfdbClient).toContain("headers.set('X-Derive-Key', this.deriveKeyHex);");
   });

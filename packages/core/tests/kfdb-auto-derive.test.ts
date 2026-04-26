@@ -78,6 +78,7 @@ describe('KFDBClient.autoDerive', () => {
         return new Response(JSON.stringify({
           session_id: MOCK_SESSION_ID,
           expires_at: MOCK_EXPIRES_AT,
+          key_hex: 'ff'.repeat(32),
         }), { status: 200 });
       }
 
@@ -116,6 +117,14 @@ describe('KFDBClient.autoDerive', () => {
     expect(signFn).toHaveBeenCalledWith(
       expect.objectContaining({ primaryType: 'Derive' }),
     );
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      headers: expect.not.objectContaining({ Authorization: expect.any(String) }),
+    }));
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      headers: expect.not.objectContaining({ Authorization: expect.any(String) }),
+    }));
   });
 
   it('uses cached session from store', async () => {
@@ -185,6 +194,7 @@ describe('KFDBClient.autoDerive', () => {
     const cached = await store.get(MOCK_ADDRESS);
     expect(cached).not.toBeNull();
     expect(cached!.sessionId).toBe(MOCK_SESSION_ID);
+    expect(cached!.keyHex).toBe('ff'.repeat(32));
     expect(cached!.address).toBe(MOCK_ADDRESS);
   });
 });

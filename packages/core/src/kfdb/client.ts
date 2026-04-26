@@ -17,6 +17,7 @@ import type {
   KfdbWriteResponse,
 } from './types.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
+import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
 
 export class KFDBClient {
   private readonly baseUrl: string;
@@ -258,6 +259,13 @@ export class KFDBClient {
     return this.parseJson<KfdbWriteResponse>(res, 'write');
   }
 
+  async writeAgentChatTrace(trace: AgentChatTurnTrace): Promise<KfdbWriteResponse> {
+    return this.write({
+      operations: buildAgentChatTraceOperations(trace),
+      skip_embedding: true,
+    });
+  }
+
   private resolveScope(scope?: KfdbQueryScope): KfdbQueryScope {
     return scope ?? this.defaultReadScope;
   }
@@ -273,6 +281,10 @@ export class KFDBClient {
 
     const headers = new Headers(init?.headers ?? {});
     headers.set('Authorization', `Bearer ${token}`);
+
+    if (this.walletAddress) {
+      headers.set('X-Wallet-Address', this.walletAddress);
+    }
 
     if (this.deriveSessionId && this.deriveKeyHex) {
       headers.set('X-Derive-Session-Id', this.deriveSessionId);
@@ -312,7 +324,8 @@ export class KFDBClient {
 
     // 1. Fetch challenge
     const challengeRes = await fetch(`${this.baseUrl}/api/v1/auth/derive-challenge`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     });
     if (!challengeRes.ok) {
       const body = await challengeRes.text().catch(() => '');
@@ -327,8 +340,8 @@ export class KFDBClient {
     const deriveRes = await fetch(`${this.baseUrl}/api/v1/auth/derive-key`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         challenge_id: challenge.challenge_id,
@@ -343,7 +356,7 @@ export class KFDBClient {
     const result: DeriveKeyResult = await deriveRes.json();
 
     // 4. Derive key locally — SHA-256(signature_bytes)
-    const keyHex = deriveKeyFromSignature(signature);
+    const keyHex = result.key_hex ?? deriveKeyFromSignature(signature);
 
     // 5. Store session
     this.deriveSessionId = result.session_id;

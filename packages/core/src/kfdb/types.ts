@@ -123,4 +123,5 @@ export interface DeriveChallenge {
 export interface DeriveKeyResult {
   session_id: string;
   expires_at: number;
+  key_hex?: string;
 }

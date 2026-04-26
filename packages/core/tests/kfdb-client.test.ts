@@ -104,6 +104,21 @@ describe('KFDBClient', () => {
     expect(headers.get('authorization')).toBe('Bearer kfdb_api_key');
   });
 
+  it('sends wallet tenant header when walletAddress is configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ labels: [], count: 0 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const walletAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    const client = new KFDBClient({ baseUrl: BASE, apiKey: 'kfdb_api_key', walletAddress });
+    await client.listLabels('private');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+    expect(headers.get('x-wallet-address')).toBe(walletAddress);
+  });
+
   it('injects resolved scope into filter and batch request bodies', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(
