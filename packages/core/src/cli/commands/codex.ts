@@ -39,7 +39,7 @@ async function confirmUpload(authPath: string): Promise<boolean> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(
-      `Upload ${authPath} to the RickyData agent gateway for wallet-scoped Codex subscription use? [y/N] `,
+      `Encrypt and upload ${authPath} to the RickyData agent gateway for wallet-scoped Codex subscription use? [y/N] `,
       (answer) => {
         rl.close();
         resolve(answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes');
@@ -52,7 +52,8 @@ function makeClient(config: ConfigManager, store: CredentialStore, opts: { profi
   const profile = opts.profile ?? config.getActiveProfile();
   const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
   const token = requireAuth(store, profile);
-  return new AgentClient({ token, gatewayUrl });
+  const privateKey = store.getPrivateKey(profile) ?? undefined;
+  return new AgentClient({ token, privateKey, gatewayUrl });
 }
 
 export function createCodexCommands(config: ConfigManager, store: CredentialStore): Command {
@@ -74,6 +75,9 @@ export function createCodexCommands(config: ConfigManager, store: CredentialStor
         if (remote.configured) {
           if (remote.authMode) console.log(chalk.dim(`Auth mode: ${remote.authMode}`));
           console.log(chalk.dim(`Tokens present: ${remote.hasTokens ? 'yes' : 'no'}`));
+          if (remote.encryptionMode) console.log(chalk.dim(`Encryption: ${remote.encryptionMode}`));
+          if (remote.unlocked !== undefined) console.log(chalk.dim(`Unlocked: ${remote.unlocked ? 'yes' : 'no'}`));
+          if (remote.needsMigration) console.log(chalk.yellow('Remote auth needs migration. Run `rickydata codex sync --yes`.'));
           if (remote.updatedAt) console.log(chalk.dim(`Updated: ${remote.updatedAt}`));
         }
         console.log(`Local ${authPath}: ${localExists ? chalk.green('Found') : chalk.yellow('Missing')}`);
@@ -102,9 +106,28 @@ export function createCodexCommands(config: ConfigManager, store: CredentialStor
 
         const client = makeClient(config, store, opts);
         const status = await client.setCodexAuth(authJson);
-        console.log(chalk.green('Codex subscription auth synced.'));
+        console.log(chalk.green('Codex subscription auth encrypted and synced.'));
         console.log(chalk.dim(`Remote status: ${status.configured ? 'configured' : 'not configured'}`));
         if (status.authMode) console.log(chalk.dim(`Auth mode: ${status.authMode}`));
+        if (status.encryptionMode) console.log(chalk.dim(`Encryption: ${status.encryptionMode}`));
+        if (status.unlocked !== undefined) console.log(chalk.dim(`Unlocked: ${status.unlocked ? 'yes' : 'no'}`));
+      } catch (err) {
+        throw new CliError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+  codex
+    .command('unlock')
+    .description('Unlock encrypted Codex subscription auth for the current gateway session')
+    .option('--profile <profile>', 'Config profile to use')
+    .option('--gateway <url>', 'Override agent gateway URL')
+    .action(async (opts) => {
+      try {
+        const client = makeClient(config, store, opts);
+        const status = await client.unlockCodexAuth();
+        console.log(chalk.green('Codex subscription auth unlocked.'));
+        if (status.authMode) console.log(chalk.dim(`Auth mode: ${status.authMode}`));
+        if (status.encryptionMode) console.log(chalk.dim(`Encryption: ${status.encryptionMode}`));
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));
       }

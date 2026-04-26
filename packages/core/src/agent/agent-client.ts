@@ -195,14 +195,33 @@ export class AgentClient {
   /** Upload a local Codex CLI auth.json object for subscription-backed Codex execution. */
   async setCodexAuth(authJson: unknown): Promise<CodexAuthStatus> {
     await this.ensureAuthenticated();
+    const { message, nonce } = await this.getCodexAuthDeriveChallenge();
+    const signature = await this.signWithPrivateKey(message, 'Codex subscription auth sync requires the owner wallet private key');
     const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth`, {
       method: 'PUT',
       headers: this.authHeaders(),
-      body: JSON.stringify({ authJson }),
+      body: JSON.stringify({ authJson, signature, nonce }),
     });
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to set Codex auth: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Unlock encrypted Codex subscription auth for this gateway session. */
+  async unlockCodexAuth(): Promise<CodexAuthStatus> {
+    await this.ensureAuthenticated();
+    const { message } = await this.getCodexAuthDeriveChallenge();
+    const signature = await this.signWithPrivateKey(message, 'Codex subscription auth unlock requires the owner wallet private key');
+    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/unlock`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ signature }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to unlock Codex auth: ${res.status} ${body}`);
     }
     return res.json();
   }
@@ -215,6 +234,17 @@ export class AgentClient {
       headers: this.authHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to delete Codex auth: ${res.status}`);
+  }
+
+  private async getCodexAuthDeriveChallenge(): Promise<{ message: string; nonce: string }> {
+    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/derive-challenge`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get Codex auth signing challenge: ${res.status} ${body}`);
+    }
+    return res.json();
   }
 
   // ─── Reflect & KB Tools (Builder) ─────────────────────────
@@ -862,6 +892,15 @@ export class AgentClient {
     }
     const { token } = await verifyRes.json();
     this.token = token;
+  }
+
+  private async signWithPrivateKey(message: string, missingKeyMessage: string): Promise<string> {
+    if (!this.privateKey) {
+      throw new AgentError(AgentErrorCode.AUTH_REQUIRED, missingKeyMessage);
+    }
+    const { privateKeyToAccount } = await import('viem/accounts');
+    const account = privateKeyToAccount(this.privateKey);
+    return account.signMessage({ message });
   }
 
   private async getOrCreateSession(agentId: string, model?: string): Promise<string> {

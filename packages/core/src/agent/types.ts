@@ -317,6 +317,10 @@ export interface CodexAuthStatus {
   hasTokens?: boolean;
   hasOpenAIApiKey?: boolean;
   updatedAt?: string;
+  encryptionMode?: 'sign-to-derive' | 'legacy-plaintext' | 'none' | string;
+  persistent?: boolean;
+  unlocked?: boolean;
+  needsMigration?: boolean;
 }
 
 // ─── Wallet ─────────────────────────────────────────────────
