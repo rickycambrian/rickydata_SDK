@@ -547,7 +547,7 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
         '2': { plan: 'free', modelProvider: 'minimax', defaultModel: 'MiniMax-M2.7-highspeed', label: 'MiniMax (M2.7)' },
         '3': { plan: 'byok', modelProvider: 'anthropic', defaultModel: 'claude-haiku-4-5-20251001', label: 'Anthropic (Claude)' },
         '4': { plan: 'free', modelProvider: 'deepseek', defaultModel: 'deepseek-v4-pro', label: 'DeepSeek (V4 Pro)' },
-        '5': { plan: 'gemini_byok', modelProvider: 'gemini', defaultModel: 'gemini-2.5-pro', label: 'Gemini (2.5 Pro)' },
+        '5': { plan: 'gemini_byok', modelProvider: 'gemini', defaultModel: 'gemini-3.1-pro-preview', label: 'Gemini (3.1 Pro Preview)' },
       };
       const chosen = providerMap[providerChoice] ?? providerMap['1'];
 

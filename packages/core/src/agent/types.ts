@@ -8,7 +8,7 @@
 export const FREE_TIER_MODEL = 'MiniMax-M2.7' as const;
 export const FREE_TIER_ZAI_MODEL = 'glm-5.1' as const;
 export const FREE_TIER_DEEPSEEK_MODEL = 'deepseek-v4-pro' as const;
-export const GEMINI_MODEL = 'gemini-2.5-pro' as const;
+export const GEMINI_MODEL = 'gemini-3.1-pro-preview' as const;
 
 export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex';
 export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'deepseek' | 'gemini' | 'openai';

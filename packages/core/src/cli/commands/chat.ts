@@ -28,7 +28,7 @@ function defaultModelForProvider(provider: unknown): string {
   if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
   if (provider === 'zai') return 'glm-5.1';
   if (provider === 'deepseek') return 'deepseek-v4-pro';
-  if (provider === 'gemini') return 'gemini-2.5-pro';
+  if (provider === 'gemini') return 'gemini-3.1-pro-preview';
   return FREE_TIER_MODEL;
 }
 
@@ -86,7 +86,7 @@ async function resolveModel(
     }
 
     if (settings.plan === 'gemini_byok') {
-      return settings.defaultModel || 'gemini-2.5-pro';
+      return settings.defaultModel || 'gemini-3.1-pro-preview';
     }
 
     // Plan not set — probe API key to decide

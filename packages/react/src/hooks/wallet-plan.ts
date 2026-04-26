@@ -7,7 +7,7 @@ function defaultModelForPlanProvider(provider: WalletSettings['modelProvider'] |
   if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
   if (provider === 'zai') return 'glm-5.1';
   if (provider === 'deepseek') return 'deepseek-v4-pro';
-  if (provider === 'gemini') return 'gemini-2.5-pro';
+  if (provider === 'gemini') return 'gemini-3.1-pro-preview';
   return 'MiniMax-M2.7';
 }
 
