@@ -179,6 +179,40 @@ export class AgentClient {
     if (!res.ok) throw new Error(`Failed to delete OpenAI API key: ${res.status}`);
   }
 
+  // ─── Gemini BYOK ─────────────────────────────────────────
+
+  /** Get Gemini BYOK key status for this wallet. */
+  async getGeminiApiKeyStatus(): Promise<{ configured: boolean; encryptionMode?: string; unlocked?: boolean }> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/gemini-apikey/status`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) return { configured: false };
+    return res.json();
+  }
+
+  /** Store a Gemini BYOK key for this wallet. Browser apps should prefer the sign-to-derive flow. */
+  async setGeminiApiKey(geminiApiKey: string): Promise<{ configured: boolean }> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/gemini-apikey`, {
+      method: 'PUT',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ geminiApiKey }),
+    });
+    if (!res.ok) throw new Error(`Failed to set Gemini API key: ${res.status}`);
+    return res.json();
+  }
+
+  /** Delete stored Gemini BYOK key for this wallet. */
+  async deleteGeminiApiKey(): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/gemini-apikey`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete Gemini API key: ${res.status}`);
+  }
+
   /** Get wallet Codex subscription auth status. */
   async getCodexAuthStatus(): Promise<CodexAuthStatus> {
     await this.ensureAuthenticated();

@@ -27,6 +27,8 @@ async function getFreeTierModel(client: AgentClient): Promise<string> {
 function defaultModelForProvider(provider: unknown): string {
   if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
   if (provider === 'zai') return 'glm-5.1';
+  if (provider === 'deepseek') return 'deepseek-v4-pro';
+  if (provider === 'gemini') return 'gemini-2.5-pro';
   return FREE_TIER_MODEL;
 }
 
@@ -52,7 +54,11 @@ async function resolveModel(
 
     // Explicit free plan — use the configured model provider (OpenRouter or MiniMax)
     if (settings.plan === 'free') {
-      if (settings.modelProvider === 'openrouter' || settings.modelProvider === 'zai') {
+      if (
+        settings.modelProvider === 'openrouter' ||
+        settings.modelProvider === 'zai' ||
+        settings.modelProvider === 'deepseek'
+      ) {
         return settings.defaultModel || defaultModelForProvider(settings.modelProvider);
       }
       if (settings.modelProvider !== 'minimax') {
@@ -73,6 +79,14 @@ async function resolveModel(
 
     if (settings.plan === 'zai_byok') {
       return settings.defaultModel || 'glm-5.1';
+    }
+
+    if (settings.plan === 'deepseek_byok') {
+      return settings.defaultModel || 'deepseek-v4-pro';
+    }
+
+    if (settings.plan === 'gemini_byok') {
+      return settings.defaultModel || 'gemini-2.5-pro';
     }
 
     // Plan not set — probe API key to decide

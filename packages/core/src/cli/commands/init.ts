@@ -108,10 +108,27 @@ const WRAPPER_SCRIPT = `#!/usr/bin/env bash
 set -euo pipefail
 NATIVE_CLAUDE="$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")"
 TOKEN=$(node -e "try{const c=JSON.parse(require('fs').readFileSync(require('os').homedir()+'/.rickydata/credentials.json','utf8'));const profiles=c.profiles||{};console.log((profiles.default||profiles[Object.keys(profiles)[0]]||{}).token||'')}catch{}")
+MODEL_ARG=""
+prev=""
+for arg in "$@"; do
+  if [[ "$prev" == "--model" ]]; then
+    MODEL_ARG="$arg"
+    break
+  fi
+  case "$arg" in
+    --model=*) MODEL_ARG="\${arg#--model=}"; break ;;
+  esac
+  prev="$arg"
+done
+MODEL_LOWER=$(printf '%s' "$MODEL_ARG" | tr '[:upper:]' '[:lower:]')
+CUSTOM_MODEL_OPTION="rickydata-agent"
+case "$MODEL_LOWER" in
+  glm-*|glm*|deepseek-*|deepseek*|gemini-*|gemini*) CUSTOM_MODEL_OPTION="$MODEL_ARG" ;;
+esac
 exec env \\
   ANTHROPIC_BASE_URL='https://agents.rickydata.org/claude-compat' \\
   ANTHROPIC_AUTH_TOKEN="$TOKEN" \\
-  ANTHROPIC_CUSTOM_MODEL_OPTION='rickydata-agent' \\
+  ANTHROPIC_CUSTOM_MODEL_OPTION="$CUSTOM_MODEL_OPTION" \\
   ANTHROPIC_CUSTOM_MODEL_OPTION_NAME='rickydata TEE Agent' \\
   ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION='Route through rickydata TEE gateway' \\
   API_TIMEOUT_MS='3000000' \\
@@ -510,6 +527,8 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
       console.log(chalk.cyan('  1.') + chalk.bold(' OpenRouter — Gemma 4') + chalk.dim(' (50 free/day, zero data retention)') + chalk.green(' [recommended]'));
       console.log(chalk.cyan('  2.') + chalk.bold(' MiniMax — M2.7') + chalk.dim(' (100 free/day)'));
       console.log(chalk.cyan('  3.') + chalk.bold(' Anthropic — Claude') + chalk.dim(' (bring your own key)'));
+      console.log(chalk.cyan('  4.') + chalk.bold(' DeepSeek — V4 Pro') + chalk.dim(' (via rickydata provider)'));
+      console.log(chalk.cyan('  5.') + chalk.bold(' Gemini — 2.5 Pro') + chalk.dim(' (bring your own key)'));
       console.log();
 
       let providerChoice = '1';  // Default: OpenRouter
@@ -527,6 +546,8 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
         '1': { plan: 'free', modelProvider: 'openrouter', defaultModel: 'google/gemma-4-26b-a4b-it', label: 'OpenRouter (Gemma 4)' },
         '2': { plan: 'free', modelProvider: 'minimax', defaultModel: 'MiniMax-M2.7-highspeed', label: 'MiniMax (M2.7)' },
         '3': { plan: 'byok', modelProvider: 'anthropic', defaultModel: 'claude-haiku-4-5-20251001', label: 'Anthropic (Claude)' },
+        '4': { plan: 'free', modelProvider: 'deepseek', defaultModel: 'deepseek-v4-pro', label: 'DeepSeek (V4 Pro)' },
+        '5': { plan: 'gemini_byok', modelProvider: 'gemini', defaultModel: 'gemini-2.5-pro', label: 'Gemini (2.5 Pro)' },
       };
       const chosen = providerMap[providerChoice] ?? providerMap['1'];
 
@@ -550,6 +571,12 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
             }
             if (chosen.modelProvider === 'anthropic') {
               console.log(chalk.dim('  Run `rickydata apikey set` to add your Anthropic API key'));
+            }
+            if (chosen.modelProvider === 'deepseek') {
+              console.log(chalk.dim('  DeepSeek requests route through the rickydata gateway provider'));
+            }
+            if (chosen.modelProvider === 'gemini') {
+              console.log(chalk.dim('  Add your Gemini API key at https://rickydata.org/settings before chatting'));
             }
           } else {
             settingsSpinner.fail('Could not update provider settings');
@@ -597,7 +624,9 @@ export function createInitCommand(config: ConfigManager, store: CredentialStore)
         ? '50 free daily requests with Gemma 4 (zero data retention)'
         : chosen.modelProvider === 'minimax'
           ? '100 free daily requests with MiniMax M2.7'
-          : 'Unlimited with your Anthropic API key (10% platform fee)';
+          : chosen.modelProvider === 'deepseek'
+            ? 'DeepSeek V4 Pro through the rickydata gateway provider'
+            : 'Unlimited with your Anthropic API key (10% platform fee)';
       console.log(chalk.green('✓') + ` ${freeTierMsg}`);
       console.log(chalk.green('✓') + ' Agent chat works immediately — no funding needed to start');
       console.log();

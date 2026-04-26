@@ -6,6 +6,8 @@ import { useWalletSettings, walletSettingsKeys } from './wallet-settings.js';
 function defaultModelForPlanProvider(provider: WalletSettings['modelProvider'] | undefined): string {
   if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
   if (provider === 'zai') return 'glm-5.1';
+  if (provider === 'deepseek') return 'deepseek-v4-pro';
+  if (provider === 'gemini') return 'gemini-2.5-pro';
   return 'MiniMax-M2.7';
 }
 
@@ -23,7 +25,11 @@ export function useWalletPlan() {
     mutationFn: async (newPlan: WalletPlan) => {
       const updates: Partial<WalletSettings> = { plan: newPlan };
       if (newPlan === 'free') {
-        const provider = settings?.modelProvider === 'openrouter' || settings?.modelProvider === 'zai'
+        const provider = (
+          settings?.modelProvider === 'openrouter' ||
+          settings?.modelProvider === 'zai' ||
+          settings?.modelProvider === 'deepseek'
+        )
           ? settings.modelProvider
           : 'minimax';
         updates.modelProvider = provider;

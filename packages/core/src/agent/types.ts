@@ -7,10 +7,12 @@
 /** Default model for free-tier users. Must start with 'MiniMax' to match backend routing. */
 export const FREE_TIER_MODEL = 'MiniMax-M2.7' as const;
 export const FREE_TIER_ZAI_MODEL = 'glm-5.1' as const;
+export const FREE_TIER_DEEPSEEK_MODEL = 'deepseek-v4-pro' as const;
+export const GEMINI_MODEL = 'gemini-2.5-pro' as const;
 
 export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex';
-export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'openai';
-export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'openai_byok';
+export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'deepseek' | 'gemini' | 'openai';
+export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'deepseek_byok' | 'gemini_byok' | 'openai_byok';
 
 // ─── Configuration ──────────────────────────────────────────
 
@@ -340,6 +342,8 @@ export interface WalletSettings {
   minimaxApiKeyConfigured?: boolean;
   openrouterApiKeyConfigured?: boolean;
   zaiApiKeyConfigured?: boolean;
+  deepseekApiKeyConfigured?: boolean;
+  geminiApiKeyConfigured?: boolean;
   teamEngine?: TeamExecutionEngine;
   executionEngine?: TeamExecutionEngine;
   engineUsed?: TeamExecutionEngine;
