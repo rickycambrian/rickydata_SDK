@@ -22,6 +22,8 @@ export interface AgentChatTurnTrace {
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-agent-chat-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
+const EXECUTION_KG_NAMESPACE = uuidV5('rickydata-execution-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
+const TRACE_SCHEMA_VERSION = 2;
 
 function sha256(input: string): Buffer {
   return createHash('sha256').update(input).digest();
@@ -43,6 +45,10 @@ function uuidV5(name: string, namespace: string): string {
 
 function deterministicId(kind: string, parts: Array<string | number>): string {
   return uuidV5(`${kind}:${parts.map((p) => String(p)).join(':')}`, KG_NAMESPACE);
+}
+
+function deterministicExecutionId(kind: string, parts: Array<string | number>): string {
+  return uuidV5(`${kind}:${parts.map((p) => String(p)).join(':')}`, EXECUTION_KG_NAMESPACE);
 }
 
 function value(input: unknown): Record<string, unknown> {
@@ -78,7 +84,34 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
   const turnNodeId = deterministicId('AgentChatTurn', [wallet, trace.agentId, trace.sessionId, trace.turnIndex]);
   const userMessageId = deterministicId('AgentChatMessage', [turnNodeId, 'user']);
   const assistantMessageId = deterministicId('AgentChatMessage', [turnNodeId, 'assistant']);
+  const walletNodeId = deterministicExecutionId('WalletTenant', [wallet]);
+  const agentNodeId = deterministicExecutionId('Agent', [trace.agentId]);
+  const provider = trace.provider ?? '';
+  const model = trace.model ?? '';
+  const executionEngine = trace.executionEngine ?? '';
+  const modelNodeId = model ? deterministicExecutionId('Model', [provider, model]) : null;
+  const executionEngineNodeId = executionEngine ? deterministicExecutionId('ExecutionEngine', [executionEngine]) : null;
   const operations: Array<Record<string, unknown>> = [
+    {
+      operation: 'create_node',
+      id: walletNodeId,
+      label: 'WalletTenant',
+      mode: 'merge',
+      properties: {
+        wallet_address: value(wallet),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
+    {
+      operation: 'create_node',
+      id: agentNodeId,
+      label: 'Agent',
+      mode: 'merge',
+      properties: {
+        agent_id: value(trace.agentId),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
     {
       operation: 'create_node',
       id: sessionNodeId,
@@ -89,7 +122,7 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
         session_id: value(trace.sessionId),
         wallet_address: value(wallet),
         source: value('rickydata-sdk'),
-        schema_version: value(1),
+        schema_version: value(TRACE_SCHEMA_VERSION),
         updated_at: value(trace.completedAt),
       },
     },
@@ -104,15 +137,31 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
         turn_index: value(trace.turnIndex),
         user_message_hash: value(stableHash(trace.userMessage)),
         assistant_text_hash: value(stableHash(trace.assistantText)),
-        model: value(trace.model ?? ''),
-        provider: value(trace.provider ?? ''),
-        execution_engine: value(trace.executionEngine ?? ''),
+        model: value(model),
+        provider: value(provider),
+        execution_engine: value(executionEngine),
         started_at: value(trace.startedAt),
         completed_at: value(trace.completedAt),
         tool_call_count: value(trace.toolCallCount),
         event_count: value(trace.events.length),
-        schema_version: value(1),
+        schema_version: value(TRACE_SCHEMA_VERSION),
       },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicExecutionId('OWNS_EXECUTION_SESSION', [walletNodeId, sessionNodeId]),
+      from: walletNodeId,
+      to: sessionNodeId,
+      edge_type: 'OWNS_EXECUTION_SESSION',
+      properties: { source: value('agent-chat') },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicExecutionId('EXECUTES_AGENT', [sessionNodeId, agentNodeId]),
+      from: sessionNodeId,
+      to: agentNodeId,
+      edge_type: 'EXECUTES_AGENT',
+      properties: { agent_id: value(trace.agentId) },
     },
     {
       operation: 'create_edge',
@@ -127,14 +176,14 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
       id: userMessageId,
       label: 'AgentChatMessage',
       mode: 'merge',
-      properties: { role: value('user'), content: value(trace.userMessage), content_hash: value(stableHash(trace.userMessage)), timestamp: value(trace.startedAt), schema_version: value(1) },
+      properties: { role: value('user'), content: value(trace.userMessage), content_hash: value(stableHash(trace.userMessage)), timestamp: value(trace.startedAt), schema_version: value(TRACE_SCHEMA_VERSION) },
     },
     {
       operation: 'create_node',
       id: assistantMessageId,
       label: 'AgentChatMessage',
       mode: 'merge',
-      properties: { role: value('assistant'), content: value(trace.assistantText), content_hash: value(stableHash(trace.assistantText)), timestamp: value(trace.completedAt), schema_version: value(1) },
+      properties: { role: value('assistant'), content: value(trace.assistantText), content_hash: value(stableHash(trace.assistantText)), timestamp: value(trace.completedAt), schema_version: value(TRACE_SCHEMA_VERSION) },
     },
     {
       operation: 'create_edge',
@@ -154,6 +203,53 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
     },
   ];
 
+  if (modelNodeId) {
+    operations.push(
+      {
+        operation: 'create_node',
+        id: modelNodeId,
+        label: 'Model',
+        mode: 'merge',
+        properties: {
+          provider: value(provider),
+          model: value(model),
+          schema_version: value(TRACE_SCHEMA_VERSION),
+        },
+      },
+      {
+        operation: 'create_edge',
+        id: deterministicExecutionId('USES_MODEL', [turnNodeId, modelNodeId]),
+        from: turnNodeId,
+        to: modelNodeId,
+        edge_type: 'USES_MODEL',
+        properties: { provider: value(provider), model: value(model) },
+      },
+    );
+  }
+
+  if (executionEngineNodeId) {
+    operations.push(
+      {
+        operation: 'create_node',
+        id: executionEngineNodeId,
+        label: 'ExecutionEngine',
+        mode: 'merge',
+        properties: {
+          execution_engine: value(executionEngine),
+          schema_version: value(TRACE_SCHEMA_VERSION),
+        },
+      },
+      {
+        operation: 'create_edge',
+        id: deterministicExecutionId('USES_EXECUTION_ENGINE', [turnNodeId, executionEngineNodeId]),
+        from: turnNodeId,
+        to: executionEngineNodeId,
+        edge_type: 'USES_EXECUTION_ENGINE',
+        properties: { execution_engine: value(executionEngine) },
+      },
+    );
+  }
+
   trace.events.forEach((event, index) => {
     const eventId = deterministicId('AgentChatEvent', [turnNodeId, index, event.type]);
     operations.push(
@@ -166,7 +262,7 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
           event_index: value(index),
           event_type: value(event.type),
           data: value(summarizeEventData(event)),
-          schema_version: value(1),
+          schema_version: value(TRACE_SCHEMA_VERSION),
         },
       },
       {
@@ -178,9 +274,44 @@ export function buildAgentChatTraceOperations(trace: AgentChatTurnTrace): Array<
         properties: { event_index: value(index) },
       },
     );
+
+    const toolUse = extractToolUse(event, index);
+    if (toolUse) {
+      const toolNodeId = deterministicId('AgentChatToolUse', [turnNodeId, toolUse.id || index, toolUse.name]);
+      operations.push(
+        {
+          operation: 'create_node',
+          id: toolNodeId,
+          label: 'AgentChatToolUse',
+          mode: 'merge',
+          properties: {
+            tool_name: value(toolUse.name),
+            tool_use_id: value(toolUse.id),
+            event_index: value(index),
+            schema_version: value(TRACE_SCHEMA_VERSION),
+          },
+        },
+        {
+          operation: 'create_edge',
+          id: deterministicId('INVOKED_TOOL', [turnNodeId, toolNodeId]),
+          from: turnNodeId,
+          to: toolNodeId,
+          edge_type: 'INVOKED_TOOL',
+          properties: { tool_name: value(toolUse.name), event_index: value(index) },
+        },
+      );
+    }
   });
 
   return operations;
+}
+
+function extractToolUse(event: AgentChatTraceEvent, index: number): { name: string; id: string } | null {
+  if (event.type !== 'tool_call' && event.type !== 'tool_use') return null;
+  if (!event.data || typeof event.data !== 'object') return null;
+  const data = event.data as Record<string, unknown>;
+  if (typeof data.name !== 'string' || !data.name) return null;
+  return { name: data.name, id: typeof data.id === 'string' ? data.id : String(index) };
 }
 
 export function createAgentChatTraceFixture(walletAddress: string): AgentChatTurnTrace {

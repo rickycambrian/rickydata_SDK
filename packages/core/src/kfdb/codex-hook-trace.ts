@@ -32,6 +32,8 @@ export interface CodexHookTrace {
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-codex-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
+const EXECUTION_KG_NAMESPACE = uuidV5('rickydata-execution-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
+const TRACE_SCHEMA_VERSION = 2;
 
 function sha256(input: string): Buffer {
   return createHash('sha256').update(input).digest();
@@ -53,6 +55,10 @@ function uuidV5(name: string, namespace: string): string {
 
 function deterministicId(kind: string, parts: Array<string | number>): string {
   return uuidV5(`${kind}:${parts.map((p) => String(p)).join(':')}`, KG_NAMESPACE);
+}
+
+function deterministicExecutionId(kind: string, parts: Array<string | number>): string {
+  return uuidV5(`${kind}:${parts.map((p) => String(p)).join(':')}`, EXECUTION_KG_NAMESPACE);
 }
 
 function value(input: unknown): Record<string, unknown> {
@@ -106,7 +112,32 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
   const wallet = trace.walletAddress.toLowerCase();
   const sessionNodeId = deterministicId('CodexSession', [wallet, trace.agentId, trace.sessionId, trace.codexSessionId]);
   const turnNodeId = deterministicId('CodexTurn', [wallet, trace.agentId, trace.sessionId, trace.turnIndex, trace.turnId]);
+  const walletNodeId = deterministicExecutionId('WalletTenant', [wallet]);
+  const agentNodeId = deterministicExecutionId('Agent', [trace.agentId]);
+  const model = trace.model ?? '';
+  const modelNodeId = model ? deterministicExecutionId('Model', ['openai', model]) : null;
+  const executionEngineNodeId = deterministicExecutionId('ExecutionEngine', ['codex']);
   const operations: Array<Record<string, unknown>> = [
+    {
+      operation: 'create_node',
+      id: walletNodeId,
+      label: 'WalletTenant',
+      mode: 'merge',
+      properties: {
+        wallet_address: value(wallet),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
+    {
+      operation: 'create_node',
+      id: agentNodeId,
+      label: 'Agent',
+      mode: 'merge',
+      properties: {
+        agent_id: value(trace.agentId),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
     {
       operation: 'create_node',
       id: sessionNodeId,
@@ -118,7 +149,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         codex_session_id: value(trace.codexSessionId),
         wallet_address: value(wallet),
         source: value('codex-hooks'),
-        schema_version: value(1),
+        schema_version: value(TRACE_SCHEMA_VERSION),
         updated_at: value(trace.completedAt),
       },
     },
@@ -133,13 +164,31 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         codex_session_id: value(trace.codexSessionId),
         turn_id: value(trace.turnId),
         turn_index: value(trace.turnIndex),
-        model: value(trace.model ?? ''),
+        model: value(model),
+        provider: value('openai'),
+        execution_engine: value('codex'),
         cwd: value(trace.cwd ?? ''),
         started_at: value(trace.startedAt),
         completed_at: value(trace.completedAt),
         event_count: value(trace.events.length),
-        schema_version: value(1),
+        schema_version: value(TRACE_SCHEMA_VERSION),
       },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicExecutionId('OWNS_EXECUTION_SESSION', [walletNodeId, sessionNodeId]),
+      from: walletNodeId,
+      to: sessionNodeId,
+      edge_type: 'OWNS_EXECUTION_SESSION',
+      properties: { source: value('codex-hooks') },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicExecutionId('EXECUTES_AGENT', [sessionNodeId, agentNodeId]),
+      from: sessionNodeId,
+      to: agentNodeId,
+      edge_type: 'EXECUTES_AGENT',
+      properties: { agent_id: value(trace.agentId) },
     },
     {
       operation: 'create_edge',
@@ -150,6 +199,51 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
       properties: { turn_index: value(trace.turnIndex) },
     },
   ];
+
+  if (modelNodeId) {
+    operations.push(
+      {
+        operation: 'create_node',
+        id: modelNodeId,
+        label: 'Model',
+        mode: 'merge',
+        properties: {
+          provider: value('openai'),
+          model: value(model),
+          schema_version: value(TRACE_SCHEMA_VERSION),
+        },
+      },
+      {
+        operation: 'create_edge',
+        id: deterministicExecutionId('USES_MODEL', [turnNodeId, modelNodeId]),
+        from: turnNodeId,
+        to: modelNodeId,
+        edge_type: 'USES_MODEL',
+        properties: { provider: value('openai'), model: value(model) },
+      },
+    );
+  }
+
+  operations.push(
+    {
+      operation: 'create_node',
+      id: executionEngineNodeId,
+      label: 'ExecutionEngine',
+      mode: 'merge',
+      properties: {
+        execution_engine: value('codex'),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicExecutionId('USES_EXECUTION_ENGINE', [turnNodeId, executionEngineNodeId]),
+      from: turnNodeId,
+      to: executionEngineNodeId,
+      edge_type: 'USES_EXECUTION_ENGINE',
+      properties: { execution_engine: value('codex') },
+    },
+  );
 
   trace.events.forEach((event) => {
     const eventId = deterministicId('CodexHookEvent', [
@@ -168,7 +262,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
           event_index: value(event.sequence),
           event_type: value(event.hookEventName),
           data: value(eventData(event)),
-          schema_version: value(1),
+          schema_version: value(TRACE_SCHEMA_VERSION),
         },
       },
       {
@@ -191,7 +285,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
           properties: {
             tool_name: value(event.toolName),
             tool_use_id: value(event.toolUseId ?? ''),
-            schema_version: value(1),
+            schema_version: value(TRACE_SCHEMA_VERSION),
           },
         },
         {
