@@ -90,10 +90,14 @@ export {
   FileDeriveSessionStore,
   buildAgentChatTraceOperations,
   createAgentChatTraceFixture,
+  buildCodexHookTraceOperations,
+  createCodexHookTraceFixture,
 } from './kfdb/index.js';
 export type {
   AgentChatTraceEvent,
   AgentChatTurnTrace,
+  CodexHookEventRecord,
+  CodexHookTrace,
   AutoDeriveOptions,
   DeriveChallenge,
   DeriveKeyResult,

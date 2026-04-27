@@ -119,6 +119,40 @@ describe('KFDBClient', () => {
     expect(headers.get('x-wallet-address')).toBe(walletAddress);
   });
 
+  it('writes Codex hook traces through the deterministic KG builder', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ operations_executed: 5 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const walletAddress = '0x75992f829DF3B5d515D70DB0f77A98171cE261EF';
+    const client = new KFDBClient({ baseUrl: BASE, apiKey: 'kfdb_api_key', walletAddress });
+    client.setDeriveSession('derive-session', 'b'.repeat(64));
+    await client.writeCodexHookTrace({
+      walletAddress,
+      agentId: 'erc8004-expert',
+      sessionId: 'session-1',
+      turnIndex: 1,
+      codexSessionId: 'codex-session-1',
+      turnId: 'turn-1',
+      startedAt: 1,
+      completedAt: 2,
+      events: [{
+        sequence: 0,
+        hookEventName: 'Stop',
+        codexSessionId: 'codex-session-1',
+        turnId: 'turn-1',
+        receivedAt: 2,
+        lastAssistantMessage: 'done',
+      }],
+    });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.skip_embedding).toBe(true);
+    expect(body.operations.map((op: { label?: string }) => op.label)).toContain('CodexHookEvent');
+  });
+
   it('injects resolved scope into filter and batch request bodies', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(

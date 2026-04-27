@@ -18,6 +18,7 @@ import type {
 } from './types.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
+import { buildCodexHookTraceOperations, type CodexHookTrace } from './codex-hook-trace.js';
 
 function normalizeKfdbExpiresAt(raw: number): number {
   return raw < 10_000_000_000 ? raw * 1000 : raw;
@@ -266,6 +267,13 @@ export class KFDBClient {
   async writeAgentChatTrace(trace: AgentChatTurnTrace): Promise<KfdbWriteResponse> {
     return this.write({
       operations: buildAgentChatTraceOperations(trace),
+      skip_embedding: true,
+    });
+  }
+
+  async writeCodexHookTrace(trace: CodexHookTrace): Promise<KfdbWriteResponse> {
+    return this.write({
+      operations: buildCodexHookTraceOperations(trace),
       skip_embedding: true,
     });
   }
