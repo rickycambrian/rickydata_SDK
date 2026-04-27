@@ -494,7 +494,7 @@ export class AgentClient {
     await this.ensureAuthenticated();
 
     // Get or create session
-    const sessionId = options?.sessionId ?? await this.getOrCreateSession(agentId, options?.model);
+    const sessionId = options?.sessionId ?? await this.getOrCreateSession(agentId, options?.model, options?.executionEngine);
     if (options?.sessionId) {
       this.cacheSession(agentId, options.sessionId);
     }
@@ -625,12 +625,12 @@ export class AgentClient {
   // ─── Session Management ───────────────────────────────────
 
   /** Create a new chat session for an agent. */
-  async createSession(agentId: string, model: string = 'haiku'): Promise<SessionCreateResponse> {
+  async createSession(agentId: string, model: string = 'haiku', executionEngine?: TeamExecutionEngine): Promise<SessionCreateResponse> {
     await this.ensureAuthenticated();
     const res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
       method: 'POST',
       headers: this.authHeaders(),
-      body: JSON.stringify({ model }),
+      body: JSON.stringify({ model, ...(executionEngine ? { executionEngine } : {}) }),
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({ error: res.statusText }));
@@ -1101,14 +1101,14 @@ export class AgentClient {
     return account.signMessage({ message });
   }
 
-  private async getOrCreateSession(agentId: string, model?: string): Promise<string> {
+  private async getOrCreateSession(agentId: string, model?: string, executionEngine?: TeamExecutionEngine): Promise<string> {
     const existing = this.getCachedSession(agentId);
     if (existing) return existing;
 
     let res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
       method: 'POST',
       headers: this.authHeaders(),
-      body: JSON.stringify({ model: model ?? 'haiku' }),
+      body: JSON.stringify({ model: model ?? 'haiku', ...(executionEngine ? { executionEngine } : {}) }),
     });
 
     if (res.status === 401 && this.privateKey) {
@@ -1118,7 +1118,7 @@ export class AgentClient {
       res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
         method: 'POST',
         headers: this.authHeaders(),
-        body: JSON.stringify({ model: model ?? 'haiku' }),
+        body: JSON.stringify({ model: model ?? 'haiku', ...(executionEngine ? { executionEngine } : {}) }),
       });
     }
 

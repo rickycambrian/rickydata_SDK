@@ -474,6 +474,33 @@ describe('AgentClient', () => {
 
       expect(session.executionEngine).toBe('openclaude');
     });
+
+    it('passes through Gemini CLI execution engine requests', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'sess-gemini',
+            agentId: 'test-agent',
+            model: 'gemini-3-flash-preview',
+            createdAt: '2026-04-27T00:00:00.000Z',
+            executionEngine: 'gemini',
+          }),
+        } as Response);
+
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      const session = await client.createSession('test-agent', 'gemini-3-flash-preview', 'gemini');
+
+      expect(session.executionEngine).toBe('gemini');
+      expect(JSON.parse(fetchSpy.mock.calls[2][1]!.body as string)).toEqual({
+        model: 'gemini-3-flash-preview',
+        executionEngine: 'gemini',
+      });
+    });
   });
 
   // ─── List Agents ────────────────────────────────────────
