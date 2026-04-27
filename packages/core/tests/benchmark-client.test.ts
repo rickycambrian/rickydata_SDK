@@ -66,6 +66,59 @@ describe('BenchmarkClient', () => {
     );
   });
 
+  it('passes benchmark proof and trace fields when recording runs', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        run_id: 'run-1',
+        tenant_id: 'tenant-1',
+        task_id: 'task-1',
+        provider: 'claude-code',
+        model: 'claude-opus-4.6',
+        thinking_mode: 'enabled',
+        context_strategy: 'dynamic-docs',
+        duration_seconds: 120,
+        success: true,
+        proof_verified: true,
+        created_at: '2026-04-26T00:00:00Z',
+      }),
+    });
+
+    const client = new BenchmarkClient({ baseUrl: 'https://kfdb.example', apiKey: 'secret' });
+    await client.recordRun({
+      task_id: 'task-1',
+      provider: 'claude-code',
+      model: 'claude-opus-4.6',
+      trace_ref: 'trace://run-1',
+      trace_artifact_hash: 'a'.repeat(64),
+      trace_kg_ref: 'kfdb://trace-kg/run-1',
+      trace_kg_summary: { tool_call_count: 12 },
+      proof_manifest_hash: 'b'.repeat(64),
+      proof_bundle: { version: 'rickydata-benchmark-run-proof/v1' },
+      proof_verified: true,
+      proof_verification_status: 'verified',
+      attestation_code_hash: 'c'.repeat(64),
+      attestation_image_digest: 'sha256:image',
+      attestation_verdict: 'report_data_bound_ed25519_verified',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://kfdb.example/api/v1/benchmark/runs');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      trace_ref: 'trace://run-1',
+      trace_artifact_hash: 'a'.repeat(64),
+      trace_kg_ref: 'kfdb://trace-kg/run-1',
+      trace_kg_summary: { tool_call_count: 12 },
+      proof_manifest_hash: 'b'.repeat(64),
+      proof_bundle: { version: 'rickydata-benchmark-run-proof/v1' },
+      proof_verified: true,
+      proof_verification_status: 'verified',
+      attestation_code_hash: 'c'.repeat(64),
+      attestation_image_digest: 'sha256:image',
+      attestation_verdict: 'report_data_bound_ed25519_verified',
+    });
+  });
+
   it('publishes a benchmark campaign', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
