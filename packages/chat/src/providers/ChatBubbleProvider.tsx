@@ -72,6 +72,7 @@ export function ChatBubbleProvider({ config, children }: ChatBubbleProviderProps
         // This getter is a fallback — the engine passes tokens directly.
         return undefined;
       },
+      signMessage: (message) => wallet.signMessage(message),
     };
     return new AgentClient(opts);
   }, [config.client, config.gatewayUrl, config.wallet]);

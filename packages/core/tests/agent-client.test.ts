@@ -306,6 +306,62 @@ describe('AgentClient', () => {
       await expect(client.chat('test-agent', 'hi')).rejects.toThrow('Payment required');
     });
 
+    it('unlocks a sign-to-derive provider key and retries the original chat once', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        // First chat fails with locked provider key
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          text: () => Promise.resolve(JSON.stringify({
+            error: 'missing_secrets',
+            needsUnlock: true,
+            message: 'Your DeepSeek API key is encrypted and locked.',
+            missingSecrets: [{ serverId: 'deepseek', secretKeys: ['DEEPSEEK_API_KEY'] }],
+          })),
+        } as Response)
+        // Provider-vault challenge
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ nonce: 'derive-nonce', message: 'Sign provider vault' }),
+        } as Response)
+        // Provider-vault unlock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            unlocked: true,
+            unlockedProviders: ['deepseek'],
+            migratedProviders: [],
+            lockedProviders: [],
+            skippedProviders: [],
+          }),
+        } as Response)
+        // Retried chat succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          body: createSSEStream([
+            { type: 'text', data: 'unlocked reply' },
+            { type: 'done', data: {} },
+          ]),
+        } as unknown as Response);
+
+      const signMessage = vi.fn().mockResolvedValue('0xsigned');
+      const client = new AgentClient({ token: 'jwt', signMessage, sessionStorePath: null });
+      const result = await client.chat('test-agent', 'hi', { sessionId: 'sess-1', model: 'deepseek-v4-pro' });
+
+      expect(result.text).toBe('unlocked reply');
+      expect(signMessage).toHaveBeenCalledWith('Sign provider vault');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/wallet/provider-vault/unlock`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ signature: '0xsigned', nonce: 'derive-nonce', providers: ['deepseek'] }),
+        }),
+      );
+    });
+
     it('wraps terminated transport errors with session recovery guidance', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
       fetchSpy
@@ -460,24 +516,37 @@ describe('AgentClient', () => {
       await expect(client.configureApiKey('invalid-key')).rejects.toThrow('must start with "sk-ant-"');
     });
 
-    it('stores API key via PUT /wallet/apikey', async () => {
+    it('stores API key via sign-to-derive PUT /wallet/apikey when a signer is available', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
       // Auth
       fetchSpy
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        // Provider-vault derive challenge
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'derive-nonce', message: 'Sign provider vault' }) } as Response)
         // Store API key
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, configured: true }) } as Response);
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, configured: true, encryptionMode: 'sign-to-derive' }) } as Response);
 
       const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await client.configureApiKey('sk-ant-test-key');
 
       expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/wallet/provider-vault/derive-challenge`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt' }),
+        }),
+      );
+      expect(fetchSpy).toHaveBeenCalledWith(
         `${GATEWAY}/wallet/apikey`,
         expect.objectContaining({
           method: 'PUT',
-          body: JSON.stringify({ anthropicApiKey: 'sk-ant-test-key' }),
+          body: expect.stringContaining('"anthropicApiKey":"sk-ant-test-key"'),
+        }),
+      );
+      expect(fetchSpy.mock.calls.find(call => call[0] === `${GATEWAY}/wallet/apikey`)?.[1]).toEqual(
+        expect.objectContaining({
+          body: expect.stringContaining('"nonce":"derive-nonce"'),
         }),
       );
     });

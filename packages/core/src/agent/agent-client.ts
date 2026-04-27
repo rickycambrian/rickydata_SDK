@@ -44,18 +44,76 @@ import type {
   FreeTierStatus,
   TeamExecutionEngine,
   CodexAuthStatus,
+  MarketplaceProvider,
+  ProviderApiKeyStatus,
+  ProviderVaultUnlockResult,
+  WalletSignMessage,
 } from './types.js';
 
 const DEFAULT_GATEWAY_URL = 'https://agents.rickydata.org';
 const SSE_READ_TIMEOUT_MS = 60_000;
 
+const PROVIDER_CONFIG: Record<MarketplaceProvider, {
+  statusPath: string;
+  setPath: string;
+  bodyKey: string;
+  keyPrefix?: string;
+}> = {
+  anthropic: { statusPath: '/wallet/apikey/status', setPath: '/wallet/apikey', bodyKey: 'anthropicApiKey', keyPrefix: 'sk-ant-' },
+  minimax: { statusPath: '/wallet/minimax-apikey/status', setPath: '/wallet/minimax-apikey', bodyKey: 'minimaxApiKey' },
+  openrouter: { statusPath: '/wallet/openrouter-apikey/status', setPath: '/wallet/openrouter-apikey', bodyKey: 'openrouterApiKey' },
+  zai: { statusPath: '/wallet/zai-apikey/status', setPath: '/wallet/zai-apikey', bodyKey: 'zaiApiKey' },
+  deepseek: { statusPath: '/wallet/deepseek-apikey/status', setPath: '/wallet/deepseek-apikey', bodyKey: 'deepseekApiKey' },
+  gemini: { statusPath: '/wallet/gemini-apikey/status', setPath: '/wallet/gemini-apikey', bodyKey: 'geminiApiKey' },
+  openai: { statusPath: '/wallet/openai-apikey/status', setPath: '/wallet/openai-apikey', bodyKey: 'openaiApiKey' },
+};
+
+function providerFromModel(model?: string, fallback?: string): MarketplaceProvider | null {
+  const value = (model || fallback || '').toLowerCase();
+  if (!value) return null;
+  if (value.startsWith('minimax') || value.includes('minimax')) return 'minimax';
+  if (value.startsWith('google/') || value.includes('openrouter')) return 'openrouter';
+  if (value.startsWith('glm') || value.includes('z.ai') || value.includes('zai')) return 'zai';
+  if (value.startsWith('deepseek')) return 'deepseek';
+  if (value.startsWith('gemini')) return 'gemini';
+  if (value.startsWith('gpt-') || value.startsWith('o1') || value.startsWith('o3') || value.startsWith('o4') || value.includes('openai')) return 'openai';
+  if (value === 'haiku' || value === 'sonnet' || value === 'opus' || value.includes('claude')) return 'anthropic';
+  return null;
+}
+
+function providerFromMissingSecret(value: unknown): MarketplaceProvider | null {
+  const raw = typeof value === 'string' ? value : '';
+  const lower = raw.toLowerCase();
+  if (lower.includes('minimax')) return 'minimax';
+  if (lower.includes('openrouter')) return 'openrouter';
+  if (lower.includes('z.ai') || lower.includes('zai')) return 'zai';
+  if (lower.includes('deepseek')) return 'deepseek';
+  if (lower.includes('gemini')) return 'gemini';
+  if (lower.includes('openai')) return 'openai';
+  if (lower.includes('anthropic')) return 'anthropic';
+  return null;
+}
+
+function parseJsonBody(body: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export class AgentClient {
   private readonly gatewayUrl: string;
   private readonly privateKey: `0x${string}` | null;
+  private readonly signMessageFn: WalletSignMessage | null;
   private readonly tokenGetter: (() => Promise<string | undefined>) | null;
   private token: string | null = null;
   private sessions: SessionStoreType | null = null;
   private readonly sessionCache = new Map<string, string>();
+  private readonly signToDeriveSignatureCache = new Map<string, string>();
 
   constructor(options: AgentClientConfig) {
     if (!options.privateKey && !options.token && !options.tokenGetter) {
@@ -69,6 +127,7 @@ export class AgentClient {
     } else {
       this.privateKey = null;
     }
+    this.signMessageFn = options.signMessage ?? null;
     this.tokenGetter = options.tokenGetter ?? null;
     this.gatewayUrl = (options.gatewayUrl ?? DEFAULT_GATEWAY_URL).replace(/\/$/, '');
     if (options.token) {
@@ -88,6 +147,11 @@ export class AgentClient {
     }
   }
 
+  /** Replace the current bearer token. Useful for browser wallet adapters that manage auth outside AgentClient. */
+  setAuthToken(token: string | null): void {
+    this.token = token;
+  }
+
   // ─── BYOK API Key Management ─────────────────────────────
 
   /**
@@ -98,16 +162,7 @@ export class AgentClient {
     if (!apiKey.startsWith('sk-ant-')) {
       throw new Error('Invalid Anthropic API key: must start with "sk-ant-"');
     }
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/apikey`, {
-      method: 'PUT',
-      headers: this.authHeaders(),
-      body: JSON.stringify({ anthropicApiKey: apiKey }),
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Failed to configure API key: ${res.status} ${body}`);
-    }
+    await this.setProviderApiKey('anthropic', apiKey);
   }
 
   /**
@@ -126,25 +181,74 @@ export class AgentClient {
   }
 
   /** Get Anthropic API key status. */
-  async getApiKeyStatus(): Promise<{ configured: boolean }> {
+  async getApiKeyStatus(): Promise<ProviderApiKeyStatus> {
+    return this.getProviderApiKeyStatus('anthropic');
+  }
+
+  /** Set Anthropic API key (alias for configureApiKey with agentbook-style body). */
+  async setApiKey(apiKey: string): Promise<ProviderApiKeyStatus> {
+    return this.setProviderApiKey('anthropic', apiKey);
+  }
+
+  /** Get provider BYOK key status for this wallet. */
+  async getProviderApiKeyStatus(provider: MarketplaceProvider): Promise<ProviderApiKeyStatus> {
     await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/apikey/status`, {
+    const spec = PROVIDER_CONFIG[provider];
+    const res = await fetch(`${this.gatewayUrl}${spec.statusPath}`, {
       headers: this.authHeaders(),
     });
     if (!res.ok) return { configured: false };
     return res.json();
   }
 
-  /** Set Anthropic API key (alias for configureApiKey with agentbook-style body). */
-  async setApiKey(apiKey: string): Promise<{ configured: boolean }> {
+  /** Store a provider BYOK key. Uses sign-to-derive when a wallet signer is available. */
+  async setProviderApiKey(provider: MarketplaceProvider, apiKey: string): Promise<ProviderApiKeyStatus> {
+    const spec = PROVIDER_CONFIG[provider];
+    if (spec.keyPrefix && !apiKey.startsWith(spec.keyPrefix)) {
+      throw new Error(`Invalid ${provider} API key: must start with "${spec.keyPrefix}"`);
+    }
+
     await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/apikey`, {
+    const body: Record<string, string> = { [spec.bodyKey]: apiKey };
+    if (this.canSignForDerive()) {
+      const { message, nonce } = await this.getProviderVaultDeriveChallenge();
+      body.signature = await this.signForDerive(message);
+      body.nonce = nonce;
+    }
+    const res = await fetch(`${this.gatewayUrl}${spec.setPath}`, {
       method: 'PUT',
       headers: this.authHeaders(),
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Failed to set API key: ${res.status}`);
+    if (!res.ok) throw new Error(`Failed to set ${provider} API key: ${res.status} ${await res.text()}`);
     return res.json();
+  }
+
+  /** Unlock provider BYOK keys for this gateway session using the owner wallet signature. */
+  async unlockProviderVault(providers?: MarketplaceProvider[]): Promise<ProviderVaultUnlockResult> {
+    await this.ensureAuthenticated();
+    const { message, nonce } = await this.getProviderVaultDeriveChallenge();
+    const signature = await this.signForDerive(message);
+    const res = await fetch(`${this.gatewayUrl}/wallet/provider-vault/unlock`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ signature, nonce, providers }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to unlock provider vault: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Ensure a configured sign-to-derive provider key is unlocked, prompting the wallet signer only if needed. */
+  async ensureProviderUnlocked(provider: MarketplaceProvider): Promise<boolean> {
+    if (!this.canSignForDerive()) return false;
+    const status = await this.getProviderApiKeyStatus(provider);
+    if (!status.configured) return false;
+    if (status.encryptionMode !== 'sign-to-derive' || status.unlocked !== false) return true;
+    const result = await this.unlockProviderVault([provider]);
+    return result.unlockedProviders.includes(provider);
   }
 
   /** Delete Anthropic API key. */
@@ -160,13 +264,8 @@ export class AgentClient {
   // ─── OpenAI BYOK + Codex Subscription Auth ───────────────────
 
   /** Get OpenAI BYOK key status for Codex execution. */
-  async getOpenAIApiKeyStatus(): Promise<{ configured: boolean; encryptionMode?: string; unlocked?: boolean }> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/openai-apikey/status`, {
-      headers: this.authHeaders(),
-    });
-    if (!res.ok) return { configured: false };
-    return res.json();
+  async getOpenAIApiKeyStatus(): Promise<ProviderApiKeyStatus> {
+    return this.getProviderApiKeyStatus('openai');
   }
 
   /** Delete stored OpenAI BYOK key for this wallet. */
@@ -182,25 +281,13 @@ export class AgentClient {
   // ─── Gemini BYOK ─────────────────────────────────────────
 
   /** Get Gemini BYOK key status for this wallet. */
-  async getGeminiApiKeyStatus(): Promise<{ configured: boolean; encryptionMode?: string; unlocked?: boolean }> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/gemini-apikey/status`, {
-      headers: this.authHeaders(),
-    });
-    if (!res.ok) return { configured: false };
-    return res.json();
+  async getGeminiApiKeyStatus(): Promise<ProviderApiKeyStatus> {
+    return this.getProviderApiKeyStatus('gemini');
   }
 
   /** Store a Gemini BYOK key for this wallet. Browser apps should prefer the sign-to-derive flow. */
-  async setGeminiApiKey(geminiApiKey: string): Promise<{ configured: boolean }> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/gemini-apikey`, {
-      method: 'PUT',
-      headers: this.authHeaders(),
-      body: JSON.stringify({ geminiApiKey }),
-    });
-    if (!res.ok) throw new Error(`Failed to set Gemini API key: ${res.status}`);
-    return res.json();
+  async setGeminiApiKey(geminiApiKey: string): Promise<ProviderApiKeyStatus> {
+    return this.setProviderApiKey('gemini', geminiApiKey);
   }
 
   /** Delete stored Gemini BYOK key for this wallet. */
@@ -433,6 +520,7 @@ export class AgentClient {
     // Retry the entire request+parse cycle on transport/network errors
     const maxRetries = options?.maxRetries ?? 3;
     let authRetried = false;
+    let providerUnlockRetried = false;
     return await this.retryWithBackoff(async () => {
       let res = await sendChatRequest();
 
@@ -445,7 +533,15 @@ export class AgentClient {
       }
 
       if (!res.ok) {
-        const body = await res.text();
+        let body = await res.text();
+        if (!providerUnlockRetried && await this.tryUnlockProviderFromErrorBody(body, options?.model)) {
+          providerUnlockRetried = true;
+          res = await sendChatRequest();
+          if (res.ok) {
+            return await this.parseSSEResponse(res, sessionId, options);
+          }
+          body = await res.text();
+        }
         if (res.status === 401) {
           throw new AgentError(AgentErrorCode.AUTH_EXPIRED, 'Authentication expired. Run `rickydata auth login` to re-authenticate.', { agentId, sessionId });
         }
@@ -470,7 +566,7 @@ export class AgentClient {
    */
   async chatRaw(agentId: string, sessionId: string, message: string, model?: string, images?: ImageAttachment[]): Promise<Response> {
     await this.ensureAuthenticated();
-    const res = await fetch(
+    const send = () => fetch(
       `${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionId)}/chat`,
       {
         method: 'POST',
@@ -478,8 +574,16 @@ export class AgentClient {
         body: JSON.stringify({ message, model, ...(images?.length ? { images } : {}) }),
       },
     );
+    let res = await send();
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({ error: res.statusText }));
+      const rawBody = typeof res.text === 'function'
+        ? await res.text().catch(() => '')
+        : JSON.stringify(await res.json().catch(() => ({ error: res.statusText })));
+      if (await this.tryUnlockProviderFromErrorBody(rawBody, model)) {
+        res = await send();
+        if (res.ok) return res;
+      }
+      const errBody = parseJsonBody(rawBody) ?? { error: rawBody || res.statusText };
       const msg = (errBody as { message?: string; error?: string }).message
         || (errBody as { error?: string }).error
         || `Chat failed: ${res.status}`;
@@ -926,6 +1030,66 @@ export class AgentClient {
     }
     const { token } = await verifyRes.json();
     this.token = token;
+  }
+
+  private canSignForDerive(): boolean {
+    return !!this.privateKey || !!this.signMessageFn;
+  }
+
+  private async getProviderVaultDeriveChallenge(): Promise<{ message: string; nonce: string }> {
+    const res = await fetch(`${this.gatewayUrl}/wallet/provider-vault/derive-challenge`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get provider vault signing challenge: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  private async signForDerive(message: string): Promise<string> {
+    const cached = this.signToDeriveSignatureCache.get(message);
+    if (cached) return cached;
+    const signature = this.signMessageFn
+      ? await this.signMessageFn(message)
+      : await this.signWithPrivateKey(message, 'Provider vault unlock requires the owner wallet signature');
+    this.signToDeriveSignatureCache.set(message, signature);
+    return signature;
+  }
+
+  private providerFromLockedSecretBody(body: string, model?: string): MarketplaceProvider | null {
+    const parsed = parseJsonBody(body);
+    if (!parsed) return null;
+    const needsUnlock = parsed.needsUnlock === true || parsed.error === 'locked_secrets';
+    if (!needsUnlock) return null;
+
+    const missingSecrets = Array.isArray(parsed.missingSecrets) ? parsed.missingSecrets : [];
+    for (const entry of missingSecrets) {
+      if (!entry || typeof entry !== 'object') continue;
+      const record = entry as Record<string, unknown>;
+      const provider = providerFromMissingSecret(record.serverId)
+        ?? providerFromMissingSecret(record.serverName);
+      if (provider) return provider;
+      const keys = Array.isArray(record.secretKeys) ? record.secretKeys : [];
+      for (const key of keys) {
+        const fromKey = providerFromMissingSecret(key);
+        if (fromKey) return fromKey;
+      }
+    }
+
+    return providerFromMissingSecret(String(parsed.message ?? '')) ?? providerFromModel(model);
+  }
+
+  private async tryUnlockProviderFromErrorBody(body: string, model?: string): Promise<boolean> {
+    if (!this.canSignForDerive()) return false;
+    const provider = this.providerFromLockedSecretBody(body, model);
+    if (!provider) return false;
+    try {
+      const result = await this.unlockProviderVault([provider]);
+      return result.unlockedProviders.includes(provider);
+    } catch {
+      return false;
+    }
   }
 
   private async signWithPrivateKey(message: string, missingKeyMessage: string): Promise<string> {

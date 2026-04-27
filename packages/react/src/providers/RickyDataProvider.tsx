@@ -3,6 +3,8 @@ import {
   AgentClient,
   type AgentClientConfig,
   type FreeTierStatus,
+  type MarketplaceProvider,
+  type ProviderVaultUnlockResult,
   type WalletBalanceResponse,
   type WalletSettings,
 } from 'rickydata/agent';
@@ -12,6 +14,8 @@ export interface RickyDataWalletTransport {
   updateWalletSettings?: (settings: Partial<WalletSettings>) => Promise<WalletSettings>;
   getWalletBalance?: () => Promise<WalletBalanceResponse>;
   getFreeTierStatus?: () => Promise<FreeTierStatus>;
+  signMessage?: (message: string) => Promise<string>;
+  unlockProviderVault?: (providers?: MarketplaceProvider[]) => Promise<ProviderVaultUnlockResult>;
 }
 
 interface RickyDataContextValue {
@@ -52,6 +56,7 @@ export function RickyDataProvider({ config, client, children }: RickyDataProvide
     };
     // Wire the provider's getAuthToken callback to the SDK's tokenGetter
     opts.tokenGetter = config.getAuthToken;
+    opts.signMessage = config.walletTransport?.signMessage;
     return {
       client: new AgentClient(opts),
       walletTransport: config.walletTransport,

@@ -13,6 +13,25 @@ export const GEMINI_MODEL = 'gemini-3.1-pro-preview' as const;
 export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex';
 export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'deepseek' | 'gemini' | 'openai';
 export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'deepseek_byok' | 'gemini_byok' | 'openai_byok';
+export type WalletSignMessage = (message: string) => Promise<string>;
+
+export interface ProviderApiKeyStatus {
+  configured: boolean;
+  persistent?: boolean;
+  encryptionMode?: 'hkdf' | 'sign-to-derive' | 'none' | string | null;
+  unlocked?: boolean;
+  needsMigration?: boolean;
+}
+
+export interface ProviderVaultUnlockResult {
+  success: boolean;
+  unlocked: boolean;
+  unlockedProviders: MarketplaceProvider[];
+  migratedProviders: MarketplaceProvider[];
+  lockedProviders: MarketplaceProvider[];
+  skippedProviders: MarketplaceProvider[];
+  expiresInMs?: number;
+}
 
 // ─── Configuration ──────────────────────────────────────────
 
@@ -23,6 +42,8 @@ export interface AgentClientConfig {
   token?: string;
   /** Async function that returns a token on demand (for browser/React use). */
   tokenGetter?: () => Promise<string | undefined>;
+  /** Optional wallet personal_sign callback used for sign-to-derive unlock/store flows in browser apps. */
+  signMessage?: WalletSignMessage;
   /** Agent Gateway URL. Defaults to https://agents.rickydata.org */
   gatewayUrl?: string;
   /** Path for session store file. Pass `null` for in-memory only (useful in tests). */

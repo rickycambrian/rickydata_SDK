@@ -62,10 +62,14 @@ export function useChatBubbleEngine({
 
   const isContextual = !!context && context.type !== 'general';
 
+  useEffect(() => {
+    client.setAuthToken(gatewayToken ?? null);
+  }, [client, gatewayToken]);
+
   // Create session on mount
   useEffect(() => {
     const walletAddr = config.wallet.getAddress();
-    if (!walletAddr) return;
+    if (!walletAddr || !gatewayToken) return;
 
     let cancelled = false;
     setLoading(true);
@@ -86,7 +90,7 @@ export function useChatBubbleEngine({
     })();
 
     return () => { cancelled = true; };
-  }, [agentId, model, client, config.wallet]);
+  }, [agentId, model, client, config.wallet, gatewayToken]);
 
   // Cleanup abort controller on unmount
   useEffect(() => {
@@ -132,6 +136,7 @@ export function useChatBubbleEngine({
     abortRef.current = controller;
 
     try {
+      if (gatewayToken) client.setAuthToken(gatewayToken);
       let sid = sessionId;
       if (!sid) {
         const session = await client.createSession(agentId, model);
@@ -267,7 +272,7 @@ export function useChatBubbleEngine({
       setActiveTools([]);
       abortRef.current = null;
     }
-  }, [streaming, input, sessionId, agentId, model, client]);
+  }, [streaming, input, sessionId, agentId, model, client, gatewayToken]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
