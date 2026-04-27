@@ -189,7 +189,6 @@ function addWorkspaceOperations(operations: Array<Record<string, unknown>>, sour
         path: value(cwd),
         path_hash: value(stableHash(cwd)),
         basename: value(basename(cwd)),
-        source: value('claude-code-hooks'),
         schema_version: value(TRACE_SCHEMA_VERSION),
       },
     },
@@ -218,7 +217,6 @@ function addCodeFileOperations(operations: Array<Record<string, unknown>>, sourc
           path_hash: value(stableHash(filePath)),
           basename: value(basename(filePath)),
           extension: value(extension(filePath)),
-          source: value('claude-code-hooks'),
           schema_version: value(TRACE_SCHEMA_VERSION),
         },
       },
@@ -245,7 +243,6 @@ function addCommandOperation(operations: Array<Record<string, unknown>>, sourceN
       mode: 'merge',
       properties: {
         ...Object.fromEntries(Object.entries(summarizeCommand(command)).map(([k, v]) => [k, value(v)])),
-        source: value('claude-code-hooks'),
         schema_version: value(TRACE_SCHEMA_VERSION),
       },
     },
