@@ -85,8 +85,8 @@ describe('apikey commands', () => {
       const program = createProgram(config, store);
       await program.parseAsync(['node', 'rickydata', 'apikey', 'set', '--key', `sk-ant-${'test'}key123`]);
 
-      // Verify derive-challenge was called first
-      expect(fetchCalls[0].url).toContain('derive-challenge');
+      // Verify unified provider-vault derive-challenge was called first
+      expect(fetchCalls[0].url).toContain('/wallet/provider-vault/derive-challenge');
 
       // Verify PUT includes signature and nonce
       const putCall = fetchCalls.find(c => c.opts?.method === 'PUT');

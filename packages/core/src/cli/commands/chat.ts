@@ -32,6 +32,30 @@ function defaultModelForProvider(provider: unknown): string {
   return FREE_TIER_MODEL;
 }
 
+async function unlockProviderVaultIfPossible(
+  gatewayUrl: string,
+  token: string,
+  privateKey: string | undefined,
+): Promise<void> {
+  if (!privateKey) return;
+  const { privateKeyToAccount } = await import('viem/accounts');
+  const key = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+  const account = privateKeyToAccount(key as `0x${string}`);
+
+  const challengeRes = await fetch(`${gatewayUrl}/wallet/provider-vault/derive-challenge`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (!challengeRes.ok) return;
+  const { message, nonce } = await challengeRes.json() as { message: string; nonce: string };
+  const signature = await account.signMessage({ message });
+
+  await fetch(`${gatewayUrl}/wallet/provider-vault/unlock`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signature, nonce }),
+  });
+}
+
 /**
  * Resolve the model to use for chat.
  *
@@ -128,6 +152,7 @@ export function createChatCommand(config: ConfigManager, store: CredentialStore)
       const token = requireAuth(store, profile);
 
       const model = await resolveModel(token, gatewayUrl, opts.model);
+      await unlockProviderVaultIfPossible(gatewayUrl, token, store.getPrivateKey(profile) ?? undefined).catch(() => {});
 
       await startChatRepl({
         agentId,

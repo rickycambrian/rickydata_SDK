@@ -24,8 +24,9 @@ async function signToDeriveApiKey(
   const key = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
   const account = privateKeyToAccount(key as `0x${string}`);
 
-  // 1. Fetch derive-challenge
-  const challengeRes = await fetch(`${gatewayUrl}/wallet/apikey/derive-challenge`, {
+  // 1. Fetch the unified provider-vault derive challenge. The same deterministic
+  // signature can unlock/migrate all provider keys for the active session.
+  const challengeRes = await fetch(`${gatewayUrl}/wallet/provider-vault/derive-challenge`, {
     headers: authHeaders(token),
   });
   if (!challengeRes.ok) {
