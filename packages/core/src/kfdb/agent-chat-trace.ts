@@ -23,7 +23,7 @@ export interface AgentChatTurnTrace {
 
 const KG_NAMESPACE = uuidV5('rickydata-agent-chat-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
 const EXECUTION_KG_NAMESPACE = uuidV5('rickydata-execution-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
-const TRACE_SCHEMA_VERSION = 2;
+const TRACE_SCHEMA_VERSION = 3;
 
 function sha256(input: string): Buffer {
   return createHash('sha256').update(input).digest();

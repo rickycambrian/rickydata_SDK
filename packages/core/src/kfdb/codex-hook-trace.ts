@@ -33,7 +33,7 @@ export interface CodexHookTrace {
 
 const KG_NAMESPACE = uuidV5('rickydata-codex-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
 const EXECUTION_KG_NAMESPACE = uuidV5('rickydata-execution-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
-const TRACE_SCHEMA_VERSION = 2;
+const TRACE_SCHEMA_VERSION = 3;
 
 function sha256(input: string): Buffer {
   return createHash('sha256').update(input).digest();
@@ -86,6 +86,161 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
   if (typeof payload === 'string') return { contentLength: payload.length, contentHash: stableHash(payload) };
   const encoded = stableJson(payload);
   return { contentLength: encoded.length, contentHash: stableHash(encoded) };
+}
+
+function basename(input: string): string {
+  const normalized = input.replace(/\\/g, '/');
+  return normalized.split('/').filter(Boolean).pop() ?? normalized;
+}
+
+function extension(input: string): string {
+  const name = basename(input);
+  const idx = name.lastIndexOf('.');
+  return idx > 0 ? name.slice(idx + 1).toLowerCase() : '';
+}
+
+function collectFilePaths(input: unknown, output = new Set<string>()): Set<string> {
+  if (input === undefined || input === null) return output;
+  if (typeof input === 'string') {
+    for (const match of input.matchAll(/^\*{3} (?:Add|Update|Delete) File: (.+)$/gm)) {
+      output.add(match[1].trim());
+    }
+    return output;
+  }
+  if (Array.isArray(input)) {
+    input.forEach((item) => collectFilePaths(item, output));
+    return output;
+  }
+  if (typeof input !== 'object') return output;
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const lowerKey = key.toLowerCase();
+    if (
+      typeof value === 'string'
+      && /(^|_)(file|path|filepath|filename)$/.test(lowerKey)
+      && value.length > 0
+      && value.length < 1_000
+    ) {
+      output.add(value);
+    } else {
+      collectFilePaths(value, output);
+    }
+  }
+  return output;
+}
+
+function extractCommand(input: unknown): string | null {
+  if (typeof input === 'string') return input;
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  for (const key of ['command', 'cmd', 'script']) {
+    if (typeof record[key] === 'string' && record[key]) return record[key] as string;
+  }
+  return null;
+}
+
+function summarizeCommand(command: string): Record<string, unknown> {
+  const firstLine = command.split(/\r?\n/, 1)[0] ?? '';
+  return {
+    command_hash: stableHash(command),
+    command_length: command.length,
+    command_preview: firstLine.slice(0, 240),
+  };
+}
+
+function addWorkspaceOperations(
+  operations: Array<Record<string, unknown>>,
+  sourceNodeId: string,
+  cwd: string | undefined,
+): void {
+  if (!cwd) return;
+  const workspaceNodeId = deterministicExecutionId('CodeWorkspace', [cwd]);
+  operations.push(
+    {
+      operation: 'create_node',
+      id: workspaceNodeId,
+      label: 'CodeWorkspace',
+      mode: 'merge',
+      properties: {
+        path: value(cwd),
+        path_hash: value(stableHash(cwd)),
+        basename: value(basename(cwd)),
+        source: value('codex-hooks'),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicId('RAN_IN_WORKSPACE', [sourceNodeId, workspaceNodeId]),
+      from: sourceNodeId,
+      to: workspaceNodeId,
+      edge_type: 'RAN_IN_WORKSPACE',
+      properties: { source: value('codex-hooks') },
+    },
+  );
+}
+
+function addCodeFileOperations(
+  operations: Array<Record<string, unknown>>,
+  sourceNodeId: string,
+  paths: string[],
+): void {
+  [...new Set(paths)].slice(0, 50).forEach((filePath) => {
+    const fileNodeId = deterministicExecutionId('CodeFile', [filePath]);
+    operations.push(
+      {
+        operation: 'create_node',
+        id: fileNodeId,
+        label: 'CodeFile',
+        mode: 'merge',
+        properties: {
+          path: value(filePath),
+          path_hash: value(stableHash(filePath)),
+          basename: value(basename(filePath)),
+          extension: value(extension(filePath)),
+          source: value('codex-hooks'),
+          schema_version: value(TRACE_SCHEMA_VERSION),
+        },
+      },
+      {
+        operation: 'create_edge',
+        id: deterministicId('TOUCHED_FILE', [sourceNodeId, fileNodeId]),
+        from: sourceNodeId,
+        to: fileNodeId,
+        edge_type: 'TOUCHED_FILE',
+        properties: { source: value('codex-hooks') },
+      },
+    );
+  });
+}
+
+function addCommandOperation(
+  operations: Array<Record<string, unknown>>,
+  sourceNodeId: string,
+  command: string | null,
+): void {
+  if (!command) return;
+  const commandNodeId = deterministicExecutionId('CodeCommand', [stableHash(command)]);
+  operations.push(
+    {
+      operation: 'create_node',
+      id: commandNodeId,
+      label: 'CodeCommand',
+      mode: 'merge',
+      properties: {
+        ...Object.fromEntries(Object.entries(summarizeCommand(command)).map(([k, v]) => [k, value(v)])),
+        source: value('codex-hooks'),
+        schema_version: value(TRACE_SCHEMA_VERSION),
+      },
+    },
+    {
+      operation: 'create_edge',
+      id: deterministicId('RAN_COMMAND', [sourceNodeId, commandNodeId]),
+      from: sourceNodeId,
+      to: commandNodeId,
+      edge_type: 'RAN_COMMAND',
+      properties: { source: value('codex-hooks') },
+    },
+  );
 }
 
 function eventData(event: CodexHookEventRecord): Record<string, unknown> {
@@ -244,6 +399,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
       properties: { execution_engine: value('codex') },
     },
   );
+  addWorkspaceOperations(operations, turnNodeId, trace.cwd);
 
   trace.events.forEach((event) => {
     const eventId = deterministicId('CodexHookEvent', [
@@ -262,6 +418,9 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
           event_index: value(event.sequence),
           event_type: value(event.hookEventName),
           data: value(eventData(event)),
+          cwd: value(event.cwd ?? trace.cwd ?? ''),
+          tool_name: value(event.toolName ?? ''),
+          tool_use_id: value(event.toolUseId ?? ''),
           schema_version: value(TRACE_SCHEMA_VERSION),
         },
       },
@@ -274,6 +433,8 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         properties: { event_index: value(event.sequence) },
       },
     );
+    addWorkspaceOperations(operations, eventId, event.cwd ?? trace.cwd);
+
     if (event.toolName) {
       const toolNodeId = deterministicId('CodexToolUse', [turnNodeId, event.toolUseId ?? event.sequence, event.toolName]);
       operations.push(
@@ -285,6 +446,11 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
           properties: {
             tool_name: value(event.toolName),
             tool_use_id: value(event.toolUseId ?? ''),
+            hook_event_name: value(event.hookEventName),
+            event_index: value(event.sequence),
+            tool_input: value(event.toolInput === undefined ? undefined : summarizePayload(event.toolInput)),
+            tool_response: value(event.toolResponse === undefined ? undefined : summarizePayload(event.toolResponse)),
+            command: value(extractCommand(event.toolInput) ? summarizeCommand(extractCommand(event.toolInput)!) : undefined),
             schema_version: value(TRACE_SCHEMA_VERSION),
           },
         },
@@ -297,6 +463,19 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
           properties: { tool_name: value(event.toolName) },
         },
       );
+      addCodeFileOperations(
+        operations,
+        toolNodeId,
+        [...collectFilePaths(event.toolInput), ...collectFilePaths(event.toolResponse)],
+      );
+      addCommandOperation(operations, toolNodeId, extractCommand(event.toolInput));
+    } else {
+      addCodeFileOperations(
+        operations,
+        eventId,
+        [...collectFilePaths(event.toolInput), ...collectFilePaths(event.toolResponse)],
+      );
+      addCommandOperation(operations, eventId, extractCommand(event.toolInput));
     }
   });
 

@@ -59,8 +59,12 @@ describe('buildCodexHookTraceOperations', () => {
     expect(first.map((op) => op.label)).toContain('CodexTurn');
     expect(first.map((op) => op.label)).toContain('CodexHookEvent');
     expect(first.map((op) => op.label)).toContain('CodexToolUse');
+    expect(first.map((op) => op.label)).toContain('CodeWorkspace');
+    expect(first.map((op) => op.label)).toContain('CodeCommand');
     expect(first.map((op) => op.edge_type)).toContain('HAS_CODEX_TURN');
     expect(first.map((op) => op.edge_type)).toContain('EMITTED_CODEX_HOOK');
     expect(first.map((op) => op.edge_type)).toContain('INVOKED_CODEX_TOOL');
+    expect(first.map((op) => op.edge_type)).toContain('RAN_IN_WORKSPACE');
+    expect(first.map((op) => op.edge_type)).toContain('RAN_COMMAND');
   });
 });
