@@ -19,6 +19,10 @@ import type {
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
 
+function normalizeKfdbExpiresAt(raw: number): number {
+  return raw < 10_000_000_000 ? raw * 1000 : raw;
+}
+
 export class KFDBClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -361,14 +365,15 @@ export class KFDBClient {
     // 5. Store session
     this.deriveSessionId = result.session_id;
     this.deriveKeyHex = keyHex;
-    this.deriveExpiresAt = result.expires_at;
+    const expiresAt = normalizeKfdbExpiresAt(result.expires_at);
+    this.deriveExpiresAt = expiresAt;
 
     // 6. Persist to store if configured
     if (this.deriveStore) {
       await this.deriveStore.set(this.walletAddress, {
         sessionId: result.session_id,
         keyHex,
-        expiresAt: result.expires_at,
+        expiresAt,
         address: this.walletAddress,
       });
     }

@@ -122,6 +122,7 @@ export interface DeriveChallenge {
 /** Server response from /api/v1/auth/derive-key. */
 export interface DeriveKeyResult {
   session_id: string;
+  /** KFDB may return Unix seconds or milliseconds; KFDBClient normalizes to milliseconds internally. */
   expires_at: number;
   key_hex?: string;
 }

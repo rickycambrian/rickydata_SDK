@@ -197,4 +197,36 @@ describe('KFDBClient.autoDerive', () => {
     expect(cached!.keyHex).toBe('ff'.repeat(32));
     expect(cached!.address).toBe(MOCK_ADDRESS);
   });
+
+  it('normalizes KFDB expires_at seconds before caching', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/v1/auth/derive-challenge')) {
+        return new Response(JSON.stringify({
+          challenge_id: 'challenge-seconds',
+          typed_data: { types: {}, primaryType: 'Derive', domain: {}, message: {} },
+        }), { status: 200 });
+      }
+      if (urlStr.includes('/api/v1/auth/derive-key')) {
+        return new Response(JSON.stringify({
+          session_id: MOCK_SESSION_ID,
+          expires_at: 1_808_785_465,
+          key_hex: 'ff'.repeat(32),
+        }), { status: 200 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    const store = new MemoryDeriveSessionStore();
+    const client = new KFDBClient({
+      baseUrl: 'http://localhost:8080',
+      apiKey: 'test-key',
+      walletAddress: MOCK_ADDRESS,
+    });
+
+    await client.autoDerive(async () => MOCK_SIG, { sessionStore: store });
+
+    const cached = await store.get(MOCK_ADDRESS);
+    expect(cached!.expiresAt).toBe(1_808_785_465_000);
+  });
 });
