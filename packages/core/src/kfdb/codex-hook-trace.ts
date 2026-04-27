@@ -164,7 +164,6 @@ function addWorkspaceOperations(
         path: value(cwd),
         path_hash: value(stableHash(cwd)),
         basename: value(basename(cwd)),
-        source: value(null),
         schema_version: value(TRACE_SCHEMA_VERSION),
       },
     },
@@ -197,7 +196,6 @@ function addCodeFileOperations(
           path_hash: value(stableHash(filePath)),
           basename: value(basename(filePath)),
           extension: value(extension(filePath)),
-          source: value(null),
           schema_version: value(TRACE_SCHEMA_VERSION),
         },
       },
@@ -228,7 +226,6 @@ function addCommandOperation(
       mode: 'merge',
       properties: {
         ...Object.fromEntries(Object.entries(summarizeCommand(command)).map(([k, v]) => [k, value(v)])),
-        source: value(null),
         schema_version: value(TRACE_SCHEMA_VERSION),
       },
     },
