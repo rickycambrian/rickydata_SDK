@@ -2,6 +2,10 @@
   "name": "@rickydata/chat",
   "version": "0.1.12",
   "description": "Reusable floating chat bubble with wallet auth, SSE streaming, agent actions, and theming",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rickycambrian/rickydata_SDK"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
