@@ -140,6 +140,33 @@ describe('AgentClient', () => {
       const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       await expect(client.chat('test-agent', 'hello')).rejects.toThrow('Auth verification failed: 403');
     });
+
+    it('forces token refresh once when a raw chat request gets a pre-stream 401', async () => {
+      const tokenGetter = vi.fn()
+        .mockResolvedValueOnce('expired-token')
+        .mockResolvedValueOnce('fresh-token');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('expired'),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          body: createSSEStream([{ type: 'done', data: {} }]),
+        } as unknown as Response);
+
+      const client = new AgentClient({ tokenGetter, sessionStorePath: null });
+      const res = await client.chatRaw('test-agent', 'sess-1', 'hello');
+
+      expect(res.ok).toBe(true);
+      expect(tokenGetter).toHaveBeenCalledWith(undefined);
+      expect(tokenGetter).toHaveBeenCalledWith({ forceRefresh: true });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const retryHeaders = new Headers((fetchSpy.mock.calls[1][1] as RequestInit).headers as HeadersInit);
+      expect(retryHeaders.get('authorization')).toBe('Bearer fresh-token');
+    });
   });
 
   // ─── Chat ───────────────────────────────────────────────

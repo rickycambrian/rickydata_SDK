@@ -106,14 +106,13 @@ paths:
                 walletAddress: 0x1234567890abcdef1234567890abcdef12345678
                 expiresAt: '2027-01-01T00:00:00Z'
   /api/v1/auth/derive-challenge:
-    get:
+    post:
       summary: Start KFDB sign-to-derive session setup
       description: |
-        Requires `Authorization: Bearer <token>`. The returned `typed_data` is signed with
-        EIP-712. Cross-language clients should treat the full object as opaque typed data
-        supplied by the server.
-      security:
-        - bearerAuth: []
+        Public challenge endpoint. The returned `typed_data` is signed with EIP-712.
+        Cross-language clients should treat the full object as opaque typed data supplied
+        by the server; the wallet signature supplies the user proof during derive-key
+        exchange.
       responses:
         '200':
           description: Derive challenge issued

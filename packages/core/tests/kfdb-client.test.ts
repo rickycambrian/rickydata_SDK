@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { KFDBClient } from '../src/kfdb/client.js';
+import { kfdbValue } from '../src/kfdb/index.js';
 
 const BASE = 'http://localhost:8080';
 
@@ -42,6 +43,61 @@ describe('KFDBClient', () => {
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v1/entities/Note?');
     expect(url).toContain('scope=private');
+  });
+
+  it('withScope preserves active derive session headers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ label: 'Note', items: [], total: 0, limit: 100, offset: 0, source: 'kfdb-scylladb' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({
+      baseUrl: BASE,
+      token: 'tok_123',
+      walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+    });
+    client.setDeriveSession('derive-session', 'a'.repeat(64));
+
+    await client.withScope('private').listEntities('Note');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+    expect(headers.get('x-derive-session-id')).toBe('derive-session');
+    expect(headers.get('x-derive-key')).toBe('a'.repeat(64));
+  });
+
+  it('posts KQL, SQL, and explain query helpers to KFDB endpoints', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({ rows: [{ total: 1 }], execution_time_ms: 2 }))
+      .mockResolvedValueOnce(mockJsonResponse({ rows: [{ count: 1 }], execution_time_ms: 3 }))
+      .mockResolvedValueOnce(mockJsonResponse({ plan: { root: 'scan' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    await client.queryKql('MATCH (n:File) RETURN COUNT(n) AS total', { scope: 'private' });
+    await client.querySql("SELECT COUNT(*) FROM nodes_by_label WHERE label='File'");
+    await client.explainKql('MATCH (n:File) RETURN n LIMIT 1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/query`);
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      query: 'MATCH (n:File) RETURN COUNT(n) AS total',
+      scope: 'private',
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/api/v1/query/sql`);
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toEqual({
+      query: "SELECT COUNT(*) FROM nodes_by_label WHERE label='File'",
+    });
+    expect(fetchMock.mock.calls[2][0]).toBe(`${BASE}/api/v1/query/explain`);
+  });
+
+  it('exports KFDB property wrapper helpers', () => {
+    expect(kfdbValue.string('hello')).toEqual({ String: 'hello' });
+    expect(kfdbValue.integer(42)).toEqual({ Integer: 42 });
+    expect(kfdbValue.float(3.14)).toEqual({ Float: 3.14 });
+    expect(kfdbValue.boolean(true)).toEqual({ Boolean: true });
+    expect(kfdbValue.vector([0.1, 0.2])).toEqual({ Vector: [0.1, 0.2] });
+    expect(kfdbValue.auto(null)).toBeNull();
+    expect(kfdbValue.auto(['a', 'b'])).toEqual({ String: '["a","b"]' });
   });
 
   it('per-call scope override beats client default', async () => {

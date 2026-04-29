@@ -41,7 +41,7 @@ export interface AgentClientConfig {
   /** Pre-existing auth token (wallet-token or JWT). Required unless `privateKey` or `tokenGetter` is provided. */
   token?: string;
   /** Async function that returns a token on demand (for browser/React use). */
-  tokenGetter?: () => Promise<string | undefined>;
+  tokenGetter?: (options?: { forceRefresh?: boolean }) => Promise<string | undefined>;
   /** Optional wallet personal_sign callback used for sign-to-derive unlock/store flows in browser apps. */
   signMessage?: WalletSignMessage;
   /** Agent Gateway URL. Defaults to https://agents.rickydata.org */

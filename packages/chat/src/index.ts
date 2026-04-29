@@ -88,6 +88,14 @@ export type {
   AgentHostContextSnapshot,
   AgentTargetDescriptor,
 } from './types/host.js';
+export {
+  createRealtimeConnectionState,
+} from 'rickydata/realtime';
+export type {
+  RealtimeConnectionState,
+  RealtimeConnectionStateSnapshot,
+  RealtimeConnectionStatus,
+} from 'rickydata/realtime';
 export { applyHostEvent } from './host/apply.js';
 export type { ApplyHostEventOptions } from './host/apply.js';
 export { buildHostContextMessage, extractHostDirectives } from './host/protocol.js';

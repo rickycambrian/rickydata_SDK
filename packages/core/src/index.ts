@@ -94,6 +94,7 @@ export {
   createClaudeCodeHookTraceFixture,
   buildCodexHookTraceOperations,
   createCodexHookTraceFixture,
+  kfdbValue,
 } from './kfdb/index.js';
 export type {
   AgentChatTraceEvent,
@@ -118,6 +119,10 @@ export type {
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
+  KfdbExplainResponse,
+  KfdbPropertyValue,
+  KfdbQueryOptions,
+  KfdbQueryResponse,
   KfdbQueryScope,
   KfdbWriteRequest,
   KfdbWriteResponse,
@@ -204,6 +209,23 @@ export { AgentError, AgentErrorCode } from './agent/index.js';
 export type { AgentErrorContext } from './agent/index.js';
 
 // Standalone SSE parsers & helpers
+export {
+  createRealtimeConnectionState,
+  parseSSEChunk,
+  streamSSEJson,
+  streamSSEJsonFromResponse,
+} from './realtime/index.js';
+export type {
+  ParsedSSEChunk,
+  RealtimeConnectionState,
+  RealtimeConnectionStateSnapshot,
+  RealtimeConnectionStatus,
+  RealtimeJsonEvent,
+  RealtimeRetryOptions,
+  StreamSSEJsonOptions,
+  StreamSSEOptions,
+} from './realtime/index.js';
+
 export {
   extractSSEData,
   streamSSEEvents,

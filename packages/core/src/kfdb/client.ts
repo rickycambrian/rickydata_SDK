@@ -12,6 +12,9 @@ import type {
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
+  KfdbExplainResponse,
+  KfdbQueryOptions,
+  KfdbQueryResponse,
   KfdbQueryScope,
   KfdbWriteRequest,
   KfdbWriteResponse,
@@ -60,7 +63,7 @@ export class KFDBClient {
    *
    * Orchestrates the full S2D flow against the KFDB derive endpoints:
    * 1. Check session store cache (if provided) — hot path: 0 HTTP calls
-   * 2. GET /api/v1/auth/derive-challenge → { challenge_id, typed_data }
+   * 2. POST /api/v1/auth/derive-challenge → { challenge_id, typed_data }
    * 3. Sign EIP-712 typed data via the provided signFn
    * 4. POST /api/v1/auth/derive-key → { session_id, expires_at }
    * 5. Derive key locally: SHA-256(signature_bytes)
@@ -132,7 +135,7 @@ export class KFDBClient {
   }
 
   withScope(scope: KfdbQueryScope): KFDBClient {
-    return new KFDBClient({
+    const scoped = new KFDBClient({
       baseUrl: this.baseUrl,
       token: this.token,
       apiKey: this.apiKey,
@@ -140,6 +143,13 @@ export class KFDBClient {
       encryptionKey: this.encryptionKey,
       walletAddress: this.walletAddress,
     });
+    scoped.deriveSessionId = this.deriveSessionId;
+    scoped.deriveKeyHex = this.deriveKeyHex;
+    scoped.deriveExpiresAt = this.deriveExpiresAt;
+    scoped.deriveSignFn = this.deriveSignFn;
+    scoped.deriveStore = this.deriveStore;
+    scoped.deriveRefreshMarginMs = this.deriveRefreshMarginMs;
+    return scoped;
   }
 
   async listLabels(scope?: KfdbQueryScope): Promise<KfdbListLabelsResponse> {
@@ -263,6 +273,42 @@ export class KFDBClient {
       body: JSON.stringify(payload),
     });
     return this.parseJson<KfdbWriteResponse>(res, 'write');
+  }
+
+  async queryKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbQueryResponse> {
+    const payload: Record<string, unknown> = { query };
+    if (options.scope) payload.scope = options.scope;
+    const res = await this.request('/api/v1/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    return this.parseJson<KfdbQueryResponse>(res, 'query KQL');
+  }
+
+  async querySql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbQueryResponse> {
+    const payload: Record<string, unknown> = { query };
+    if (options.scope) payload.scope = options.scope;
+    const res = await this.request('/api/v1/query/sql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    return this.parseJson<KfdbQueryResponse>(res, 'query SQL');
+  }
+
+  async explainKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbExplainResponse> {
+    const payload: Record<string, unknown> = { query };
+    if (options.scope) payload.scope = options.scope;
+    const res = await this.request('/api/v1/query/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    return this.parseJson<KfdbExplainResponse>(res, 'explain KQL');
   }
 
   async writeAgentChatTrace(trace: AgentChatTurnTrace): Promise<KfdbWriteResponse> {

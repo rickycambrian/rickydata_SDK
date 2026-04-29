@@ -93,3 +93,11 @@ export type {
   WalletBalanceResponse,
   SSEEvent,
 } from 'rickydata/agent';
+export {
+  createRealtimeConnectionState,
+} from 'rickydata/realtime';
+export type {
+  RealtimeConnectionState,
+  RealtimeConnectionStateSnapshot,
+  RealtimeConnectionStatus,
+} from 'rickydata/realtime';

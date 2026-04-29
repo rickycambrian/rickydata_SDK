@@ -88,6 +88,31 @@ export interface KfdbWriteResponse {
   affected_ids: string[];
 }
 
+export interface KfdbQueryOptions {
+  scope?: KfdbQueryScope;
+  signal?: AbortSignal;
+}
+
+export interface KfdbQueryResponse {
+  rows?: Record<string, unknown>[];
+  columns?: string[];
+  execution_time_ms?: number;
+  [key: string]: unknown;
+}
+
+export interface KfdbExplainResponse {
+  plan?: unknown;
+  query?: string;
+  [key: string]: unknown;
+}
+
+export type KfdbPropertyValue =
+  | { String: string }
+  | { Integer: number }
+  | { Float: number }
+  | { Boolean: boolean }
+  | { Vector: number[] };
+
 // ── Sign-to-Derive Types ────────────────────────────────────────────
 
 /** Cached derive session credentials. */

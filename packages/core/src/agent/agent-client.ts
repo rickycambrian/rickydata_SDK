@@ -12,6 +12,7 @@ import {
   AgentError,
   AgentErrorCode,
 } from './types.js';
+import { streamSSEJsonFromResponse } from '../realtime/index.js';
 import type {
   ImageAttachment,
   AgentClientConfig,
@@ -109,7 +110,7 @@ export class AgentClient {
   private readonly gatewayUrl: string;
   private readonly privateKey: `0x${string}` | null;
   private readonly signMessageFn: WalletSignMessage | null;
-  private readonly tokenGetter: (() => Promise<string | undefined>) | null;
+  private readonly tokenGetter: ((options?: { forceRefresh?: boolean }) => Promise<string | undefined>) | null;
   private token: string | null = null;
   private sessions: SessionStoreType | null = null;
   private readonly sessionCache = new Map<string, string>();
@@ -525,10 +526,10 @@ export class AgentClient {
       let res = await sendChatRequest();
 
       // Retry once on 401 with re-auth (only on first occurrence)
-      if (res.status === 401 && this.privateKey && !authRetried) {
+      if (res.status === 401 && (this.privateKey || this.tokenGetter) && !authRetried) {
         authRetried = true;
         this.token = null;
-        await this.ensureAuthenticated();
+        await this.ensureAuthenticated({ forceRefresh: true });
         res = await sendChatRequest();
       }
 
@@ -575,6 +576,11 @@ export class AgentClient {
       },
     );
     let res = await send();
+    if (res.status === 401 && (this.privateKey || this.tokenGetter)) {
+      this.token = null;
+      await this.ensureAuthenticated({ forceRefresh: true });
+      res = await send();
+    }
     if (!res.ok) {
       const rawBody = typeof res.text === 'function'
         ? await res.text().catch(() => '')
@@ -986,12 +992,13 @@ export class AgentClient {
 
   // ─── Internal: Auth ──────────────────────────────────────
 
-  private async ensureAuthenticated(): Promise<void> {
-    if (this.token) return;
+  private async ensureAuthenticated(options: { forceRefresh?: boolean } = {}): Promise<void> {
+    if (this.token && !options.forceRefresh) return;
+    if (options.forceRefresh) this.token = null;
 
     // Try tokenGetter first (for browser/React use)
     if (this.tokenGetter) {
-      const t = await this.tokenGetter();
+      const t = await this.tokenGetter(options.forceRefresh ? { forceRefresh: true } : undefined);
       if (!t) throw new AgentError(AgentErrorCode.AUTH_FAILED, 'Token getter returned no token');
       this.token = t;
       return;
@@ -1111,10 +1118,10 @@ export class AgentClient {
       body: JSON.stringify({ model: model ?? 'haiku', ...(executionEngine ? { executionEngine } : {}) }),
     });
 
-    if (res.status === 401 && this.privateKey) {
+    if (res.status === 401 && (this.privateKey || this.tokenGetter)) {
       // Token expired — re-authenticate and retry
       this.token = null;
-      await this.ensureAuthenticated();
+      await this.ensureAuthenticated({ forceRefresh: true });
       res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/sessions`, {
         method: 'POST',
         headers: this.authHeaders(),
@@ -1371,59 +1378,17 @@ export async function streamSSEEvents(
   response: Response,
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const createTimeoutPromise = (): Promise<never> => {
-    clearTimeout(timeoutId);
-    return new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(
-        () => reject(new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s')),
-        SSE_READ_TIMEOUT_MS,
-      );
-    });
-  };
-
   try {
-    while (true) {
-      const timeoutPromise = createTimeoutPromise();
-      const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-
-      for (const part of parts) {
-        if (part.startsWith(':')) continue;
-        if (part.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(part.slice(6)) as SSEEvent;
-            onEvent(event);
-          } catch {
-            // Skip malformed events
-          }
-        }
-      }
-    }
-
-    if (buffer.startsWith('data: ')) {
-      try {
-        const event = JSON.parse(buffer.slice(6)) as SSEEvent;
-        onEvent(event);
-      } catch {
-        // Skip
-      }
+    if (!response.body) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
+    for await (const event of streamSSEJsonFromResponse<SSEEvent>(response, { heartbeatTimeoutMs: SSE_READ_TIMEOUT_MS })) {
+      onEvent(event.data);
     }
   } catch (err) {
-    try { reader.cancel(); } catch { /* ignore */ }
+    if (err instanceof AgentError) throw err;
+    if (err instanceof Error && /idle for 60000ms|timed out/i.test(err.message)) {
+      throw new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s');
+    }
     throw err;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -1434,59 +1399,17 @@ export async function streamTeamSSEEvents(
   response: Response,
   onEvent: (event: TeamSSEEvent) => void,
 ): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const createTimeoutPromise = (): Promise<never> => {
-    clearTimeout(timeoutId);
-    return new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(
-        () => reject(new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s')),
-        SSE_READ_TIMEOUT_MS,
-      );
-    });
-  };
-
   try {
-    while (true) {
-      const timeoutPromise = createTimeoutPromise();
-      const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-
-      for (const part of parts) {
-        if (part.startsWith(':')) continue;
-        if (part.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(part.slice(6)) as TeamSSEEvent;
-            onEvent(event);
-          } catch {
-            // Skip malformed events
-          }
-        }
-      }
-    }
-
-    if (buffer.startsWith('data: ')) {
-      try {
-        const event = JSON.parse(buffer.slice(6)) as TeamSSEEvent;
-        onEvent(event);
-      } catch {
-        // Skip
-      }
+    if (!response.body) throw new AgentError(AgentErrorCode.NETWORK_ERROR, 'No response body');
+    for await (const event of streamSSEJsonFromResponse<TeamSSEEvent>(response, { heartbeatTimeoutMs: SSE_READ_TIMEOUT_MS })) {
+      onEvent(event.data);
     }
   } catch (err) {
-    try { reader.cancel(); } catch { /* ignore */ }
+    if (err instanceof AgentError) throw err;
+    if (err instanceof Error && /idle for 60000ms|timed out/i.test(err.message)) {
+      throw new AgentError(AgentErrorCode.NETWORK_TIMEOUT, 'Connection timed out — no response for 60s');
+    }
     throw err;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
