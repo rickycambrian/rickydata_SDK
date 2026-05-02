@@ -25,7 +25,7 @@ vi.mock('viem/chains', () => ({
 const mockRequirements: PaymentRequirements = {
   amount: '500', // $0.0005
   recipient: '0xRecipient',
-  usdcContract: '0xUSDC',
+  usdcContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   network: 'base',
   chainId: 8453,
 };

@@ -1,6 +1,19 @@
 import type { PaymentRequirements, PaymentReceipt } from '../types/payment.js';
-import { USDC_TOKEN_NAME, USDC_TOKEN_VERSION, BASE_CHAIN_ID } from '../constants.js';
+import { USDC_TOKEN_NAME, USDC_TOKEN_VERSION, BASE_CHAIN_ID, USDC_ADDRESS } from '../constants.js';
 import { PaymentSigningError } from '../errors/index.js';
+
+function validatePaymentRequirements(requirements: PaymentRequirements): void {
+  if (requirements.chainId !== BASE_CHAIN_ID) {
+    throw new PaymentSigningError(
+      `Untrusted chain ID ${requirements.chainId} in payment requirements. Only Base mainnet (${BASE_CHAIN_ID}) is supported.`,
+    );
+  }
+  if (requirements.usdcContract.toLowerCase() !== USDC_ADDRESS.toLowerCase()) {
+    throw new PaymentSigningError(
+      `Untrusted USDC contract ${requirements.usdcContract} in payment requirements. Expected Base USDC ${USDC_ADDRESS}.`,
+    );
+  }
+}
 
 /**
  * Sign an EIP-3009 TransferWithAuthorization payment.
@@ -14,6 +27,8 @@ export async function signPayment(
   account: { address: `0x${string}`; signTypedData?: unknown },
   requirements: PaymentRequirements,
 ): Promise<{ header: string; receipt: PaymentReceipt }> {
+  validatePaymentRequirements(requirements);
+
   const { createWalletClient, http } = await import('viem');
   const { base } = await import('viem/chains');
 
@@ -29,7 +44,7 @@ export async function signPayment(
     name: requirements.tokenName ?? USDC_TOKEN_NAME,
     version: requirements.tokenVersion ?? USDC_TOKEN_VERSION,
     chainId: BigInt(requirements.chainId),
-    verifyingContract: requirements.usdcContract as `0x${string}`,
+    verifyingContract: USDC_ADDRESS as `0x${string}`,
   } as const;
 
   const nonce = `0x${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')}` as `0x${string}`;

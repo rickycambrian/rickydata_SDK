@@ -58,6 +58,55 @@ describe('SpendingPolicy', () => {
     expect(result.allowed).toBe(true);
   });
 
+  it('blocks evil-rickydata.org when allowlist has rickydata.org (no substring bypass)', async () => {
+    const policy = new SpendingPolicy({
+      maxPerCall: 1,
+      allowedEndpoints: ['rickydata.org'],
+    });
+    const result = await policy.validate(0.001, 'https://evil-rickydata.org/tool');
+    expect(result.allowed).toBe(false);
+    expect(result.violation).toBe('ENDPOINT_NOT_ALLOWED');
+  });
+
+  it('blocks rickydata.org.attacker.com (suffix attack)', async () => {
+    const policy = new SpendingPolicy({
+      maxPerCall: 1,
+      allowedEndpoints: ['rickydata.org'],
+    });
+    const result = await policy.validate(0.001, 'https://rickydata.org.attacker.com/tool');
+    expect(result.allowed).toBe(false);
+    expect(result.violation).toBe('ENDPOINT_NOT_ALLOWED');
+  });
+
+  it('allows subdomain mcp.rickydata.org when allowlist has rickydata.org', async () => {
+    const policy = new SpendingPolicy({
+      maxPerCall: 1,
+      allowedEndpoints: ['rickydata.org'],
+    });
+    const result = await policy.validate(0.001, 'https://mcp.rickydata.org/tool');
+    expect(result.allowed).toBe(true);
+  });
+
+  it('allows exact hostname match rickydata.org', async () => {
+    const policy = new SpendingPolicy({
+      maxPerCall: 1,
+      allowedEndpoints: ['rickydata.org'],
+    });
+    const result = await policy.validate(0.001, 'https://rickydata.org/tool');
+    expect(result.allowed).toBe(true);
+  });
+
+  it('allows exact string match for non-URL endpoints', async () => {
+    const policy = new SpendingPolicy({
+      maxPerCall: 1,
+      allowedEndpoints: ['some-internal-service'],
+    });
+    const allowed = await policy.validate(0.001, 'some-internal-service');
+    const blocked = await policy.validate(0.001, 'not-some-internal-service');
+    expect(allowed.allowed).toBe(true);
+    expect(blocked.allowed).toBe(false);
+  });
+
   it('detects duplicate payments within window', async () => {
     const policy = new SpendingPolicy({
       maxPerCall: 1, maxPerSession: 100, maxPerDay: 100, maxPerWeek: 100,

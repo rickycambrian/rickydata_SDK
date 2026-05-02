@@ -230,7 +230,13 @@ export class SpendingPolicy {
 
   private checkEndpoint(endpoint: string): PolicyResult {
     if (this.allowedEndpoints.length === 0) return { allowed: true };
-    const allowed = this.allowedEndpoints.some(e => endpoint.includes(e));
+    let allowed = false;
+    try {
+      const hostname = new URL(endpoint).hostname;
+      allowed = this.allowedEndpoints.some(e => hostname === e || hostname.endsWith('.' + e));
+    } catch {
+      allowed = this.allowedEndpoints.some(e => endpoint === e);
+    }
     if (!allowed) {
       return reject('ENDPOINT_NOT_ALLOWED', `Endpoint not in allowlist: ${endpoint}`);
     }
