@@ -29,6 +29,7 @@ function defaultModelForProvider(provider: unknown): string {
   if (provider === 'zai') return 'glm-5.1';
   if (provider === 'deepseek') return 'deepseek-v4-pro';
   if (provider === 'gemini') return 'gemini-3.1-pro-preview';
+  if (provider === 'kimi') return 'kimi-for-coding';
   return FREE_TIER_MODEL;
 }
 
@@ -111,6 +112,10 @@ async function resolveModel(
 
     if (settings.plan === 'gemini_byok') {
       return settings.defaultModel || 'gemini-3.1-pro-preview';
+    }
+
+    if (settings.plan === 'kimi_byok') {
+      return settings.defaultModel || 'kimi-for-coding';
     }
 
     // Plan not set — probe API key to decide

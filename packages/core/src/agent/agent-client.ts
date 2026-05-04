@@ -67,6 +67,7 @@ const PROVIDER_CONFIG: Record<MarketplaceProvider, {
   deepseek: { statusPath: '/wallet/deepseek-apikey/status', setPath: '/wallet/deepseek-apikey', bodyKey: 'deepseekApiKey' },
   gemini: { statusPath: '/wallet/gemini-apikey/status', setPath: '/wallet/gemini-apikey', bodyKey: 'geminiApiKey' },
   openai: { statusPath: '/wallet/openai-apikey/status', setPath: '/wallet/openai-apikey', bodyKey: 'openaiApiKey' },
+  kimi: { statusPath: '/wallet/kimi-apikey/status', setPath: '/wallet/kimi-apikey', bodyKey: 'kimiApiKey' },
 };
 
 function providerFromModel(model?: string, fallback?: string): MarketplaceProvider | null {
@@ -77,6 +78,7 @@ function providerFromModel(model?: string, fallback?: string): MarketplaceProvid
   if (value.startsWith('glm') || value.includes('z.ai') || value.includes('zai')) return 'zai';
   if (value.startsWith('deepseek')) return 'deepseek';
   if (value.startsWith('gemini')) return 'gemini';
+  if (value.startsWith('kimi') || value === 'kimi-for-coding') return 'kimi';
   if (value.startsWith('gpt-') || value.startsWith('o1') || value.startsWith('o3') || value.startsWith('o4') || value.includes('openai')) return 'openai';
   if (value === 'haiku' || value === 'sonnet' || value === 'opus' || value.includes('claude')) return 'anthropic';
   return null;
@@ -90,6 +92,7 @@ function providerFromMissingSecret(value: unknown): MarketplaceProvider | null {
   if (lower.includes('z.ai') || lower.includes('zai')) return 'zai';
   if (lower.includes('deepseek')) return 'deepseek';
   if (lower.includes('gemini')) return 'gemini';
+  if (lower.includes('kimi')) return 'kimi';
   if (lower.includes('openai')) return 'openai';
   if (lower.includes('anthropic')) return 'anthropic';
   return null;

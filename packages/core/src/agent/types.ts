@@ -10,9 +10,9 @@ export const FREE_TIER_ZAI_MODEL = 'glm-5.1' as const;
 export const FREE_TIER_DEEPSEEK_MODEL = 'deepseek-v4-pro' as const;
 export const GEMINI_MODEL = 'gemini-3.1-pro-preview' as const;
 
-export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex' | 'opencode' | 'hermes' | 'gemini' | 'openrouter-agent';
-export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'deepseek' | 'gemini' | 'openai';
-export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'deepseek_byok' | 'gemini_byok' | 'openai_byok';
+export type TeamExecutionEngine = 'claude' | 'openclaude' | 'codex' | 'opencode' | 'hermes' | 'gemini' | 'openrouter-agent' | 'kimi-code';
+export type MarketplaceProvider = 'anthropic' | 'minimax' | 'openrouter' | 'zai' | 'deepseek' | 'gemini' | 'openai' | 'kimi';
+export type WalletPlan = 'free' | 'byok' | 'minimax_byok' | 'openrouter_byok' | 'zai_byok' | 'deepseek_byok' | 'gemini_byok' | 'openai_byok' | 'kimi_byok';
 export type WalletSignMessage = (message: string) => Promise<string>;
 
 export interface ProviderApiKeyStatus {
@@ -367,6 +367,7 @@ export interface WalletSettings {
   zaiApiKeyConfigured?: boolean;
   deepseekApiKeyConfigured?: boolean;
   geminiApiKeyConfigured?: boolean;
+  kimiApiKeyConfigured?: boolean;
   teamEngine?: TeamExecutionEngine;
   executionEngine?: TeamExecutionEngine;
   engineUsed?: TeamExecutionEngine;
