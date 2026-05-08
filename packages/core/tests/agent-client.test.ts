@@ -555,6 +555,33 @@ describe('AgentClient', () => {
         executionEngine: 'kimi-code',
       });
     });
+
+    it('passes through RickyData Code execution engine requests', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'sess-rickydata-code',
+            agentId: 'test-agent',
+            model: 'claude-haiku-4-5-20251001',
+            createdAt: '2026-05-08T00:00:00.000Z',
+            executionEngine: 'rickydata-code',
+          }),
+        } as Response);
+
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      const session = await client.createSession('test-agent', 'claude-haiku-4-5-20251001', 'rickydata-code');
+
+      expect(session.executionEngine).toBe('rickydata-code');
+      expect(JSON.parse(fetchSpy.mock.calls[2][1]!.body as string)).toEqual({
+        model: 'claude-haiku-4-5-20251001',
+        executionEngine: 'rickydata-code',
+      });
+    });
   });
 
   // ─── List Agents ────────────────────────────────────────
