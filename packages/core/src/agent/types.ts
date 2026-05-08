@@ -194,6 +194,11 @@ export interface SSEPlanningEvent {
   data: string;
 }
 
+export interface SSEStatusEvent {
+  type: 'status';
+  data: { code?: string; message?: string; [key: string]: unknown };
+}
+
 export interface SSEToolApprovalRequestEvent {
   type: 'tool_approval_request';
   data: {
@@ -224,6 +229,7 @@ export type SSEEvent =
   | SSEErrorEvent
   | SSEThinkingEvent
   | SSEPlanningEvent
+  | SSEStatusEvent
   | SSEToolApprovalRequestEvent
   | SSETransactionSigningRequestEvent;
 
