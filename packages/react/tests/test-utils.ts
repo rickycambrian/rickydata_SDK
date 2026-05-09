@@ -14,6 +14,16 @@ export function createMockClient() {
     chatRaw: vi.fn().mockResolvedValue(new Response('', { status: 200 })),
     getSession: vi.fn().mockResolvedValue({ id: 'session-1', agentId: 'agent-1', model: 'haiku', messages: [], createdAt: new Date().toISOString() }),
 
+    // Voice
+    getVoiceLivekitToken: vi.fn().mockResolvedValue({
+      token: 'livekit-token',
+      url: 'wss://livekit.example.com',
+      roomName: 'voice-room',
+      sessionId: 'voice-session-1',
+    }),
+    startVoiceSession: vi.fn().mockResolvedValue({ sessionId: 'voice-session-legacy' }),
+    endVoiceSession: vi.fn().mockResolvedValue(undefined),
+
     // API Key
     getApiKeyStatus: vi.fn().mockResolvedValue({ configured: true }),
     setApiKey: vi.fn().mockResolvedValue(undefined),

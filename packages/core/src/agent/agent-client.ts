@@ -36,6 +36,7 @@ import type {
   WalletTransactionsResponse,
   VoiceTokenResponse,
   VoiceLivekitTokenResponse,
+  VoiceLivekitTokenRequest,
   VoiceToolCallRequest,
   VoiceToolCallResponse,
   VoiceEndResponse,
@@ -887,7 +888,7 @@ export class AgentClient {
   }
 
   /** Get a LiveKit token for voice chat (returns url, roomName, sessionId for LiveKit Room.connect). */
-  async getVoiceLivekitToken(agentId: string, config: { voice?: string }): Promise<VoiceLivekitTokenResponse> {
+  async getVoiceLivekitToken(agentId: string, config: VoiceLivekitTokenRequest = {}): Promise<VoiceLivekitTokenResponse> {
     await this.ensureAuthenticated();
     const res = await fetch(`${this.gatewayUrl}/agents/${encodeURIComponent(agentId)}/voice/livekit-token`, {
       method: 'POST',

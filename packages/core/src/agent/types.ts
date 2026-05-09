@@ -447,6 +447,32 @@ export interface VoiceLivekitTokenResponse {
   url: string;
   roomName: string;
   sessionId: string;
+  provider?: 'livekit';
+  tts?: {
+    provider: 'cartesia' | 'gemini-live';
+    model?: string;
+    voice?: string;
+  };
+  narrator?: {
+    enabled: boolean;
+    parallel: boolean;
+    provider: string;
+    model: string;
+    displayName: string;
+    strategy?: string;
+  };
+}
+
+export interface VoiceLivekitTokenRequest {
+  voice?: string;
+  model?: string;
+  resumeSessionId?: string;
+  executionEngine?: 'claude' | 'rickydata-code';
+  ttsProvider?: 'cartesia' | 'gemini-live';
+  ttsModel?: string;
+  ttsVoice?: string;
+  narratorEnabled?: boolean;
+  parallelNarrator?: boolean;
 }
 
 export interface VoiceToolCallRequest {

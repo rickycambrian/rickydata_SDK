@@ -807,4 +807,52 @@ describe('AgentClient', () => {
       );
     });
   });
+
+  describe('voice', () => {
+    it('sends the full LiveKit voice token request body', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          token: 'lk-token',
+          url: 'wss://livekit.example',
+          roomName: 'voice-room',
+          sessionId: 'session-1',
+          provider: 'livekit',
+        }),
+      } as Response);
+
+      const client = new AgentClient({ token: 'wallet-token', sessionStorePath: null });
+      const result = await client.getVoiceLivekitToken('test-agent', {
+        voice: 'voice-id',
+        model: 'claude-haiku-4-5-20251001',
+        resumeSessionId: 'existing-session',
+        executionEngine: 'rickydata-code',
+        ttsProvider: 'gemini-live',
+        ttsModel: 'gemini-3.1-flash-live-preview',
+        ttsVoice: 'Kore',
+        narratorEnabled: true,
+        parallelNarrator: true,
+      });
+
+      expect(result.sessionId).toBe('session-1');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/agents/test-agent/voice/livekit-token`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer wallet-token' }),
+          body: JSON.stringify({
+            voice: 'voice-id',
+            model: 'claude-haiku-4-5-20251001',
+            resumeSessionId: 'existing-session',
+            executionEngine: 'rickydata-code',
+            ttsProvider: 'gemini-live',
+            ttsModel: 'gemini-3.1-flash-live-preview',
+            ttsVoice: 'Kore',
+            narratorEnabled: true,
+            parallelNarrator: true,
+          }),
+        }),
+      );
+    });
+  });
 });

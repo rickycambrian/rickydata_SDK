@@ -107,6 +107,13 @@ export interface UseAgentVoiceChatOptions {
   agentId: string;
   model?: string;
   voice?: string;
+  resumeSessionId?: string;
+  executionEngine?: 'claude' | 'rickydata-code';
+  ttsProvider?: 'cartesia' | 'gemini-live';
+  ttsModel?: string;
+  ttsVoice?: string;
+  narratorEnabled?: boolean;
+  parallelNarrator?: boolean;
   /** Override gateway URL (e.g., proxy through your own API to avoid CORS). Defaults to client's configured URL. */
   gatewayUrl?: string;
   onError?: (error: string) => void;
@@ -137,6 +144,13 @@ export function useAgentVoiceChat({
   agentId,
   model = 'claude-sonnet-4-20250514',
   voice = '5ee9feff-1265-424a-9d7f-8e4d431a12c7',
+  resumeSessionId,
+  executionEngine,
+  ttsProvider,
+  ttsModel,
+  ttsVoice,
+  narratorEnabled = true,
+  parallelNarrator = true,
   gatewayUrl,
   onError,
 }: UseAgentVoiceChatOptions): UseAgentVoiceChatResult {
@@ -198,7 +212,17 @@ export function useAgentVoiceChat({
       // 2. Get LiveKit token from agent gateway via AgentClient
       let livekitData: { token: string; url: string; roomName: string; sessionId: string };
       try {
-        livekitData = await client.getVoiceLivekitToken(agentId, { voice });
+        livekitData = await client.getVoiceLivekitToken(agentId, {
+          voice,
+          model,
+          resumeSessionId,
+          executionEngine,
+          ttsProvider,
+          ttsModel,
+          ttsVoice,
+          narratorEnabled,
+          parallelNarrator,
+        });
       } catch (tokenErr) {
         const status = (tokenErr as Error & { status?: number }).status;
         if (status === 402) setNeedsDeposit(true);
@@ -207,16 +231,7 @@ export function useAgentVoiceChat({
       sessionIdRef.current = livekitData.sessionId;
       setSessionId(livekitData.sessionId);
 
-      // 3. Start billing session
-      try {
-        const sessionData = await client.startVoiceSession(agentId, { model });
-        sessionIdRef.current = sessionData.sessionId;
-        setSessionId(sessionData.sessionId);
-      } catch {
-        // Non-fatal — billing session start failure shouldn't block voice
-      }
-
-      // 4. Create and configure LiveKit room
+      // 3. Create and configure LiveKit room
       const room = new Room({ adaptiveStream: true, dynacast: true });
       roomRef.current = room;
 
@@ -356,7 +371,7 @@ export function useAgentVoiceChat({
         setIsAgentSpeaking(false);
       });
 
-      // 5. Connect to LiveKit room (with timeout)
+      // 4. Connect to LiveKit room (with timeout)
       const connectTimeout = new Promise<never>((_, reject) => {
         connectionTimerRef.current = setTimeout(
           () => reject(new Error('Connection timed out. Tap retry to try again.')),
@@ -368,7 +383,7 @@ export function useAgentVoiceChat({
       connectionTimerRef.current = null;
       await room.localParticipant.setMicrophoneEnabled(true);
 
-      // 6. Start duration timer
+      // 5. Start duration timer
       startTimeRef.current = Date.now();
       timerRef.current = setInterval(() => {
         if (startTimeRef.current) {
@@ -387,7 +402,7 @@ export function useAgentVoiceChat({
       setConnectionState('error');
       if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; }
     }
-  }, [client, agentId, model, voice, gatewayUrl, onError, isSpeakerMuted]);
+  }, [client, agentId, model, voice, resumeSessionId, executionEngine, ttsProvider, ttsModel, ttsVoice, narratorEnabled, parallelNarrator, gatewayUrl, onError, isSpeakerMuted]);
 
   const disconnect = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
