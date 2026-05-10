@@ -9,6 +9,15 @@ import {
   encryptProperties,
   decryptResponseRows,
   isClientEncrypted,
+  generateSharingKeyPair,
+  generateSharedNotebookGroupKey,
+  importSharedNotebookGroupKey,
+  wrapSharedNotebookGroupKey,
+  unwrapSharedNotebookGroupKey,
+  encryptSharedNotebookField,
+  decryptSharedNotebookField,
+  encryptSharedNotebookFields,
+  decryptSharedNotebookRows,
 } from '../src/encryption.js';
 
 // A valid 65-byte signature (130 hex chars) for testing key derivation
@@ -285,5 +294,61 @@ describe('isClientEncrypted', () => {
 
   it('returns false for server-encrypted strings', () => {
     expect(isClientEncrypted("__enc_v1_str:abc")).toBe(false);
+  });
+});
+
+describe('shared notebook group key helpers', () => {
+  it('wraps and unwraps a group key for an X25519 recipient', async () => {
+    const recipient = generateSharingKeyPair();
+    const groupKey = generateSharedNotebookGroupKey();
+
+    const wrapped = await wrapSharedNotebookGroupKey(groupKey, recipient.publicKey);
+    const unwrapped = await unwrapSharedNotebookGroupKey(wrapped, recipient.privateKey);
+
+    expect(wrapped).toMatchObject({
+      version: 1,
+      alg: 'X25519-HKDF-SHA256-AES-256-GCM',
+    });
+    expect(wrapped.ephemeral_public_key).toBeTypeOf('string');
+    expect(wrapped.nonce).toBeTypeOf('string');
+    expect(wrapped.ciphertext).toBeTypeOf('string');
+    expect(unwrapped).toBe(groupKey);
+  });
+
+  it('fails to unwrap with the wrong recipient private key', async () => {
+    const intendedRecipient = generateSharingKeyPair();
+    const wrongRecipient = generateSharingKeyPair();
+    const groupKey = generateSharedNotebookGroupKey();
+
+    const wrapped = await wrapSharedNotebookGroupKey(groupKey, intendedRecipient.publicKey);
+
+    await expect(
+      unwrapSharedNotebookGroupKey(wrapped, wrongRecipient.privateKey),
+    ).rejects.toThrow();
+  });
+
+  it('encrypts and decrypts __cenc_v2_group fields', async () => {
+    const groupKey = generateSharedNotebookGroupKey();
+    const encrypted = await encryptSharedNotebookField(groupKey, { title: 'Team Plan', count: 2 }, 'k7');
+
+    expect(encrypted).toMatch(/^__cenc_v2_group_k7\.obj:/);
+
+    const decrypted = await decryptSharedNotebookField(groupKey, encrypted);
+    expect(decrypted).toEqual({ title: 'Team Plan', count: 2 });
+  });
+
+  it('encrypts and decrypts shared notebook property rows by key id', async () => {
+    const groupKey = generateSharedNotebookGroupKey();
+    const imported = await importSharedNotebookGroupKey(groupKey);
+    const encrypted = await encryptSharedNotebookFields(imported, {
+      title: { String: 'Shared note' },
+      count: { Integer: 3 },
+    }, 'team_k1');
+
+    expect((encrypted.title as { String: string }).String).toMatch(/^__cenc_v2_group_team_k1\.str:/);
+    expect((encrypted.count as { String: string }).String).toMatch(/^__cenc_v2_group_team_k1\.int:/);
+
+    const rows = await decryptSharedNotebookRows({ team_k1: groupKey }, [encrypted]);
+    expect(rows[0]).toEqual({ title: 'Shared note', count: 3 });
   });
 });

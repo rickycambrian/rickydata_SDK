@@ -263,4 +263,103 @@ describe('KFDBClient', () => {
     const batchBody = JSON.parse(String(batchInit.body));
     expect(batchBody.scope).toBe('global');
   });
+
+  it('sends shared notebook key enrollment and sharing request shapes', async () => {
+    const wrappedGroupKey = {
+      version: 1 as const,
+      alg: 'X25519-HKDF-SHA256-AES-256-GCM' as const,
+      ephemeral_public_key: 'eph_pk_b64',
+      salt: 'salt_b64',
+      nonce: 'nonce_b64',
+      ciphertext: 'ciphertext_b64',
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({
+        key_id: 'sharing-key-1',
+        public_key: 'recipient_pk_b64',
+        algorithm: 'X25519',
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        keys: [{
+          key_id: 'sharing-key-1',
+          public_key: 'recipient_pk_b64',
+          algorithm: 'X25519',
+        }],
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        notebook_id: '550e8400-e29b-41d4-a716-446655440000',
+        workspace_id: '650e8400-e29b-41d4-a716-446655440000',
+        current_version: 1,
+        content_hash: 'sha256:abc',
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        notebook_id: 'notebook/with space',
+        member: {
+          wallet_address: '0xrecipient',
+          role: 'editor',
+          sharing_key_id: 'sharing-key-1',
+          key_id: 'k1',
+        },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    await client.enrollSharingKey({
+      public_key: 'recipient_pk_b64',
+      label: 'Laptop',
+      device_id: 'device-1',
+    });
+    await client.listSharingKeys();
+    await client.createSharedNotebook({
+      workspace_id: '650e8400-e29b-41d4-a716-446655440000',
+      title_ciphertext: '__cenc_v2_group_k1.str:title',
+      content_ciphertext: '__cenc_v2_group_k1.str:content',
+      content_hash: 'sha256:abc',
+      key_version: 'k1',
+      dek_envelopes: [{
+        wallet_address: '0xrecipient',
+        wrapped_dek: 'opaque_dek_b64',
+        key_version: 'k1',
+      }],
+    });
+    await client.shareNotebook('notebook/with space', {
+      recipient_wallet_address: '0xrecipient',
+      recipient_sharing_key_id: 'sharing-key-1',
+      role: 'editor',
+      key_id: 'k1',
+      wrapped_group_key: wrappedGroupKey,
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/shared-notebooks/keys/enroll`);
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      public_key: 'recipient_pk_b64',
+      algorithm: 'X25519',
+      label: 'Laptop',
+      device_id: 'device-1',
+    });
+
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/api/v1/shared-notebooks/keys`);
+    expect(fetchMock.mock.calls[2][0]).toBe(`${BASE}/api/v1/shared-notebooks`);
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toEqual({
+      workspace_id: '650e8400-e29b-41d4-a716-446655440000',
+      title_ciphertext: '__cenc_v2_group_k1.str:title',
+      content_ciphertext: '__cenc_v2_group_k1.str:content',
+      content_hash: 'sha256:abc',
+      key_version: 'k1',
+      dek_envelopes: [{
+        wallet_address: '0xrecipient',
+        wrapped_dek: 'opaque_dek_b64',
+        key_version: 'k1',
+      }],
+    });
+
+    expect(fetchMock.mock.calls[3][0]).toBe(`${BASE}/api/v1/shared-notebooks/notebook%2Fwith%20space/share`);
+    expect(JSON.parse(String((fetchMock.mock.calls[3][1] as RequestInit).body))).toEqual({
+      recipient_wallet_address: '0xrecipient',
+      recipient_sharing_key_id: 'sharing-key-1',
+      role: 'editor',
+      key_id: 'k1',
+      wrapped_group_key: wrappedGroupKey,
+    });
+  });
 });

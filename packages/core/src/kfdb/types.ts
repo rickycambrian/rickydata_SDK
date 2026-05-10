@@ -1,3 +1,5 @@
+import type { WrappedGroupKey } from '../encryption.js';
+
 export type KfdbQueryScope = 'global' | 'private';
 
 export interface KfdbClientConfig {
@@ -150,4 +152,159 @@ export interface DeriveKeyResult {
   /** KFDB may return Unix seconds or milliseconds; KFDBClient normalizes to milliseconds internally. */
   expires_at: number;
   key_hex?: string;
+}
+
+// ── Shared Notebook Key Types ───────────────────────────────────────
+
+export type KfdbSharedNotebookRole = 'owner' | 'editor' | 'viewer';
+export type KfdbSharedNotebookKeyAlgorithm = 'X25519';
+
+export interface KfdbEnrollSharingKeyRequest {
+  /** Base64-encoded 32-byte X25519 public key from generateSharingKeyPair(). */
+  public_key: string;
+  algorithm?: KfdbSharedNotebookKeyAlgorithm;
+  label?: string;
+  device_id?: string;
+}
+
+export interface KfdbSharingKey {
+  key_id: string;
+  public_key: string;
+  algorithm: KfdbSharedNotebookKeyAlgorithm;
+  label?: string;
+  device_id?: string;
+  wallet_address?: string;
+  created_at?: string;
+  revoked_at?: string | null;
+}
+
+export interface KfdbListSharingKeysResponse {
+  keys: KfdbSharingKey[];
+}
+
+export interface KfdbCreateSharedNotebookRequest {
+  workspace_id: string;
+  title_ciphertext: string;
+  content_ciphertext: string;
+  metadata_ciphertext?: string;
+  content_hash: string;
+  encryption_algo?: string;
+  key_version?: string;
+  client_metadata?: string;
+  dek_envelopes: KfdbSharedNotebookDekEnvelope[];
+}
+
+export interface KfdbUpdateSharedNotebookRequest {
+  base_version: number;
+  base_hash: string;
+  title_ciphertext: string;
+  content_ciphertext: string;
+  metadata_ciphertext?: string;
+  content_hash: string;
+  encryption_algo?: string;
+  key_version?: string;
+  client_metadata?: string;
+  change_summary?: string;
+  dek_envelopes?: KfdbSharedNotebookDekEnvelope[];
+}
+
+export interface KfdbSharedNotebookDekEnvelope {
+  wallet_address: string;
+  wrapped_dek: string;
+  algo?: string;
+  key_version?: string;
+  public_key_hash?: string;
+}
+
+export interface KfdbSharedNotebook {
+  notebook_id: string;
+  workspace_id: string;
+  title_ciphertext: string;
+  content_ciphertext: string;
+  metadata_ciphertext?: string | null;
+  content_hash: string;
+  current_version: number;
+  encryption_algo: string;
+  key_version: string;
+  client_metadata?: string | null;
+  created_by: string;
+  updated_by: string;
+  created_at: number;
+  updated_at: number;
+  dek_envelopes?: KfdbSharedNotebookDekEnvelope[];
+}
+
+export interface KfdbSharedNotebookWriteResponse {
+  notebook_id: string;
+  workspace_id: string;
+  current_version: number;
+  content_hash: string;
+}
+
+export interface KfdbSharedNotebookVersion {
+  notebook_id: string;
+  version_number: number;
+  content_hash: string;
+  title_ciphertext: string;
+  content_ciphertext: string;
+  metadata_ciphertext?: string | null;
+  actor_wallet: string;
+  actor_user_id: string;
+  actor_tenant_id: string;
+  actor_action: string;
+  change_summary?: string | null;
+  created_at: number;
+  base_version?: number | null;
+  base_hash?: string | null;
+}
+
+export interface KfdbListSharedNotebooksResponse {
+  notebooks: KfdbSharedNotebook[];
+}
+
+export interface KfdbShareNotebookRequest {
+  recipient_wallet_address: string;
+  recipient_sharing_key_id: string;
+  role: KfdbSharedNotebookRole;
+  key_id: string;
+  wrapped_group_key: WrappedGroupKey;
+}
+
+export interface KfdbSharedNotebookMember {
+  wallet_address: string;
+  role: KfdbSharedNotebookRole;
+  sharing_key_id?: string;
+  key_id?: string;
+  joined_at?: string;
+}
+
+export interface KfdbShareNotebookResponse {
+  notebook_id: string;
+  member: KfdbSharedNotebookMember;
+}
+
+export interface KfdbListSharedNotebookMembersResponse {
+  members: KfdbSharedNotebookMember[];
+}
+
+export interface KfdbUpsertSharedNotebookGroupKeyRequest {
+  notebook_id: string;
+  recipient_wallet_address: string;
+  recipient_sharing_key_id: string;
+  key_id: string;
+  wrapped_group_key: WrappedGroupKey;
+}
+
+export interface KfdbSharedNotebookGroupKey {
+  notebook_id: string;
+  recipient_wallet_address: string;
+  recipient_sharing_key_id?: string;
+  key_id: string;
+  wrapped_group_key: WrappedGroupKey;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface KfdbListSharedNotebookGroupKeysResponse {
+  keys: KfdbSharedNotebookGroupKey[];
 }

@@ -13,9 +13,23 @@ import type {
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
   KfdbExplainResponse,
+  KfdbCreateSharedNotebookRequest,
+  KfdbEnrollSharingKeyRequest,
+  KfdbListSharedNotebookGroupKeysResponse,
+  KfdbListSharedNotebookMembersResponse,
+  KfdbListSharedNotebooksResponse,
+  KfdbListSharingKeysResponse,
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbShareNotebookRequest,
+  KfdbShareNotebookResponse,
+  KfdbSharingKey,
+  KfdbSharedNotebook,
+  KfdbSharedNotebookGroupKey,
+  KfdbSharedNotebookWriteResponse,
+  KfdbUpdateSharedNotebookRequest,
+  KfdbUpsertSharedNotebookGroupKeyRequest,
   KfdbWriteRequest,
   KfdbWriteResponse,
 } from './types.js';
@@ -330,6 +344,102 @@ export class KFDBClient {
       operations: buildClaudeCodeHookTraceOperations(trace),
       skip_embedding: true,
     });
+  }
+
+  async enrollSharingKey(request: KfdbEnrollSharingKeyRequest): Promise<KfdbSharingKey> {
+    const payload = {
+      ...request,
+      algorithm: request.algorithm ?? 'X25519',
+    };
+    const res = await this.request('/api/v1/shared-notebooks/keys/enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return this.parseJson<KfdbSharingKey>(res, 'enroll sharing key');
+  }
+
+  async listSharingKeys(): Promise<KfdbListSharingKeysResponse> {
+    const res = await this.request('/api/v1/shared-notebooks/keys');
+    return this.parseJson<KfdbListSharingKeysResponse>(res, 'list sharing keys');
+  }
+
+  async createSharedNotebook(request: KfdbCreateSharedNotebookRequest): Promise<KfdbSharedNotebookWriteResponse> {
+    const res = await this.request('/api/v1/shared-notebooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return this.parseJson<KfdbSharedNotebookWriteResponse>(res, 'create shared notebook');
+  }
+
+  async listSharedNotebooks(options: { workspaceId?: string; limit?: number } = {}): Promise<KfdbListSharedNotebooksResponse> {
+    const params = new URLSearchParams();
+    if (options.workspaceId) params.set('workspace_id', options.workspaceId);
+    if (options.limit != null) params.set('limit', String(options.limit));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    const res = await this.request(`/api/v1/shared-notebooks${suffix}`);
+    const data = await this.parseJson<KfdbSharedNotebook[] | KfdbListSharedNotebooksResponse>(
+      res,
+      'list shared notebooks',
+    );
+    return Array.isArray(data) ? { notebooks: data } : data;
+  }
+
+  async getSharedNotebook(notebookId: string): Promise<KfdbSharedNotebook> {
+    const encodedNotebookId = encodeURIComponent(notebookId);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}`);
+    return this.parseJson<KfdbSharedNotebook>(res, 'get shared notebook');
+  }
+
+  async updateSharedNotebook(
+    notebookId: string,
+    request: KfdbUpdateSharedNotebookRequest,
+  ): Promise<KfdbSharedNotebookWriteResponse> {
+    const encodedNotebookId = encodeURIComponent(notebookId);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return this.parseJson<KfdbSharedNotebookWriteResponse>(res, 'update shared notebook');
+  }
+
+  async shareNotebook(
+    notebookId: string,
+    request: KfdbShareNotebookRequest,
+  ): Promise<KfdbShareNotebookResponse> {
+    const encodedNotebookId = encodeURIComponent(notebookId);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return this.parseJson<KfdbShareNotebookResponse>(res, 'share notebook');
+  }
+
+  async listSharedNotebookMembers(notebookId: string): Promise<KfdbListSharedNotebookMembersResponse> {
+    const encodedNotebookId = encodeURIComponent(notebookId);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}/members`);
+    return this.parseJson<KfdbListSharedNotebookMembersResponse>(res, 'list shared notebook members');
+  }
+
+  async upsertSharedNotebookGroupKey(
+    request: KfdbUpsertSharedNotebookGroupKeyRequest,
+  ): Promise<KfdbSharedNotebookGroupKey> {
+    const encodedNotebookId = encodeURIComponent(request.notebook_id);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}/group-keys`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return this.parseJson<KfdbSharedNotebookGroupKey>(res, 'upsert shared notebook group key');
+  }
+
+  async listSharedNotebookGroupKeys(notebookId: string): Promise<KfdbListSharedNotebookGroupKeysResponse> {
+    const encodedNotebookId = encodeURIComponent(notebookId);
+    const res = await this.request(`/api/v1/shared-notebooks/${encodedNotebookId}/group-keys`);
+    return this.parseJson<KfdbListSharedNotebookGroupKeysResponse>(res, 'list shared notebook group keys');
   }
 
   private resolveScope(scope?: KfdbQueryScope): KfdbQueryScope {
