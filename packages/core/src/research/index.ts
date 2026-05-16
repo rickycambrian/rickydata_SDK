@@ -7,6 +7,7 @@ export {
   createDefaultResearchPolicyArms,
 } from './defaults.js';
 export { ResearchKFDBClient } from './kfdb-research-client.js';
+export { BenchmarkEvidenceClient } from './benchmark-evidence-client.js';
 export { ResearchClient } from './research-client.js';
 export { SelfImprovementClient } from './self-improvement-client.js';
 
@@ -73,3 +74,13 @@ export type {
   VerifyResearchRunRequest,
   WalletSkillRecord,
 } from './types.js';
+export type {
+  BenchmarkConfigRecord,
+  BenchmarkEvidenceClientConfig,
+  BenchmarkLiveRunRow,
+  BenchmarkTraceReadModel,
+  ExecuteProofBackedRunRequest,
+  GetRunHistoryOptions,
+  ListLiveRunsOptions,
+  ProofBackedRunResult,
+} from './benchmark-evidence-client.js';

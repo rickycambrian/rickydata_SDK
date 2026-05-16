@@ -1,7 +1,7 @@
 // Main client
 export { MCPGateway } from './client.js';
 export { KFDBClient } from './kfdb/index.js';
-export { ResearchClient, ResearchKFDBClient, SelfImprovementClient } from './research/index.js';
+export { BenchmarkEvidenceClient, ResearchClient, ResearchKFDBClient, SelfImprovementClient } from './research/index.js';
 
 // Auth
 export {
@@ -214,6 +214,16 @@ export type {
   TriggerSelfImprovementRequest,
   VerifyResearchRunRequest,
   WalletSkillRecord,
+} from './research/index.js';
+export type {
+  BenchmarkConfigRecord,
+  BenchmarkEvidenceClientConfig,
+  BenchmarkLiveRunRow,
+  BenchmarkTraceReadModel,
+  ExecuteProofBackedRunRequest,
+  GetRunHistoryOptions,
+  ListLiveRunsOptions,
+  ProofBackedRunResult,
 } from './research/index.js';
 export {
   DEFAULT_RESEARCH_AGENT_CATALOG,
