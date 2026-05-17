@@ -4,6 +4,16 @@ export { useGitHubRepo, repoKeys } from './useGitHubRepo.js';
 export { usePipelineResolve } from './usePipelineResolve.js';
 export { usePipelineStatus, pipelineKeys } from './usePipelineStatus.js';
 export { useStartSession, useCreatePR } from './useWorkSessions.js';
+export {
+  useGitHubRepoSettings,
+  useUpdateGitHubRepoSettings,
+  useDeriveGitHubRepoSessionChallenge,
+  useCreateGitHubRepoSession,
+  useDeleteGitHubRepoSession,
+  useGitHubRepoSessionTree,
+  useGitHubRepoSessionChat,
+  repoSessionKeys,
+} from './useGitHubRepoSessions.js';
 export { useFeedbackSummary, useFeedbackOutcome, feedbackKeys } from './useFeedbackOutcomes.js';
 export { useReportOutcome } from './useReportOutcome.js';
 export { useRateExecution } from './useRateExecution.js';

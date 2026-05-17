@@ -20,6 +20,19 @@ function createSSEStream(events: SSEEvent[]): ReadableStream<Uint8Array> {
   });
 }
 
+function createNDJSONStream(events: unknown[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = events.map(e => `${JSON.stringify(e)}\n`);
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    },
+  });
+}
+
 function mockAuthFlow() {
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   // Challenge
@@ -426,6 +439,63 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('model guide specialist', () => {
+    it('posts forced privacy flags and parses the final proof result', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        body: createNDJSONStream([
+          { type: 'started', message: 'started' },
+          {
+            type: 'complete',
+            result: {
+              text: 'Use GPT-5.5 Codex for this repo.',
+              price_usd: 0.8,
+              tee_proof: { available: false, manifestHash: 'sha256:test' },
+            },
+          },
+        ]),
+      } as unknown as Response);
+
+      const events: unknown[] = [];
+      const client = new AgentClient({ token: 'jwt-token-123', sessionStorePath: null });
+      const result = await client.runModelGuideSpecialist({
+        model: 'codex-5.5',
+        prompt: 'Which model should I use?',
+        files: [{ content: 'print("hi")', mimeType: 'text/plain' }],
+        skippedCount: 2,
+      }, {
+        onEvent: (event) => events.push(event),
+      });
+
+      expect(result.text).toContain('GPT-5.5');
+      expect(result.tee_proof?.manifestHash).toBe('sha256:test');
+      expect(events).toHaveLength(2);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/api/model-guide/analyze/stream`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-token-123' }),
+        }),
+      );
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.safety_flags).toEqual({
+        persistConversations: false,
+        recordConversationTrace: false,
+        disableClaudeCodeHooks: true,
+        disableCodexHooks: true,
+        retainUploadedFiles: false,
+        returnTeeDeletionProof: true,
+      });
+      expect(body.privacy).toEqual(expect.objectContaining({
+        persist: false,
+        trace: false,
+        hooks: false,
+        write_scope: 'none',
+      }));
+      expect(body.files[0]).not.toHaveProperty('relativePath');
+    });
+  });
+
   // ─── Session Reuse ──────────────────────────────────────
 
   describe('session reuse', () => {
@@ -685,6 +755,86 @@ describe('AgentClient', () => {
       const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
       const result = await client.isApiKeyConfigured();
       expect(result).toBe(false);
+    });
+  });
+
+  describe('secret storage sign-to-derive', () => {
+    it('stores MCP secrets with signature and nonce when a signer is available', async () => {
+      const signMessage = vi.fn().mockResolvedValue('0xs2d-signature');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Sign MCP secrets derive message', nonce: 'mcp-nonce' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ success: true, encryptionMode: 'sign-to-derive' }),
+        } as Response);
+
+      const client = new AgentClient({ token: 'jwt-token-123', signMessage, sessionStorePath: null });
+      await client.storeMcpSecrets('server-1', { API_KEY: 'secret-value' });
+
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        `${GATEWAY}/wallet/mcp-secrets/derive-challenge`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-token-123' }),
+        }),
+      );
+      expect(signMessage).toHaveBeenCalledWith('Sign MCP secrets derive message');
+      const request = fetchSpy.mock.calls[1][1] as RequestInit;
+      expect(fetchSpy.mock.calls[1][0]).toBe(`${GATEWAY}/wallet/mcp-secrets/server-1`);
+      expect(JSON.parse(request.body as string)).toEqual({
+        secrets: { API_KEY: 'secret-value' },
+        signature: '0xs2d-signature',
+        nonce: 'mcp-nonce',
+      });
+    });
+
+    it('stores agent secrets with signature and nonce when a signer is available', async () => {
+      const signMessage = vi.fn().mockResolvedValue('0xagent-s2d-signature');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Sign agent secrets derive message', nonce: 'agent-nonce' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ success: true, encryptionMode: 'sign-to-derive' }),
+        } as Response);
+
+      const client = new AgentClient({ token: 'jwt-token-123', signMessage, sessionStorePath: null });
+      await client.storeAgentSecrets('agent-1', { API_KEY: 'secret-value' });
+
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        `${GATEWAY}/wallet/agent-secrets/derive-challenge`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-token-123' }),
+        }),
+      );
+      expect(signMessage).toHaveBeenCalledWith('Sign agent secrets derive message');
+      const request = fetchSpy.mock.calls[1][1] as RequestInit;
+      expect(fetchSpy.mock.calls[1][0]).toBe(`${GATEWAY}/wallet/agent-secrets/agent-1`);
+      expect(JSON.parse(request.body as string)).toEqual({
+        secrets: { API_KEY: 'secret-value' },
+        signature: '0xagent-s2d-signature',
+        nonce: 'agent-nonce',
+      });
+    });
+
+    it('keeps the legacy MCP secret body for token-only clients without a signer', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true }) } as Response);
+
+      const client = new AgentClient({ token: 'jwt-token-123', sessionStorePath: null });
+      await client.storeMcpSecrets('server-1', { API_KEY: 'secret-value' });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0][0]).toBe(`${GATEWAY}/wallet/mcp-secrets/server-1`);
+      expect(JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)).toEqual({
+        secrets: { API_KEY: 'secret-value' },
+      });
     });
   });
 

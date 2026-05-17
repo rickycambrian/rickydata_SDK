@@ -25,6 +25,16 @@ export { usePipelinePropose } from './hooks/usePipelinePropose.js';
 export { useApprovePlan, useRejectPlan, useAddPlanFeedback, planKeys } from './hooks/usePlanActions.js';
 export { usePipelineStatus, pipelineKeys } from './hooks/usePipelineStatus.js';
 export { useStartSession, useCreatePR } from './hooks/useWorkSessions.js';
+export {
+  useGitHubRepoSettings,
+  useUpdateGitHubRepoSettings,
+  useDeriveGitHubRepoSessionChallenge,
+  useCreateGitHubRepoSession,
+  useDeleteGitHubRepoSession,
+  useGitHubRepoSessionTree,
+  useGitHubRepoSessionChat,
+  repoSessionKeys,
+} from './hooks/useGitHubRepoSessions.js';
 export { useFeedbackSummary, useFeedbackOutcome, feedbackKeys } from './hooks/useFeedbackOutcomes.js';
 export { useReportOutcome } from './hooks/useReportOutcome.js';
 export { useRateExecution } from './hooks/useRateExecution.js';
@@ -62,3 +72,4 @@ export { TeamReviewSummary } from './components/TeamReviewSummary.js';
 
 // Types
 export type * from './types.js';
+export { DEFAULT_GITHUB_REPO_SETTINGS } from './types.js';

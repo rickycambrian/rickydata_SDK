@@ -13,7 +13,15 @@ import type {
   TeamReviewRun,
   TeamReviewRunEvent,
   TeamReviewConfig,
+  GitHubRepoSettings,
+  DeriveGitHubRepoSessionChallengeInput,
+  GitHubRepoSessionChallenge,
+  CreateGitHubRepoSessionInput,
+  GitHubRepoSession,
+  GitHubRepoSessionTree,
+  GitHubRepoSessionChatRequest,
 } from '../types.js';
+import type { SSEEvent } from 'rickydata/agent';
 
 export interface GitHubApiConfig {
   baseUrl: string;
@@ -336,6 +344,76 @@ export class GitHubApi {
     }
   }
 
+  // Ephemeral repo development sessions
+  async getRepoSettings(owner: string, repo: string): Promise<GitHubRepoSettings> {
+    return this.request(`/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/settings`);
+  }
+
+  async updateRepoSettings(
+    owner: string,
+    repo: string,
+    settings: Partial<GitHubRepoSettings>,
+  ): Promise<GitHubRepoSettings> {
+    return this.request(`/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async deriveRepoSessionChallenge(
+    owner: string,
+    repo: string,
+    input: DeriveGitHubRepoSessionChallengeInput = {},
+  ): Promise<GitHubRepoSessionChallenge> {
+    return this.request(
+      `/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/sessions/derive-challenge`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  async createRepoSession(
+    owner: string,
+    repo: string,
+    input: CreateGitHubRepoSessionInput,
+  ): Promise<GitHubRepoSession> {
+    return this.request(`/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteRepoSession(sessionId: string): Promise<void> {
+    await this.requestEmpty(`/github/repo-sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getRepoSessionTree(
+    sessionId: string,
+    options?: { path?: string; ref?: string },
+  ): Promise<GitHubRepoSessionTree> {
+    const params = new URLSearchParams();
+    if (options?.path) params.set('path', options.path);
+    if (options?.ref) params.set('ref', options.ref);
+    const qs = params.toString();
+    return this.request(`/github/repo-sessions/${encodeURIComponent(sessionId)}/tree${qs ? `?${qs}` : ''}`);
+  }
+
+  async *streamRepoSessionChat(
+    sessionId: string,
+    input: GitHubRepoSessionChatRequest,
+    options?: { signal?: AbortSignal },
+  ): AsyncGenerator<SSEEvent> {
+    yield* this.streamSSE<SSEEvent>(`/github/repo-sessions/${encodeURIComponent(sessionId)}/chat`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+      signal: options?.signal,
+    });
+  }
+
   // Private helpers
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`;
@@ -351,5 +429,68 @@ export class GitHubApi {
       throw new Error(`GitHub API error ${res.status}: ${body}`);
     }
     return res.json();
+  }
+
+  private async requestEmpty(path: string, init?: RequestInit): Promise<void> {
+    const url = `${this.baseUrl}${path}`;
+    const token = await this.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...((init?.headers as Record<string, string>) || {}),
+    };
+    const res = await globalThis.fetch(url, { ...init, headers });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`GitHub API error ${res.status}: ${body}`);
+    }
+  }
+
+  private async *streamSSE<T>(path: string, init: RequestInit): AsyncGenerator<T> {
+    const url = `${this.baseUrl}${path}`;
+    const token = await this.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...((init.headers as Record<string, string>) || {}),
+    };
+    const res = await globalThis.fetch(url, { ...init, headers });
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`GitHub API error ${res.status}: ${body}`);
+    }
+
+    const decoder = new TextDecoder();
+    const reader = res.body.getReader();
+    let buffer = '';
+    let dataLines: string[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const lineRaw of lines) {
+        const line = lineRaw.trimEnd();
+        if (!line) {
+          if (dataLines.length > 0) {
+            const payload = dataLines.join('\n');
+            dataLines = [];
+            try {
+              yield JSON.parse(payload) as T;
+            } catch {
+              // Skip malformed frames.
+            }
+          }
+          continue;
+        }
+        if (line.startsWith(':')) continue;
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trimStart());
+        }
+      }
+    }
   }
 }

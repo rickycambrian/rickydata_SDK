@@ -253,6 +253,91 @@ export interface WorkSession {
   cost?: number;
 }
 
+// === Ephemeral Repo Development Session Types ===
+
+export type GitHubRepoPrivacyMode =
+  | 'no_store_active_chat'
+  | 'index_issues_prs_to_kfdb'
+  | 'index_code_to_kfdb'
+  | 'persistent_clone_for_public_repo';
+
+export type GitHubRepoHookPolicy = 'disabled' | 'kfdb_trace';
+
+export interface GitHubRepoSettings {
+  privacyMode: GitHubRepoPrivacyMode;
+  hookPolicy: GitHubRepoHookPolicy;
+  executionEngine: string;
+  provider: string;
+  folderScopes: string[];
+  updatedAt?: string;
+}
+
+export const DEFAULT_GITHUB_REPO_SETTINGS: GitHubRepoSettings = {
+  privacyMode: 'no_store_active_chat',
+  hookPolicy: 'disabled',
+  executionEngine: '',
+  provider: '',
+  folderScopes: [],
+};
+
+export interface DeriveGitHubRepoSessionChallengeInput {
+  address?: string;
+  ref?: string;
+  folderScopes?: string[];
+}
+
+export interface GitHubRepoSessionChallenge {
+  challengeId: string;
+  message: string;
+  expiresAt: string;
+}
+
+export interface CreateGitHubRepoSessionInput {
+  challengeId: string;
+  signature: string;
+  address?: string;
+  ref?: string;
+  executionEngine?: string;
+  provider?: string;
+  folderScopes?: string[];
+}
+
+export interface GitHubRepoSession {
+  id: string;
+  owner: string;
+  repo: string;
+  ref: string;
+  status: 'active' | 'expired' | 'closed';
+  privacyMode: GitHubRepoPrivacyMode;
+  hookPolicy: GitHubRepoHookPolicy;
+  executionEngine: string;
+  provider: string;
+  folderScopes: string[];
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface GitHubRepoTreeEntry {
+  path: string;
+  name: string;
+  type: 'file' | 'directory' | 'symlink' | 'submodule';
+  size?: number;
+  sha?: string;
+}
+
+export interface GitHubRepoSessionTree {
+  repo: string;
+  ref: string;
+  path: string;
+  entries: GitHubRepoTreeEntry[];
+}
+
+export interface GitHubRepoSessionChatRequest {
+  message: string;
+  model?: string;
+  context?: Record<string, unknown>;
+}
+
 // === Answer Sheet Types ===
 
 export interface AnswerSheet {

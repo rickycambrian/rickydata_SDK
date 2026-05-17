@@ -129,6 +129,53 @@ export interface ChatResult {
   usage?: { inputTokens: number; outputTokens: number };
 }
 
+// ─── Model Guide Specialist ───────────────────────────────
+
+export type ModelGuideSpecialistModel = 'haiku-4.5' | 'codex-5.5';
+
+export interface ModelGuideSpecialistFile {
+  content: string;
+  mimeType?: string;
+}
+
+export interface ModelGuideSpecialistRequest {
+  model: ModelGuideSpecialistModel;
+  prompt: string;
+  files?: ModelGuideSpecialistFile[];
+  skippedCount?: number;
+}
+
+export interface ModelGuideSpecialistEvent {
+  type?: string;
+  message?: string;
+  result?: ModelGuideSpecialistResult;
+  [key: string]: unknown;
+}
+
+export interface ModelGuideSpecialistResult {
+  run_id?: string;
+  text?: string;
+  error?: string | null;
+  provider?: string;
+  model?: string;
+  execution_engine?: string;
+  price_usd?: number;
+  usage?: { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+  tool_call_count?: number;
+  event_count?: number;
+  tee_proof?: {
+    available?: boolean;
+    manifestHash?: string;
+    manifest?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+}
+
+export interface ModelGuideSpecialistOptions {
+  signal?: AbortSignal;
+  onEvent?: (event: ModelGuideSpecialistEvent) => void;
+}
+
 // ─── Reflect & KB Tools (Builder) ───────────────────────────
 
 export interface ReflectConfig {
@@ -447,6 +494,8 @@ export interface VoiceLivekitTokenResponse {
   url: string;
   roomName: string;
   sessionId: string;
+  agentGatewayUrl?: string;
+  executionEngine?: TeamExecutionEngine;
   provider?: 'livekit';
   tts?: {
     provider: 'cartesia' | 'gemini-live';
@@ -460,6 +509,7 @@ export interface VoiceLivekitTokenResponse {
     model: string;
     displayName: string;
     strategy?: string;
+    configured?: boolean;
   };
 }
 
@@ -467,7 +517,7 @@ export interface VoiceLivekitTokenRequest {
   voice?: string;
   model?: string;
   resumeSessionId?: string;
-  executionEngine?: 'claude' | 'rickydata-code';
+  executionEngine?: TeamExecutionEngine;
   ttsProvider?: 'cartesia' | 'gemini-live';
   ttsModel?: string;
   ttsVoice?: string;

@@ -30,6 +30,12 @@ export type {
   // Chat
   ChatOptions,
   ChatResult,
+  ModelGuideSpecialistModel,
+  ModelGuideSpecialistFile,
+  ModelGuideSpecialistRequest,
+  ModelGuideSpecialistEvent,
+  ModelGuideSpecialistResult,
+  ModelGuideSpecialistOptions,
 
   // Reflect
   ReflectConfig,

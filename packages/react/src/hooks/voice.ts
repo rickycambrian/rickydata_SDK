@@ -114,9 +114,19 @@ export interface UseAgentVoiceChatOptions {
   ttsVoice?: string;
   narratorEnabled?: boolean;
   parallelNarrator?: boolean;
+  /** Disable browser SpeechSynthesis narration when the server-side voice relay already speaks narration. Defaults to true. */
+  browserNarration?: boolean;
+  /** When false, connect to the LiveKit room even if microphone access is unavailable. Defaults to true. */
+  requireMicrophone?: boolean;
   /** Override gateway URL (e.g., proxy through your own API to avoid CORS). Defaults to client's configured URL. */
   gatewayUrl?: string;
   onError?: (error: string) => void;
+  onUserText?: (text: string) => void;
+  onAgentText?: (text: string, isFinal: boolean) => void;
+  onNarratorText?: (text: string) => void;
+  onToolCallStarted?: (call: { callId: string; name: string; arguments: Record<string, unknown> }) => void;
+  onToolCallCompleted?: (call: { callId: string; success: boolean; result: string }) => void;
+  onTurnComplete?: (cost: string) => void;
 }
 
 export interface UseAgentVoiceChatResult {
@@ -151,8 +161,16 @@ export function useAgentVoiceChat({
   ttsVoice,
   narratorEnabled = true,
   parallelNarrator = true,
+  browserNarration = true,
+  requireMicrophone = true,
   gatewayUrl,
   onError,
+  onUserText,
+  onAgentText,
+  onNarratorText,
+  onToolCallStarted,
+  onToolCallCompleted,
+  onTurnComplete,
 }: UseAgentVoiceChatOptions): UseAgentVoiceChatResult {
   const client = useRickyData();
 
@@ -177,6 +195,7 @@ export function useAgentVoiceChat({
   const completedToolCallCountRef = useRef(0);
   const connectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolCallTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const finalUserTranscriptIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     return () => {
@@ -193,20 +212,32 @@ export function useAgentVoiceChat({
     setNeedsDeposit(false);
     setSessionId(null);
     completedToolCallCountRef.current = 0;
+    finalUserTranscriptIdsRef.current.clear();
 
     try {
-      // 1. Request microphone FIRST — fail fast
+      // 1. Request microphone first. Desktop/local clients can continue in
+      // listen/text mode if WebView or browser permissions block capture.
+      let microphoneAvailable = false;
       try {
         const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         testStream.getTracks().forEach(t => t.stop());
+        microphoneAvailable = true;
       } catch (micErr) {
         const name = micErr instanceof DOMException ? micErr.name : '';
-        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-          throw new Error('Microphone access denied. Please allow microphone access and try again.');
-        } else if (name === 'NotFoundError') {
-          throw new Error('No microphone found. Please connect a microphone and try again.');
+        if (requireMicrophone) {
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            throw new Error('Microphone access denied. Please allow microphone access and try again.');
+          } else if (name === 'NotFoundError') {
+            throw new Error('No microphone found. Please connect a microphone and try again.');
+          }
+          throw new Error('Could not access microphone.');
         }
-        throw new Error('Could not access microphone.');
+        setIsMicMuted(true);
+        onError?.(
+          name === 'NotFoundError'
+            ? 'No microphone found. Connected in listen/text mode.'
+            : 'Microphone unavailable. Connected in listen/text mode.',
+        );
       }
 
       // 2. Get LiveKit token from agent gateway via AgentClient
@@ -265,6 +296,10 @@ export function useAgentVoiceChat({
             }
             return [...prev, { id, role, text: segment.text, timestamp: new Date().toISOString(), isFinal: segment.final }];
           });
+          if (role === 'user' && segment.final && segment.text.trim() && !finalUserTranscriptIdsRef.current.has(id)) {
+            finalUserTranscriptIdsRef.current.add(id);
+            onUserText?.(segment.text.trim());
+          }
         }
       });
 
@@ -279,21 +314,26 @@ export function useAgentVoiceChat({
 
         const type = msg.type as string;
         if (type === 'tool_call_started') {
-          setToolCalls(prev => [...prev, {
+          const call = {
             callId: msg.callId as string,
             name: msg.name as string,
             arguments: (msg.arguments as Record<string, unknown>) ?? {},
+          };
+          onToolCallStarted?.(call);
+          setToolCalls(prev => [...prev, {
+            ...call,
             status: 'executing',
             timestamp: Date.now(),
           }]);
 
-          // Inject narration
-          const startNarration = createNarration('tool_start', msg.callId as string, msg.name as string);
-          speakNarration(startNarration.text, isSpeakerMuted);
-          setTranscripts(prev => [...prev, {
-            ...startNarration,
-            timestamp: new Date().toISOString(),
-          }]);
+          if (browserNarration) {
+            const startNarration = createNarration('tool_start', msg.callId as string, msg.name as string);
+            speakNarration(startNarration.text, isSpeakerMuted);
+            setTranscripts(prev => [...prev, {
+              ...startNarration,
+              timestamp: new Date().toISOString(),
+            }]);
+          }
 
           // Start timeout timer
           const callId = msg.callId as string;
@@ -301,18 +341,25 @@ export function useAgentVoiceChat({
             setToolCalls(prev => prev.map(tc =>
               tc.callId === callId ? { ...tc, status: 'timed_out' as const } : tc
             ));
-            const timeoutNarration = createNarration('tool_timeout', callId, msg.name as string);
-            speakNarration(timeoutNarration.text, isSpeakerMuted);
-            setTranscripts(prev => [...prev, {
-              ...timeoutNarration,
-              timestamp: new Date().toISOString(),
-            }]);
+            if (browserNarration) {
+              const timeoutNarration = createNarration('tool_timeout', callId, msg.name as string);
+              speakNarration(timeoutNarration.text, isSpeakerMuted);
+              setTranscripts(prev => [...prev, {
+                ...timeoutNarration,
+                timestamp: new Date().toISOString(),
+              }]);
+            }
             toolCallTimersRef.current.delete(callId);
           }, TOOL_CALL_TIMEOUT_MS);
           toolCallTimersRef.current.set(callId, timer);
         } else if (type === 'tool_call_completed') {
           const completedCallId = msg.callId as string;
           const success = msg.success as boolean;
+          onToolCallCompleted?.({
+            callId: completedCallId,
+            success,
+            result: String(msg.result ?? ''),
+          });
           setToolCalls(prev => prev.map(tc =>
             tc.callId === completedCallId ? { ...tc, status: success ? 'completed' : 'error', result: String(msg.result ?? '') } : tc
           ));
@@ -323,13 +370,14 @@ export function useAgentVoiceChat({
             clearTimeout(existingTimer);
             toolCallTimersRef.current.delete(completedCallId);
           }
-          // Inject completion narration
-          const doneNarration = createNarration(success ? 'tool_success' : 'tool_error', completedCallId);
-          speakNarration(doneNarration.text, isSpeakerMuted);
-          setTranscripts(prev => [...prev, {
-            ...doneNarration,
-            timestamp: new Date().toISOString(),
-          }]);
+          if (browserNarration) {
+            const doneNarration = createNarration(success ? 'tool_success' : 'tool_error', completedCallId);
+            speakNarration(doneNarration.text, isSpeakerMuted);
+            setTranscripts(prev => [...prev, {
+              ...doneNarration,
+              timestamp: new Date().toISOString(),
+            }]);
+          }
 
           completedToolCallCountRef.current += 1;
           if (startTimeRef.current) {
@@ -338,9 +386,11 @@ export function useAgentVoiceChat({
           }
         } else if (type === 'session_cost') {
           const costStr = (msg.cost as string) ?? '$0.00';
+          onTurnComplete?.(costStr);
           setEstimatedCost(parseFloat(costStr.replace('$', '')) || 0);
         } else if (type === 'agent_text') {
           const text = msg.text as string;
+          onAgentText?.(text, Boolean(msg.isFinal));
           const id = `agent-rich-${Date.now()}`;
           setTranscripts(prev => {
             const lastAgent = [...prev].reverse().find(t => t.role === 'agent' && !t.isFinal);
@@ -349,6 +399,9 @@ export function useAgentVoiceChat({
             }
             return [...prev, { id, role: 'agent', text, timestamp: new Date().toISOString(), isFinal: true }];
           });
+        } else if (type === 'narrator_text') {
+          const text = String(msg.text ?? '').trim();
+          if (text) onNarratorText?.(text);
         }
       });
 
@@ -381,7 +434,13 @@ export function useAgentVoiceChat({
       await Promise.race([room.connect(livekitData.url, livekitData.token, { autoSubscribe: true }), connectTimeout]);
       clearTimeout(connectionTimerRef.current!);
       connectionTimerRef.current = null;
-      await room.localParticipant.setMicrophoneEnabled(true);
+      if (microphoneAvailable) {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setIsMicMuted(false);
+      } else {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        setIsMicMuted(true);
+      }
 
       // 5. Start duration timer
       startTimeRef.current = Date.now();
@@ -402,7 +461,7 @@ export function useAgentVoiceChat({
       setConnectionState('error');
       if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; }
     }
-  }, [client, agentId, model, voice, resumeSessionId, executionEngine, ttsProvider, ttsModel, ttsVoice, narratorEnabled, parallelNarrator, gatewayUrl, onError, isSpeakerMuted]);
+  }, [client, agentId, model, voice, resumeSessionId, executionEngine, ttsProvider, ttsModel, ttsVoice, narratorEnabled, parallelNarrator, browserNarration, requireMicrophone, gatewayUrl, onError, onUserText, onAgentText, onNarratorText, onToolCallStarted, onToolCallCompleted, onTurnComplete, isSpeakerMuted]);
 
   const disconnect = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -472,16 +531,19 @@ export function useAgentVoiceChat({
     setToolCalls(prev => prev.map(tc =>
       tc.callId === callId ? { ...tc, status: 'timed_out' } : tc
     ));
-    const cancelNarration = createNarration('tool_cancel', callId);
-    speakNarration(cancelNarration.text, isSpeakerMuted);
-    setTranscripts(prev => [...prev, {
-      ...cancelNarration,
-      timestamp: new Date().toISOString(),
-    }]);
-  }, [isSpeakerMuted]);
+    if (browserNarration) {
+      const cancelNarration = createNarration('tool_cancel', callId);
+      speakNarration(cancelNarration.text, isSpeakerMuted);
+      setTranscripts(prev => [...prev, {
+        ...cancelNarration,
+        timestamp: new Date().toISOString(),
+      }]);
+    }
+  }, [browserNarration, isSpeakerMuted]);
 
   const sendTextMessage = useCallback((text: string) => {
     if (!roomRef.current) return;
+    onUserText?.(text);
     setTranscripts(prev => [...prev, {
       id: `user-text-${Date.now()}`, role: 'user', text,
       timestamp: new Date().toISOString(), isFinal: true,
@@ -491,7 +553,7 @@ export function useAgentVoiceChat({
       new TextEncoder().encode(payload),
       { reliable: true },
     );
-  }, []);
+  }, [onUserText]);
 
   return {
     connectionState, transcripts, toolCalls,

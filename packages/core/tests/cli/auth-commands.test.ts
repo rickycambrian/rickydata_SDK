@@ -302,7 +302,7 @@ describe('auth commands', () => {
     it('validates mcpwt_ wallet token format and stores it', async () => {
       __mockReadlineAnswer = 'mcpwt_wallettoken123';
 
-      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       const program = createProgram(config, store);
       await program.parseAsync(['node', 'rickydata', 'auth', 'login']);
@@ -310,6 +310,9 @@ describe('auth commands', () => {
       const cred = store.getToken('default');
       expect(cred?.token).toBe('mcpwt_wallettoken123');
       expect(cred?.walletAddress).toBe('(wallet-token)');
+      const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(output).toContain('https://rickydata.org/auth/cli');
+      expect(output).not.toContain('marketplace.rickydata.org/#/auth/cli');
     });
 
     it('rejects invalid token format', async () => {

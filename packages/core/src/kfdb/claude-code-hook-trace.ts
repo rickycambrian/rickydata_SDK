@@ -35,6 +35,7 @@ export interface ClaudeCodeHookTrace {
   startedAt: number;
   completedAt: number;
   events: ClaudeCodeHookEventRecord[];
+  benchmarkRunId?: string;
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-claude-code-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');

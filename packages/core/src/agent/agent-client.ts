@@ -43,6 +43,10 @@ import type {
   TeamWorkflowPayload,
   TeamSSEEvent,
   TeamWorkflowOptions,
+  ModelGuideSpecialistRequest,
+  ModelGuideSpecialistResult,
+  ModelGuideSpecialistEvent,
+  ModelGuideSpecialistOptions,
   FreeTierStatus,
   TeamExecutionEngine,
   CodexAuthStatus,
@@ -703,12 +707,21 @@ export class AgentClient {
   /** Store secrets for an MCP server. */
   async storeMcpSecrets(serverId: string, secrets: Record<string, string>): Promise<void> {
     await this.ensureAuthenticated();
+    const body: Record<string, unknown> = { secrets };
+    if (this.canSignForDerive()) {
+      const { message, nonce } = await this.getDeriveChallenge(
+        '/wallet/mcp-secrets/derive-challenge',
+        'MCP secrets',
+      );
+      body.signature = await this.signForDerive(message);
+      body.nonce = nonce;
+    }
     const res = await fetch(
       `${this.gatewayUrl}/wallet/mcp-secrets/${encodeURIComponent(serverId)}`,
       {
         method: 'POST',
         headers: this.authHeaders(),
-        body: JSON.stringify({ secrets }),
+        body: JSON.stringify(body),
       },
     );
     if (!res.ok) {
@@ -779,12 +792,21 @@ export class AgentClient {
   /** Store agent-level secrets. */
   async storeAgentSecrets(agentId: string, secrets: Record<string, string>): Promise<void> {
     await this.ensureAuthenticated();
+    const body: Record<string, unknown> = { secrets };
+    if (this.canSignForDerive()) {
+      const { message, nonce } = await this.getDeriveChallenge(
+        '/wallet/agent-secrets/derive-challenge',
+        'agent secrets',
+      );
+      body.signature = await this.signForDerive(message);
+      body.nonce = nonce;
+    }
     const res = await fetch(
       `${this.gatewayUrl}/wallet/agent-secrets/${encodeURIComponent(agentId)}`,
       {
         method: 'POST',
         headers: this.authHeaders(),
-        body: JSON.stringify({ secrets }),
+        body: JSON.stringify(body),
       },
     );
     if (!res.ok) {
@@ -994,6 +1016,75 @@ export class AgentClient {
     }
   }
 
+  // ─── Model Guide Specialist ─────────────────────────────
+
+  async runModelGuideSpecialist(
+    request: ModelGuideSpecialistRequest,
+    options?: ModelGuideSpecialistOptions,
+  ): Promise<ModelGuideSpecialistResult> {
+    if (!request.prompt?.trim()) {
+      throw new AgentError(AgentErrorCode.VALIDATION_ERROR, 'prompt is required');
+    }
+    if (request.model !== 'haiku-4.5' && request.model !== 'codex-5.5') {
+      throw new AgentError(AgentErrorCode.VALIDATION_ERROR, 'model must be "haiku-4.5" or "codex-5.5"');
+    }
+
+    await this.ensureAuthenticated();
+
+    const body = {
+      model: request.model,
+      prompt: request.prompt,
+      files: (request.files ?? []).map((file, index) => ({
+        index,
+        content: file.content,
+        mimeType: file.mimeType ?? 'text/plain',
+      })),
+      skipped_count: request.skippedCount ?? 0,
+      safety_flags: {
+        persistConversations: false,
+        recordConversationTrace: false,
+        disableClaudeCodeHooks: true,
+        disableCodexHooks: true,
+        retainUploadedFiles: false,
+        returnTeeDeletionProof: true,
+      },
+      privacy: {
+        visibility: 'private',
+        data_scope: 'private_ephemeral',
+        read_scope: 'private',
+        write_scope: 'none',
+        persist: false,
+        trace: false,
+        hooks: false,
+        durable_sse: false,
+        proof_required: true,
+      },
+    };
+
+    const send = () => fetch(`${this.gatewayUrl}/api/model-guide/analyze/stream`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+
+    let res = await send();
+    if (res.status === 401 && (this.privateKey || this.tokenGetter)) {
+      this.token = null;
+      await this.ensureAuthenticated({ forceRefresh: true });
+      res = await send();
+    }
+    if (!res.ok) {
+      const rawBody = await res.text().catch(() => '');
+      const errBody = parseJsonBody(rawBody) ?? { error: rawBody || res.statusText };
+      const msg = (errBody as { message?: string; error?: string }).message
+        || (errBody as { error?: string }).error
+        || `Model guide specialist failed: ${res.status}`;
+      throw AgentError.fromHttpStatus(res.status, msg, { operation: 'runModelGuideSpecialist' });
+    }
+    return await this.parseModelGuideNdjsonResponse(res, options);
+  }
+
   // ─── Internal: Auth ──────────────────────────────────────
 
   private async ensureAuthenticated(options: { forceRefresh?: boolean } = {}): Promise<void> {
@@ -1048,12 +1139,16 @@ export class AgentClient {
   }
 
   private async getProviderVaultDeriveChallenge(): Promise<{ message: string; nonce: string }> {
-    const res = await fetch(`${this.gatewayUrl}/wallet/provider-vault/derive-challenge`, {
+    return this.getDeriveChallenge('/wallet/provider-vault/derive-challenge', 'provider vault');
+  }
+
+  private async getDeriveChallenge(path: string, label: string): Promise<{ message: string; nonce: string }> {
+    const res = await fetch(`${this.gatewayUrl}${path}`, {
       headers: this.authHeaders(),
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to get provider vault signing challenge: ${res.status} ${body}`);
+      throw new Error(`Failed to get ${label} signing challenge: ${res.status} ${body}`);
     }
     return res.json();
   }
@@ -1351,6 +1446,51 @@ export class AgentClient {
     }
 
     return { text, sessionId, model, executionEngine, engineUsed, codexAuthSource, cost, toolCallCount, usage };
+  }
+
+  private async parseModelGuideNdjsonResponse(
+    response: Response,
+    options?: ModelGuideSpecialistOptions,
+  ): Promise<ModelGuideSpecialistResult> {
+    const body = response.body;
+    if (!body) return {};
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const handleLine = (line: string): ModelGuideSpecialistResult | null => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      let event: ModelGuideSpecialistEvent;
+      try {
+        event = JSON.parse(trimmed) as ModelGuideSpecialistEvent;
+      } catch {
+        return null;
+      }
+      options?.onEvent?.(event);
+      if (event.type === 'complete' && event.result) return event.result;
+      if (event.type === 'error') {
+        throw AgentError.fromHttpStatus(Number(event.status) || 502, event.message || 'Model guide specialist failed', {
+          operation: 'runModelGuideSpecialist',
+        });
+      }
+      return null;
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const result = handleLine(line);
+        if (result) return result;
+      }
+    }
+    const result = handleLine(buffer);
+    if (result) return result;
+    return {};
   }
 }
 

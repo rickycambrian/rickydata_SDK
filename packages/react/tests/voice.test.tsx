@@ -100,4 +100,122 @@ describe('useAgentVoiceChat', () => {
     expect(livekitMocks.setMicrophoneEnabled).toHaveBeenCalledWith(true);
     expect(stopTrack).toHaveBeenCalled();
   });
+
+  it('can disable browser narration while still tracking tool data messages', async () => {
+    const speak = vi.fn();
+    const cancel = vi.fn();
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: { speak, cancel },
+    });
+
+    const { result } = renderHookWithProvider(
+      () => useAgentVoiceChat({
+        agentId: 'agent-1',
+        browserNarration: false,
+      }),
+      mockClient,
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const dataHandler = livekitMocks.on.mock.calls.find(
+      ([event]) => event === 'DataReceived',
+    )?.[1] as ((payload: Uint8Array) => void) | undefined;
+    expect(dataHandler).toBeDefined();
+
+    await act(async () => {
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'tool_call_started',
+        callId: 'call-1',
+        name: 'write_file',
+        arguments: { path: 'voice.txt' },
+      })));
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'tool_call_completed',
+        callId: 'call-1',
+        success: true,
+        result: 'ok',
+      })));
+    });
+
+    expect(result.current.toolCalls).toHaveLength(1);
+    expect(result.current.toolCalls[0].status).toBe('completed');
+    expect(result.current.transcripts.some((item) => item.isNarration)).toBe(false);
+    expect(speak).not.toHaveBeenCalled();
+  });
+
+  it('emits UI callbacks for LiveKit relay data messages', async () => {
+    const onNarratorText = vi.fn();
+    const onAgentText = vi.fn();
+    const onToolCallStarted = vi.fn();
+    const onToolCallCompleted = vi.fn();
+    const onTurnComplete = vi.fn();
+
+    const { result } = renderHookWithProvider(
+      () => useAgentVoiceChat({
+        agentId: 'agent-1',
+        browserNarration: false,
+        onNarratorText,
+        onAgentText,
+        onToolCallStarted,
+        onToolCallCompleted,
+        onTurnComplete,
+      }),
+      mockClient,
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const dataHandler = livekitMocks.on.mock.calls.find(
+      ([event]) => event === 'DataReceived',
+    )?.[1] as ((payload: Uint8Array) => void) | undefined;
+    expect(dataHandler).toBeDefined();
+
+    await act(async () => {
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'narrator_text',
+        text: 'Checking the workspace.',
+      })));
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'tool_call_started',
+        callId: 'call-1',
+        name: 'read_file',
+        arguments: { path: 'README.md' },
+      })));
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'tool_call_completed',
+        callId: 'call-1',
+        success: true,
+        result: 'ok',
+      })));
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'agent_text',
+        text: 'Done.',
+        isFinal: true,
+      })));
+      dataHandler?.(new TextEncoder().encode(JSON.stringify({
+        type: 'session_cost',
+        cost: '$0.00',
+      })));
+    });
+
+    expect(onNarratorText).toHaveBeenCalledWith('Checking the workspace.');
+    expect(onToolCallStarted).toHaveBeenCalledWith({
+      callId: 'call-1',
+      name: 'read_file',
+      arguments: { path: 'README.md' },
+    });
+    expect(onToolCallCompleted).toHaveBeenCalledWith({
+      callId: 'call-1',
+      success: true,
+      result: 'ok',
+    });
+    expect(onAgentText).toHaveBeenCalledWith('Done.', true);
+    expect(onTurnComplete).toHaveBeenCalledWith('$0.00');
+  });
 });
