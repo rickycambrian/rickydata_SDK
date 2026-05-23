@@ -30,6 +30,7 @@ function defaultModelForProvider(provider: unknown): string {
   if (provider === 'deepseek') return 'deepseek-v4-pro';
   if (provider === 'gemini') return 'gemini-3.1-pro-preview';
   if (provider === 'kimi') return 'kimi-for-coding';
+  if (provider === 'opencode') return 'opencode-go/deepseek-v4-flash';
   return FREE_TIER_MODEL;
 }
 
@@ -116,6 +117,10 @@ async function resolveModel(
 
     if (settings.plan === 'kimi_byok') {
       return settings.defaultModel || 'kimi-for-coding';
+    }
+
+    if (settings.plan === 'opencode_byok') {
+      return settings.defaultModel || 'opencode-go/deepseek-v4-flash';
     }
 
     // Plan not set — probe API key to decide

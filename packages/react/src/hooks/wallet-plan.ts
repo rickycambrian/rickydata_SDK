@@ -8,6 +8,7 @@ function defaultModelForPlanProvider(provider: WalletSettings['modelProvider'] |
   if (provider === 'zai') return 'glm-5.1';
   if (provider === 'deepseek') return 'deepseek-v4-pro';
   if (provider === 'gemini') return 'gemini-3.1-pro-preview';
+  if (provider === 'opencode') return 'opencode-go/deepseek-v4-flash';
   return 'MiniMax-M2.7';
 }
 

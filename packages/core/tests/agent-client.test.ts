@@ -730,6 +730,36 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('setProviderApiKey', () => {
+    it('stores OpenCode Go API keys in the wallet provider vault', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'n', message: 'Sign' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'jwt' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'derive-nonce', message: 'Sign provider vault' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, configured: true, encryptionMode: 'sign-to-derive' }) } as Response);
+
+      const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
+      const status = await client.setProviderApiKey('opencode', 'sk-opencode-test-key');
+
+      expect(status.configured).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/wallet/provider-vault/derive-challenge`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt' }),
+        }),
+      );
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${GATEWAY}/wallet/opencode-apikey`,
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"opencodeApiKey":"sk-opencode-test-key"'),
+        }),
+      );
+    });
+  });
+
   describe('isApiKeyConfigured', () => {
     it('returns true when key is configured', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');

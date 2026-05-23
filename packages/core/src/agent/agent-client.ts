@@ -73,11 +73,13 @@ const PROVIDER_CONFIG: Record<MarketplaceProvider, {
   gemini: { statusPath: '/wallet/gemini-apikey/status', setPath: '/wallet/gemini-apikey', bodyKey: 'geminiApiKey' },
   openai: { statusPath: '/wallet/openai-apikey/status', setPath: '/wallet/openai-apikey', bodyKey: 'openaiApiKey' },
   kimi: { statusPath: '/wallet/kimi-apikey/status', setPath: '/wallet/kimi-apikey', bodyKey: 'kimiApiKey' },
+  opencode: { statusPath: '/wallet/opencode-apikey/status', setPath: '/wallet/opencode-apikey', bodyKey: 'opencodeApiKey' },
 };
 
 function providerFromModel(model?: string, fallback?: string): MarketplaceProvider | null {
   const value = (model || fallback || '').toLowerCase();
   if (!value) return null;
+  if (value.startsWith('opencode-go/')) return 'opencode';
   if (value.startsWith('minimax') || value.includes('minimax')) return 'minimax';
   if (value.startsWith('google/') || value.includes('openrouter')) return 'openrouter';
   if (value.startsWith('glm') || value.includes('z.ai') || value.includes('zai')) return 'zai';
@@ -92,6 +94,7 @@ function providerFromModel(model?: string, fallback?: string): MarketplaceProvid
 function providerFromMissingSecret(value: unknown): MarketplaceProvider | null {
   const raw = typeof value === 'string' ? value : '';
   const lower = raw.toLowerCase();
+  if (lower.includes('opencode')) return 'opencode';
   if (lower.includes('minimax')) return 'minimax';
   if (lower.includes('openrouter')) return 'openrouter';
   if (lower.includes('z.ai') || lower.includes('zai')) return 'zai';
