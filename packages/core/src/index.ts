@@ -103,8 +103,14 @@ export {
   buildClaudeCodeHookTraceOperations,
   createClaudeCodeHookTraceFixture,
   buildCodexHookTraceOperations,
+  buildRickydataGraphWriteRequest,
+  canonicalizeRickydataRepoRef,
+  deriveRickydataGraphEdgeId,
+  deriveRickydataGraphId,
   createCodexHookTraceFixture,
   kfdbValue,
+  rickydataGraphContract,
+  rickydataGraphValue,
 } from './kfdb/index.js';
 export type {
   AgentChatTraceEvent,

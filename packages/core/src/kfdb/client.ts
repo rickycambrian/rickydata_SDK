@@ -37,6 +37,7 @@ import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
 import { buildClaudeCodeHookTraceOperations, type ClaudeCodeHookTrace } from './claude-code-hook-trace.js';
 import { buildCodexHookTraceOperations, type CodexHookTrace } from './codex-hook-trace.js';
+import { buildRickydataGraphWriteRequest, type RickydataGraphWriteInput } from './rickydata-graph.js';
 
 function normalizeKfdbExpiresAt(raw: number): number {
   return raw < 10_000_000_000 ? raw * 1000 : raw;
@@ -287,6 +288,10 @@ export class KFDBClient {
       body: JSON.stringify(payload),
     });
     return this.parseJson<KfdbWriteResponse>(res, 'write');
+  }
+
+  async writeRickydataGraph(input: RickydataGraphWriteInput): Promise<KfdbWriteResponse> {
+    return this.write(buildRickydataGraphWriteRequest(input));
   }
 
   async queryKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbQueryResponse> {
