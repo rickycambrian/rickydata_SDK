@@ -3,6 +3,18 @@ export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './derive-sessi
 export { buildAgentChatTraceOperations, createAgentChatTraceFixture } from './agent-chat-trace.js';
 export { buildClaudeCodeHookTraceOperations, createClaudeCodeHookTraceFixture } from './claude-code-hook-trace.js';
 export { buildCodexHookTraceOperations, createCodexHookTraceFixture } from './codex-hook-trace.js';
+export {
+  GraphEdgeType,
+  GraphEntityKind,
+  RICKYDATA_GRAPH_NAMESPACE,
+  RICKYDATA_GRAPH_SCHEMA_VERSION,
+  buildRickydataGraphWriteRequest,
+  canonicalizeRickydataRepoRef,
+  deriveRickydataGraphEdgeId,
+  deriveRickydataGraphId,
+  rickydataGraphContract,
+  rickydataGraphValue,
+} from './rickydata-graph.js';
 export { kfdbValue } from './values.js';
 export {
   generateSharingKeyPair,
@@ -19,6 +31,15 @@ export type { SharingKeyPair, WrappedGroupKey } from '../encryption.js';
 export type { AgentChatTraceEvent, AgentChatTurnTrace } from './agent-chat-trace.js';
 export type { ClaudeCodeHookEventRecord, ClaudeCodeHookTrace } from './claude-code-hook-trace.js';
 export type { CodexHookEventRecord, CodexHookTrace } from './codex-hook-trace.js';
+export type {
+  RickydataGraphContract,
+  RickydataGraphEdge,
+  RickydataGraphNode,
+  RickydataGraphPrimitiveValue,
+  RickydataGraphWriteInput,
+  RickydataGraphWriteOperation,
+  RickydataGraphWriteRequest,
+} from './rickydata-graph.js';
 
 export type {
   AutoDeriveOptions,
