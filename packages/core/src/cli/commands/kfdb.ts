@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
+import { HERMES_KFDB_TRACE_HANDLER, HERMES_KFDB_TRACE_HOOK_YAML } from '../hermes-kfdb-hook-template.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -284,6 +285,17 @@ export function createKfdbCommands(config: ConfigManager, store: CredentialStore
 
       // ── Hooks ──
       console.log();
+      const hermesHookDir = path.join(os.homedir(), '.hermes', 'hooks', 'rickydata-kfdb-trace');
+      const hermesHookYaml = path.join(hermesHookDir, 'HOOK.yaml');
+      const hermesHookHandler = path.join(hermesHookDir, 'handler.py');
+      if (fs.existsSync(hermesHookYaml) && fs.existsSync(hermesHookHandler)) {
+        console.log(chalk.green('✓') + ' Hermes session tracking hook: installed');
+        console.log(chalk.dim(`  Hook: ${hermesHookDir}`));
+      } else {
+        console.log(chalk.dim('✗') + ' Hermes session tracking hook: not installed');
+        console.log(chalk.dim('  Run ' + chalk.cyan('rickydata kfdb install-hermes-hooks') + ' to enable Hermes gateway traces'));
+      }
+
       const claudeSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
       if (fs.existsSync(claudeSettingsPath)) {
         const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
@@ -308,6 +320,39 @@ export function createKfdbCommands(config: ConfigManager, store: CredentialStore
       }
 
       console.log();
+    });
+
+  // ── rickydata kfdb install-hermes-hooks ─────────────────────────────
+  kfdb
+    .command('install-hermes-hooks')
+    .description('Install Hermes gateway hooks that write private session traces to KFDB')
+    .option('--force', 'Overwrite an existing Hermes KFDB trace hook')
+    .action(async (opts) => {
+      const hermesHookDir = path.join(os.homedir(), '.hermes', 'hooks', 'rickydata-kfdb-trace');
+      const hookYaml = path.join(hermesHookDir, 'HOOK.yaml');
+      const handlerPy = path.join(hermesHookDir, 'handler.py');
+
+      if (!fs.existsSync(hermesHookDir)) {
+        fs.mkdirSync(hermesHookDir, { recursive: true });
+      }
+
+      for (const file of [hookYaml, handlerPy]) {
+        if (fs.existsSync(file) && !opts.force) {
+          console.log(chalk.yellow('!') + ` ${file} already exists; use --force to overwrite`);
+          return;
+        }
+      }
+
+      fs.writeFileSync(hookYaml, HERMES_KFDB_TRACE_HOOK_YAML, 'utf-8');
+      fs.writeFileSync(handlerPy, HERMES_KFDB_TRACE_HANDLER, 'utf-8');
+      fs.chmodSync(handlerPy, 0o700);
+
+      console.log(chalk.green('✓') + ' Hermes KFDB trace hook installed');
+      console.log(chalk.dim(`  ${hookYaml}`));
+      console.log(chalk.dim(`  ${handlerPy}`));
+      console.log();
+      console.log(chalk.dim('The hook reads KFDB/wallet-derived private-tenant credentials from ~/.hermes/.env or process env.'));
+      console.log(chalk.dim('Restart the Hermes gateway for the hook to be loaded by live sessions.'));
     });
 
   return kfdb;
