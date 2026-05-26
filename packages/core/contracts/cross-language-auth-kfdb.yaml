@@ -9,6 +9,7 @@ info:
 
     Normative scope:
     - wallet-token creation via `/api/auth/token-message` and `/api/auth/create-token`
+    - Core2/device-wallet delegation via `/auth/device/*` and `/auth/watch/device/*`
     - KFDB sign-to-derive session establishment via `/api/v1/auth/derive-challenge` and
       `/api/v1/auth/derive-key`
     - canonical `mcpwt_` token payload fields
@@ -160,6 +161,123 @@ paths:
               example:
                 session_id: session-123
                 expires_at: 1712800000000
+  /auth/device:
+    post:
+      summary: Start device-wallet pairing
+      description: |
+        Returns a short-lived user code and a device-wallet proof message. The device signs
+        `deviceProofMessage` with its fresh local wallet before the user approves the pairing.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePairingRequest'
+            example:
+              client: rickydata_terminal
+              platform: esp32
+              permissions:
+                - agents:voice
+                - provider-vault:device-s2d
+      responses:
+        '201':
+          description: Pairing challenge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicePairingChallenge'
+  /auth/device/{deviceCode}/proof:
+    post:
+      summary: Prove device-wallet ownership
+      parameters:
+        - in: path
+          name: deviceCode
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceWalletProof'
+      responses:
+        '200':
+          description: Device wallet verified for this pairing
+  /auth/device/approve:
+    post:
+      summary: Approve a proved device wallet
+      description: |
+        Requires a user Bearer token. The approval persists a scoped user-wallet to
+        device-wallet delegation and prepares the device's first short-lived gateway session.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceApprovalRequest'
+      responses:
+        '200':
+          description: Device delegation approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApproval'
+  /auth/watch/device/{deviceCode}:
+    get:
+      summary: Poll device pairing status
+      description: Compatibility polling path used by Core2 firmware.
+      parameters:
+        - in: path
+          name: deviceCode
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approved device session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApproval'
+        '202':
+          description: Pairing still pending
+        '404':
+          description: Pairing expired or unknown
+  /auth/device/challenge:
+    get:
+      summary: Request a device-session refresh challenge
+      parameters:
+        - in: query
+          name: deviceWalletAddress
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refresh challenge to sign with the device wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRefreshChallenge'
+  /auth/device/refresh:
+    post:
+      summary: Refresh a device session by device-wallet signature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRefreshRequest'
+      responses:
+        '200':
+          description: New short-lived gateway session for the delegated device
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceSessionRefresh'
 components:
   securitySchemes:
     bearerAuth:
@@ -307,6 +425,165 @@ components:
           description: Unix timestamp in milliseconds.
         address:
           type: string
+    DevicePairingRequest:
+      type: object
+      properties:
+        client:
+          type: string
+        platform:
+          type: string
+        label:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    DevicePairingChallenge:
+      type: object
+      required:
+        - deviceCode
+        - userCode
+        - verificationUri
+        - expiresIn
+        - interval
+        - deviceProofNonce
+        - deviceProofMessage
+      properties:
+        deviceCode:
+          type: string
+        userCode:
+          type: string
+          description: Human-entered code such as `ABCD-2345`.
+        verificationUri:
+          type: string
+          format: uri
+        verificationUriComplete:
+          type: string
+          format: uri
+        expiresIn:
+          type: integer
+          description: Pairing expiry in seconds.
+        interval:
+          type: integer
+          description: Recommended polling interval in seconds.
+        deviceProofNonce:
+          type: string
+        deviceProofMessage:
+          type: string
+          description: EIP-191 message the device wallet signs before approval.
+    DeviceWalletProof:
+      type: object
+      required:
+        - deviceWalletAddress
+        - signature
+      properties:
+        deviceWalletAddress:
+          type: string
+        devicePublicKey:
+          type: string
+          description: Optional uncompressed secp256k1 public key for ESP32 proof mode.
+        signature:
+          type: string
+          description: EIP-191 signature over `deviceProofMessage`, or DER ECDSA over SHA-256(deviceProofMessage) when `devicePublicKey` is supplied.
+    DeviceApprovalRequest:
+      type: object
+      required:
+        - userCode
+      properties:
+        userCode:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        ttlSeconds:
+          type: integer
+          description: Delegation lifetime. Gateway default is 14 days and max is 30 days.
+    DeviceApproval:
+      type: object
+      required:
+        - status
+        - walletAddress
+        - deviceWalletAddress
+        - scopes
+        - expiresAt
+        - delegationExpiresAt
+      properties:
+        status:
+          type: string
+          enum: [APPROVED]
+        token:
+          type: string
+          description: Present when returned to the polling device.
+        walletAddress:
+          type: string
+          description: User wallet that owns the delegation.
+        deviceWalletAddress:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: integer
+          description: Gateway session expiry in milliseconds.
+        delegationExpiresAt:
+          type: integer
+          description: Device delegation expiry in milliseconds.
+    DeviceRefreshChallenge:
+      type: object
+      required:
+        - nonce
+        - message
+        - expiresAt
+        - deviceWalletAddress
+      properties:
+        nonce:
+          type: string
+        message:
+          type: string
+        expiresAt:
+          type: integer
+        deviceWalletAddress:
+          type: string
+    DeviceRefreshRequest:
+      type: object
+      required:
+        - deviceWalletAddress
+        - nonce
+        - signature
+      properties:
+        deviceWalletAddress:
+          type: string
+        nonce:
+          type: string
+        signature:
+          type: string
+          description: EIP-191 signature over the refresh challenge message.
+    DeviceSessionRefresh:
+      type: object
+      required:
+        - token
+        - walletAddress
+        - deviceWalletAddress
+        - scopes
+        - expiresAt
+        - delegationExpiresAt
+      properties:
+        token:
+          type: string
+        walletAddress:
+          type: string
+        deviceWalletAddress:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: integer
+        delegationExpiresAt:
+          type: integer
 x-rickydata-notes:
   requestHeadersAfterDerive:
     - X-Wallet-Address
@@ -315,3 +592,4 @@ x-rickydata-notes:
   implementationNotes:
     - Browser login is out-of-band; obtain an mcpwt_ token elsewhere, then inject it into the client.
     - Do not require cross-language clients to read JS credential files or browser storage.
+    - Core2 devices should expect user interaction only at initial pairing and delegation renewal; refreshes are device-wallet signed.
