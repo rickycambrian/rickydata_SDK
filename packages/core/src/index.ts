@@ -7,6 +7,10 @@ export { BenchmarkEvidenceClient, ResearchClient, ResearchKFDBClient, SelfImprov
 export {
   AuthManager,
   createWalletToken,
+  requestDevicePairing,
+  proveDeviceWallet,
+  approveDevicePairing,
+  refreshDeviceSession,
   createSignToDeriveKey,
   createAuthenticatedClient,
   decodeTokenPayload,
@@ -21,6 +25,10 @@ export type {
   DeriveKeyResponse,
   WalletTokenPayload,
   WalletTokenOptions,
+  DevicePairingRequest,
+  DevicePairingChallenge,
+  DevicePairingApproval,
+  DeviceSessionRefresh,
   AuthenticatedClient,
 } from './auth.js';
 

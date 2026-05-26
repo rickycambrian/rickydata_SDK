@@ -70,6 +70,43 @@ export interface WalletAdapter {
   onAddressChange?(callback: (address: string | null) => void): () => void;
 }
 
+export interface DevicePairingRequest {
+  client?: string;
+  platform?: string;
+  label?: string;
+  permissions?: string[];
+}
+
+export interface DevicePairingChallenge {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+  expiresIn: number;
+  interval: number;
+  deviceProofNonce: string;
+  deviceProofMessage: string;
+}
+
+export interface DevicePairingApproval {
+  status: 'APPROVED';
+  token?: string;
+  walletAddress: string;
+  deviceWalletAddress: string;
+  scopes: string[];
+  expiresAt: number;
+  delegationExpiresAt: number;
+}
+
+export interface DeviceSessionRefresh {
+  token: string;
+  walletAddress: string;
+  deviceWalletAddress: string;
+  scopes: string[];
+  expiresAt: number;
+  delegationExpiresAt: number;
+}
+
 export type EthHttpSigner = {
   address: `0x${string}`;
   chainId: number;
@@ -197,6 +234,119 @@ export async function createWalletToken(
     );
   }
   return tokenRes.json();
+}
+
+/**
+ * Start Core2-style device pairing. The device should show userCode or
+ * verificationUriComplete, then sign deviceProofMessage with its local fresh
+ * wallet and submit that proof before the user approves.
+ */
+export async function requestDevicePairing(
+  gatewayUrl: string,
+  options: DevicePairingRequest = {},
+): Promise<DevicePairingChallenge> {
+  const base = gatewayUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/auth/device`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client: options.client ?? 'rickydata_terminal',
+      platform: options.platform ?? 'esp32',
+      ...(options.label ? { label: options.label } : {}),
+      ...(options.permissions ? { permissions: options.permissions } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to request device pairing: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+/**
+ * Prove that the device owns its fresh wallet before the user's wallet grants
+ * a delegation to it.
+ */
+export async function proveDeviceWallet(
+  gatewayUrl: string,
+  pairing: Pick<DevicePairingChallenge, 'deviceCode' | 'deviceProofMessage'>,
+  deviceWalletAddress: string,
+  signFn: (message: string) => Promise<string>,
+): Promise<{ status: 'VERIFIED'; deviceWalletAddress: string }> {
+  const base = gatewayUrl.replace(/\/$/, '');
+  const signature = await signFn(pairing.deviceProofMessage);
+  const res = await fetch(`${base}/auth/device/${encodeURIComponent(pairing.deviceCode)}/proof`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceWalletAddress, signature }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to prove device wallet: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+/**
+ * Approve a proved device pairing using an already-authenticated user wallet
+ * token/session. The device receives the session by polling its device code.
+ */
+export async function approveDevicePairing(
+  gatewayUrl: string,
+  authToken: string,
+  userCode: string,
+  options: { scopes?: string[]; ttlSeconds?: number } = {},
+): Promise<DevicePairingApproval> {
+  const base = gatewayUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/auth/device/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      userCode,
+      ...(options.scopes ? { scopes: options.scopes } : {}),
+      ...(typeof options.ttlSeconds === 'number' ? { ttlSeconds: options.ttlSeconds } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to approve device pairing: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+/**
+ * Refresh a delegated Core2 device session without asking the user to sign
+ * again. The gateway verifies the device-wallet signature against the stored
+ * user-approved delegation.
+ */
+export async function refreshDeviceSession(
+  gatewayUrl: string,
+  deviceWalletAddress: string,
+  signFn: (message: string) => Promise<string>,
+): Promise<DeviceSessionRefresh> {
+  const base = gatewayUrl.replace(/\/$/, '');
+  const challengeRes = await fetch(
+    `${base}/auth/device/challenge?deviceWalletAddress=${encodeURIComponent(deviceWalletAddress)}`,
+  );
+  if (!challengeRes.ok) {
+    const body = await challengeRes.text();
+    throw new Error(`Failed to request device refresh challenge: ${challengeRes.status} ${body}`);
+  }
+  const challenge = await challengeRes.json() as { nonce: string; message: string };
+  const signature = await signFn(challenge.message);
+  const refreshRes = await fetch(`${base}/auth/device/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceWalletAddress, nonce: challenge.nonce, signature }),
+  });
+  if (!refreshRes.ok) {
+    const body = await refreshRes.text();
+    throw new Error(`Failed to refresh device session: ${refreshRes.status} ${body}`);
+  }
+  return refreshRes.json();
 }
 
 // ─────────────────────────────────────────────────────────────────────
