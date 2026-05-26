@@ -318,6 +318,8 @@ def _base_operations(event_type: str, context: dict[str, Any], state: dict[str, 
     model = event.get("model") or ""
     session_node = _id("HermesSession", [wallet, agent_id, native_sid, native_sid])
     turn_node = _id("HermesTurn", [wallet, agent_id, native_sid, turn_index, native_sid])
+    chat_session_node = _id("AgentChatSession", [wallet, agent_id, native_sid])
+    chat_turn_node = _id("AgentChatTurn", [wallet, agent_id, native_sid, turn_index])
     wallet_node = _exec_id("WalletTenant", [wallet])
     agent_node = _exec_id("Agent", [agent_id])
     engine_node = _exec_id("ExecutionEngine", ["hermes"])
@@ -327,9 +329,13 @@ def _base_operations(event_type: str, context: dict[str, Any], state: dict[str, 
         _node("Agent", agent_node, {"agent_id": agent_id, "schema_version": TRACE_SCHEMA_VERSION}),
         _node("HermesSession", session_node, {"agent_id": agent_id, "session_id": native_sid, "hermes_session_id": native_sid, "gateway_session_id": event.get("gatewaySessionId") or "", "platform": event.get("platform") or "", "chat_id_hash": event.get("chatIdHash") or "", "user_id_hash": event.get("userIdHash") or "", "wallet_address": wallet, "source": "hermes-hooks", "privacy_scope": "private", "schema_version": TRACE_SCHEMA_VERSION, "updated_at": event.get("receivedAt")}),
         _node("HermesTurn", turn_node, {"agent_id": agent_id, "session_id": native_sid, "hermes_session_id": native_sid, "turn_index": turn_index, "model": model, "provider": provider, "execution_engine": "hermes", "cwd": event.get("cwd") or "", "platform": event.get("platform") or "", "completed_at": event.get("receivedAt"), "privacy_scope": "private", "schema_version": TRACE_SCHEMA_VERSION}),
+        _node("AgentChatSession", chat_session_node, {"agent_id": agent_id, "session_id": native_sid, "external_session_id": native_sid, "wallet_address": wallet, "source": "hermes-hooks", "privacy_scope": "private", "schema_version": TRACE_SCHEMA_VERSION, "updated_at": event.get("receivedAt")}),
+        _node("AgentChatTurn", chat_turn_node, {"agent_id": agent_id, "session_id": native_sid, "turn_index": turn_index, "model": model, "provider": provider, "execution_engine": "hermes", "cwd": event.get("cwd") or "", "source": "hermes-hooks", "privacy_scope": "private", "schema_version": TRACE_SCHEMA_VERSION, "completed_at": event.get("receivedAt")}),
         _edge("OWNS_EXECUTION_SESSION", wallet_node, session_node, {"source": "hermes-hooks"}),
         _edge("EXECUTES_AGENT", session_node, agent_node, {"agent_id": agent_id}),
-        _edge("HAS_HERMES_TURN", session_node, turn_node, {"turn_index": turn_index}),
+        _edge("HAS_TURN", session_node, turn_node, {"turn_index": turn_index}),
+        _edge("MIRRORS_AGENT_CHAT_SESSION", session_node, chat_session_node, {"source": "hermes-hooks"}),
+        _edge("MIRRORS_AGENT_CHAT_TURN", turn_node, chat_turn_node, {"source": "hermes-hooks"}),
         _node("ExecutionEngine", engine_node, {"execution_engine": "hermes", "schema_version": TRACE_SCHEMA_VERSION}),
         _edge("USES_EXECUTION_ENGINE", turn_node, engine_node, {"execution_engine": "hermes"}),
         _node("HermesHookEvent", event_node, {"event_index": seq, "event_type": event_type, "raw_event_type": event_type, "cwd": event.get("cwd") or "", "platform": event.get("platform") or "", "tool_name": "", "tool_use_id": "", "data": event, "privacy_scope": "private", "schema_version": TRACE_SCHEMA_VERSION}),
