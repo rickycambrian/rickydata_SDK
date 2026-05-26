@@ -37,6 +37,7 @@ import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
 import { buildClaudeCodeHookTraceOperations, type ClaudeCodeHookTrace } from './claude-code-hook-trace.js';
 import { buildCodexHookTraceOperations, type CodexHookTrace } from './codex-hook-trace.js';
+import { buildHermesHookTraceOperations, type HermesHookTrace } from './hermes-hook-trace.js';
 import { buildRickydataGraphWriteRequest, type RickydataGraphWriteInput } from './rickydata-graph.js';
 
 function normalizeKfdbExpiresAt(raw: number): number {
@@ -347,6 +348,13 @@ export class KFDBClient {
   async writeClaudeCodeHookTrace(trace: ClaudeCodeHookTrace): Promise<KfdbWriteResponse> {
     return this.write({
       operations: buildClaudeCodeHookTraceOperations(trace),
+      skip_embedding: true,
+    });
+  }
+
+  async writeHermesHookTrace(trace: HermesHookTrace): Promise<KfdbWriteResponse> {
+    return this.write({
+      operations: buildHermesHookTraceOperations(trace),
       skip_embedding: true,
     });
   }
