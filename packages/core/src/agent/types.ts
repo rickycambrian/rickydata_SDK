@@ -195,6 +195,107 @@ export interface KbToolsStatus {
   kbToolsEnabled: boolean;
 }
 
+// ─── Agent Builder (recipe-driven provisioning) ─────────────
+
+/**
+ * High-level spec for creating an agent programmatically. The builder maps this
+ * to a {@link CustomAgentDefinition} for `POST /agents/custom`, then runs the
+ * follow-up provisioning steps (skills, claude-md, secrets, kb-tools).
+ *
+ * `name`/`systemPrompt` are the only required fields; everything else is optional
+ * and mirrors the agent definition front-matter documented in the create-flow contract.
+ */
+export interface AgentSpec {
+  /** Slug/base name. Private agents get a `-<6hex>` suffix appended to form the id. */
+  name: string;
+  /** System prompt (the markdown body of an agent.md recipe). */
+  systemPrompt: string;
+  /** Pre-computed id. Defaults to `name` for a first create; the gateway may return a suffixed id. */
+  id?: string;
+  title?: string;
+  description?: string;
+  /** e.g. 'haiku' | 'sonnet' | 'opus' | a named variant. */
+  model?: string;
+  /** Category (JSON `category`, markdown `categories`). */
+  category?: string;
+  /** MCP server ids/names to attach. */
+  mcpServers?: string[];
+  /** Gateway builtin tool names. */
+  builtinTools?: string[];
+  /** Names of agent secrets the agent expects (values supplied separately at deploy time). */
+  agentSecrets?: string[];
+  /** Wallet skill names to upload (resolved to `skills/<name>.md` when deploying a recipe). */
+  skills?: string[];
+  /** 'private' (default) or 'public'. */
+  visibility?: 'private' | 'public';
+  /** Enable gateway-native KnowledgeBook (KFDB) tools after create. */
+  kbTools?: boolean;
+  /** Reflect/KnowledgeBook config to apply after create. */
+  reflect?: { enabled?: boolean; config?: Partial<ReflectConfig> };
+  /** Extra metadata stored on the definition. */
+  metadata?: Record<string, unknown>;
+}
+
+/** A single skill file parsed from a recipe's `skills/` directory. */
+export interface SkillFile {
+  /** Skill name (filename stem, minus the `.md` extension). */
+  name: string;
+  /** Full markdown content of the skill file. */
+  content: string;
+}
+
+/**
+ * A parsed recipe directory: the agent spec (from `agent.md` front-matter + body),
+ * its skill files, and optional per-agent CLAUDE routing.
+ */
+export interface AgentRecipe {
+  /** The agent spec derived from `agent.md`. */
+  spec: AgentSpec;
+  /** Skill files from `skills/*.md`. */
+  skills: SkillFile[];
+  /** Raw content of `claude-routing.md`, if present. */
+  claudeRouting?: string;
+}
+
+/** Result of a create / deploy run. Records each provisioning step that ran. */
+export interface CreateResult {
+  /** The agent id returned by the gateway (may carry a `-<6hex>` suffix). */
+  agentId: string;
+  agentName?: string;
+  qualityScore?: number;
+  /** Skill names successfully uploaded. */
+  uploadedSkills: string[];
+  /** Whether per-agent CLAUDE routing was uploaded. */
+  claudeRoutingUploaded: boolean;
+  /** Agent-secret names that were set. */
+  agentSecretsSet: string[];
+  /** MCP server ids that had secrets set. */
+  mcpSecretsSet: string[];
+  /** Whether KnowledgeBook tools were enabled. */
+  kbToolsEnabled: boolean;
+  /** Whether reflect config was applied. */
+  reflectConfigured: boolean;
+}
+
+/** Outcome of {@link AgentBuilder.verify}: the live state of a provisioned agent. */
+export interface VerifyResult {
+  agentId: string;
+  /** Whether `GET /agents/custom/{id}` returned the agent. */
+  exists: boolean;
+  /** Skill names reported by the wallet skills listing for this agent. */
+  skills: string[];
+  /** MCP tool names exposed via `tools/list` on the agent MCP endpoint. */
+  tools: string[];
+  /** Per-server secret requirements (from `/agents/{id}/mcp-requirements`). */
+  mcpRequirements?: McpRequirementsResponse;
+  /** Agent-level secret status. */
+  secretStatus?: AgentSecretStatus;
+  /** KnowledgeBook tools enabled flag. */
+  kbToolsEnabled?: boolean;
+  /** Reflect status (includes `kbAuthConfigured`). */
+  reflect?: ReflectStatus;
+}
+
 // ─── SSE Events (from Agent Gateway) ────────────────────────
 
 export interface SSETextEvent {

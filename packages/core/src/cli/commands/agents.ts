@@ -9,6 +9,7 @@ import { CredentialStore } from '../config/credential-store.js';
 import { AgentClient } from '../../agent/agent-client.js';
 import { formatOutput, formatJson, type OutputFormat } from '../output/formatter.js';
 import { CliError } from '../errors.js';
+import { registerAgentBuilderCommands } from './agent.js';
 
 interface SkillInfo {
   name: string;
@@ -510,6 +511,9 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
         });
       }
     });
+
+  // Builder subcommands: rickydata agent create|deploy|verify
+  registerAgentBuilderCommands(agents, config, store);
 
   return agents;
 }
