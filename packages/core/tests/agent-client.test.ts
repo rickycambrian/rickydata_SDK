@@ -1072,7 +1072,8 @@ describe('AgentClient — Anthropic OAuth (Claude Code subscription)', () => {
     const putCall = fetchSpy.mock.calls.find(([url, init]) => url === `${GATEWAY}/wallet/anthropic-oauth` && (init as RequestInit)?.method === 'PUT');
     expect(putCall).toBeDefined();
     const putBody = JSON.parse((putCall![1] as RequestInit).body as string);
-    expect(putBody.bundle).toEqual(bundle);
+    // SHARED CONTRACT: the gateway reads the bundle from `credentials`.
+    expect(putBody.credentials).toEqual(bundle);
     expect(putBody.nonce).toBe('oauth-nonce');
     expect(putBody.signature).toMatch(/^0x[0-9a-f]+$/i);
   });

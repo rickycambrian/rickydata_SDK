@@ -406,10 +406,14 @@ export class AgentClient {
     await this.ensureAuthenticated();
     const { message, nonce } = await this.getAnthropicOAuthDeriveChallenge();
     const signature = await this.signWithPrivateKey(message, 'Anthropic OAuth sync requires the owner wallet private key');
+    // The deployed gateway reads the bundle from `credentials` (its PUT handler
+    // does `req.body?.credentials ?? req.body?.claudeAiOauth ?? req.body`). Sending
+    // it under a `bundle` key falls through to the whole body and fails validation,
+    // so the SHARED CONTRACT key here is `credentials` (carrying the claudeAiOauth wrapper).
     const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth`, {
       method: 'PUT',
       headers: this.authHeaders(),
-      body: JSON.stringify({ bundle, signature, nonce }),
+      body: JSON.stringify({ credentials: bundle, signature, nonce }),
     });
     if (!res.ok) {
       const body = await res.text();

@@ -254,8 +254,9 @@ describe('claude commands', () => {
       const putBody = JSON.parse(putCall!.opts.body as string);
       expect(putBody.signature).toBe('0xmocksignature');
       expect(putBody.nonce).toBe('n-1');
-      expect(putBody.bundle.claudeAiOauth.accessToken).toBe(ACCESS);
-      expect(putBody.bundle.claudeAiOauth.refreshToken).toBe(REFRESH);
+      // SHARED CONTRACT: the gateway reads the bundle from `credentials`.
+      expect(putBody.credentials.claudeAiOauth.accessToken).toBe(ACCESS);
+      expect(putBody.credentials.claudeAiOauth.refreshToken).toBe(REFRESH);
 
       // 3. Tokens are NEVER printed to the console.
       const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
