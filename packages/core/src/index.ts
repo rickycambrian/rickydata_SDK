@@ -257,6 +257,26 @@ export { AgentClient } from './agent/index.js';
 // SessionStore removed from main export — uses Node.js builtins (fs, path, os)
 // Use: import { SessionStore } from 'rickydata/agent/session-store' for server
 
+// Agent Builder (recipe-driven provisioning) + recipe parsing helpers
+export {
+  AgentBuilder,
+  challengeVerifyToken,
+  parseAgentMarkdown,
+  splitFrontMatter,
+  parseFrontMatterBlock,
+  toStringList,
+} from './agent/index.js';
+export type {
+  AgentBuilderConfig,
+  DeployRecipeOptions,
+  ParsedFrontMatter,
+  AgentSpec,
+  AgentRecipe,
+  SkillFile,
+  CreateResult,
+  VerifyResult,
+} from './agent/index.js';
+
 // Agent Error Taxonomy
 export { AgentError, AgentErrorCode } from './agent/index.js';
 export type { AgentErrorContext } from './agent/index.js';
@@ -309,6 +329,8 @@ export type {
   McpRequirementsResponse,
   AgentSecretStatus,
   CodexAuthStatus,
+  AnthropicOAuthStatus,
+  AnthropicOAuthBundle,
   // Wallet
   WalletSettings,
   WalletBalanceResponse,

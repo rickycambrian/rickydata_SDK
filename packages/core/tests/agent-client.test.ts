@@ -1036,3 +1036,97 @@ describe('AgentClient', () => {
     });
   });
 });
+
+describe('AgentClient — Anthropic OAuth (Claude Code subscription)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uploads a credential bundle via a wallet-signed PUT', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    // derive-challenge
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ message: 'Sign Anthropic OAuth', nonce: 'oauth-nonce' }),
+    } as Response);
+    // PUT
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ configured: true, hasTokens: true, encryptionMode: 'sign-to-derive' }),
+    } as Response);
+
+    // privateKey path (CLI/Node) — viem signs the gateway-issued message.
+    const client = new AgentClient({ token: 'wallet-token', privateKey: PRIVATE_KEY, gatewayUrl: GATEWAY, sessionStorePath: null });
+
+    const bundle = {
+      claudeAiOauth: {
+        accessToken: 'sk-ant-oat-SECRET',
+        refreshToken: 'sk-ant-ort-SECRET',
+        expiresAt: 123,
+        scopes: ['user:inference'],
+      },
+    };
+    const status = await client.setAnthropicOAuth(bundle);
+
+    expect(status.configured).toBe(true);
+    const putCall = fetchSpy.mock.calls.find(([url, init]) => url === `${GATEWAY}/wallet/anthropic-oauth` && (init as RequestInit)?.method === 'PUT');
+    expect(putCall).toBeDefined();
+    const putBody = JSON.parse((putCall![1] as RequestInit).body as string);
+    // SHARED CONTRACT: the gateway reads the bundle from `credentials`.
+    expect(putBody.credentials).toEqual(bundle);
+    expect(putBody.nonce).toBe('oauth-nonce');
+    expect(putBody.signature).toMatch(/^0x[0-9a-f]+$/i);
+  });
+
+  it('reads status without signing', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ configured: true, hasTokens: true, scopes: ['user:profile'] }),
+    } as Response);
+
+    const client = new AgentClient({ token: 'wallet-token', gatewayUrl: GATEWAY, sessionStorePath: null });
+    const status = await client.getAnthropicOAuthStatus();
+
+    expect(status.configured).toBe(true);
+    expect(status.scopes).toEqual(['user:profile']);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `${GATEWAY}/wallet/anthropic-oauth/status`,
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer wallet-token' }) }),
+    );
+  });
+
+  it('unlocks via a wallet-signed POST', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ message: 'Sign Anthropic OAuth', nonce: 'n' }),
+    } as Response);
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ configured: true, unlocked: true }),
+    } as Response);
+
+    const client = new AgentClient({ token: 'wallet-token', privateKey: PRIVATE_KEY, gatewayUrl: GATEWAY, sessionStorePath: null });
+    const status = await client.unlockAnthropicOAuth();
+
+    expect(status.unlocked).toBe(true);
+    const postCall = fetchSpy.mock.calls.find(([url]) => url === `${GATEWAY}/wallet/anthropic-oauth/unlock`);
+    expect(postCall).toBeDefined();
+    expect((postCall![1] as RequestInit).method).toBe('POST');
+    expect(JSON.parse((postCall![1] as RequestInit).body as string).signature).toMatch(/^0x[0-9a-f]+$/i);
+  });
+
+  it('deletes via DELETE', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce({ ok: true } as Response);
+
+    const client = new AgentClient({ token: 'wallet-token', gatewayUrl: GATEWAY, sessionStorePath: null });
+    await client.deleteAnthropicOAuth();
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `${GATEWAY}/wallet/anthropic-oauth`,
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+});
