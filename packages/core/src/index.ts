@@ -325,6 +325,8 @@ export type {
   McpRequirementsResponse,
   AgentSecretStatus,
   CodexAuthStatus,
+  AnthropicOAuthStatus,
+  AnthropicOAuthBundle,
   // Wallet
   WalletSettings,
   WalletBalanceResponse,

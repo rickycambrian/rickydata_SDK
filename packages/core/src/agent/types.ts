@@ -503,6 +503,43 @@ export interface CodexAuthStatus {
   needsMigration?: boolean;
 }
 
+/**
+ * Anthropic (Claude Code) OAuth credential bundle uploaded to the gateway vault.
+ *
+ * Mirrors the canonical `claudeAiOauth` credential shape that Claude Code itself
+ * persists (see `~/.claude/.credentials.json`), so the gateway can reuse standard
+ * Anthropic OAuth token-refresh logic. This is the SHARED CONTRACT with the gateway
+ * repo for `POST /wallet/anthropic-oauth`.
+ */
+export interface AnthropicOAuthBundle {
+  claudeAiOauth: {
+    /** OAuth access token (`sk-ant-oat...`). NEVER logged or written to disk in plaintext. */
+    accessToken: string;
+    /** OAuth refresh token (`sk-ant-ort...`). */
+    refreshToken: string;
+    /** Absolute expiry as epoch milliseconds. */
+    expiresAt: number;
+    /** Granted scopes, e.g. ['org:create_api_key','user:profile','user:inference','user:sessions:claude_code']. */
+    scopes: string[];
+    /** Subscription tier when known (e.g. 'pro', 'max'); omitted otherwise. */
+    subscriptionType?: string;
+  };
+}
+
+/** Wallet-scoped status of a stored Anthropic OAuth credential (no token text). */
+export interface AnthropicOAuthStatus {
+  configured: boolean;
+  hasTokens?: boolean;
+  scopes?: string[];
+  expiresAt?: number;
+  subscriptionType?: string;
+  updatedAt?: string;
+  encryptionMode?: 'sign-to-derive' | 'legacy-plaintext' | 'none' | string;
+  persistent?: boolean;
+  unlocked?: boolean;
+  needsMigration?: boolean;
+}
+
 // ─── Wallet ─────────────────────────────────────────────────
 
 export interface WalletSettings {

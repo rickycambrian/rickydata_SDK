@@ -50,6 +50,8 @@ import type {
   FreeTierStatus,
   TeamExecutionEngine,
   CodexAuthStatus,
+  AnthropicOAuthStatus,
+  AnthropicOAuthBundle,
   MarketplaceProvider,
   ProviderApiKeyStatus,
   ProviderVaultUnlockResult,
@@ -376,6 +378,80 @@ export class AgentClient {
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to get Codex auth signing challenge: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  // ─── Anthropic (Claude Code) OAuth Subscription Auth ─────────
+
+  /** Get wallet Anthropic OAuth (Claude Code subscription) credential status. */
+  async getAnthropicOAuthStatus(): Promise<AnthropicOAuthStatus> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/status`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get Anthropic OAuth status: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Upload an Anthropic OAuth credential bundle for subscription-backed Claude execution.
+   * The bundle is encrypted at the gateway under a wallet-derived key; the request is
+   * authorized by a wallet signature. Token material is sent only in this signed call.
+   */
+  async setAnthropicOAuth(bundle: AnthropicOAuthBundle): Promise<AnthropicOAuthStatus> {
+    await this.ensureAuthenticated();
+    const { message, nonce } = await this.getAnthropicOAuthDeriveChallenge();
+    const signature = await this.signWithPrivateKey(message, 'Anthropic OAuth sync requires the owner wallet private key');
+    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth`, {
+      method: 'PUT',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ bundle, signature, nonce }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to set Anthropic OAuth: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Unlock encrypted Anthropic OAuth credential for this gateway session. */
+  async unlockAnthropicOAuth(): Promise<AnthropicOAuthStatus> {
+    await this.ensureAuthenticated();
+    const { message } = await this.getAnthropicOAuthDeriveChallenge();
+    const signature = await this.signWithPrivateKey(message, 'Anthropic OAuth unlock requires the owner wallet private key');
+    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/unlock`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify({ signature }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to unlock Anthropic OAuth: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
+
+  /** Delete wallet Anthropic OAuth credential. */
+  async deleteAnthropicOAuth(): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete Anthropic OAuth: ${res.status}`);
+  }
+
+  private async getAnthropicOAuthDeriveChallenge(): Promise<{ message: string; nonce: string }> {
+    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/derive-challenge`, {
+      headers: this.authHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to get Anthropic OAuth signing challenge: ${res.status} ${body}`);
     }
     return res.json();
   }
