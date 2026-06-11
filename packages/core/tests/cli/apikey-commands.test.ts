@@ -96,10 +96,10 @@ describe('apikey commands', () => {
       expect(body.nonce).toBe('test-nonce-123');
 
       const output = consoleSpy.mock.calls.map(c => c.join(' ')).join('\n');
-      expect(output).toContain('zero-knowledge encryption');
+      expect(output).toContain('user-controlled encryption');
     });
 
-    it('shows zero-knowledge tip when no private key stored (HKDF fallback)', async () => {
+    it('shows user-controlled encryption tip when no private key stored (HKDF fallback)', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({}),

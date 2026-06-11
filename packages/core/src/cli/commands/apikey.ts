@@ -129,9 +129,9 @@ export function createApiKeyCommands(config: ConfigManager, store: CredentialSto
         const privateKey = store.getPrivateKey(profile);
 
         if (privateKey) {
-          // S2D path — zero-knowledge encryption
+          // S2D path — user-controlled encryption
           const result = await signToDeriveApiKey(gatewayUrl, token, privateKey, apiKey);
-          console.log(chalk.green('Anthropic API key configured with zero-knowledge encryption.'));
+          console.log(chalk.green('Anthropic API key configured with user-controlled encryption.'));
           console.log(chalk.dim(`Encryption: ${result.encryptionMode}`));
           console.log(chalk.dim('BYOK pricing is now active (10% markup only).'));
         } else {
@@ -145,7 +145,7 @@ export function createApiKeyCommands(config: ConfigManager, store: CredentialSto
           console.log(chalk.green('Anthropic API key configured successfully.'));
           console.log(chalk.dim('BYOK pricing is now active (10% markup only).'));
           console.log(chalk.yellow(
-            'Tip: Use `rickydata auth login --private-key` to enable zero-knowledge encryption.'
+            'Tip: Use `rickydata auth login --private-key` to enable user-controlled encryption.'
           ));
         }
       } catch (err) {

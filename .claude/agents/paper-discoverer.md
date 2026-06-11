@@ -96,7 +96,7 @@ Conducts web research with source verification and citations.
 - For SDK/API gaps: `"API design patterns"`, `"developer experience"`, `"TypeScript SDK"`
 - For database gaps: category `cs.DB`, `"query optimization"`, `"graph database"`
 - For AI/ML gaps: category `cs.AI` or `cs.CL`, `"agent systems"`, `"tool use"`
-- For security: `"authentication"`, `"wallet security"`, `"zero-knowledge"`
+- For security: `"authentication"`, `"wallet security"`, `"zero-knowledge proofs"`
 - Always try both specific (exact technique) and broad (problem domain) queries
 - Use `dateRange: "last30days"` to find the latest work on fast-moving topics
 
