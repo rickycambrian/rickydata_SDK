@@ -610,18 +610,18 @@ describe('AgentClient', () => {
           json: () => Promise.resolve({
             id: 'sess-kimi',
             agentId: 'test-agent',
-            model: 'kimi-for-coding',
+            model: 'kimi-k2.7-code',
             createdAt: '2026-05-04T00:00:00.000Z',
             executionEngine: 'kimi-code',
           }),
         } as Response);
 
       const client = new AgentClient({ privateKey: PRIVATE_KEY, sessionStorePath: null });
-      const session = await client.createSession('test-agent', 'kimi-for-coding', 'kimi-code');
+      const session = await client.createSession('test-agent', 'kimi-k2.7-code', 'kimi-code');
 
       expect(session.executionEngine).toBe('kimi-code');
       expect(JSON.parse(fetchSpy.mock.calls[2][1]!.body as string)).toEqual({
-        model: 'kimi-for-coding',
+        model: 'kimi-k2.7-code',
         executionEngine: 'kimi-code',
       });
     });
