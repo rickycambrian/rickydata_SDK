@@ -30,10 +30,20 @@ describe('Rickydata repo/execution graph SDK helpers', () => {
     expect(contract.nodeLabels).toContain('Repository');
     expect(contract.nodeLabels).toContain('RickydataRun');
     expect(contract.nodeLabels).toContain('GitHubIssue');
+    expect(contract.nodeLabels).toContain('RoadmapItem');
+    expect(contract.nodeLabels).toContain('AgentContextPack');
+    expect(contract.nodeLabels).toContain('EvidenceRequirement');
+    expect(contract.nodeLabels).toContain('BenchmarkRunProof');
     expect(contract.edgeTypes).toContain('PROVES');
     expect(contract.edgeTypes).toContain('PROJECTED_TO_KFDB');
+    expect(contract.edgeTypes).toContain('PROVIDES_CONTEXT');
+    expect(contract.edgeTypes).toContain('REQUIRES_EVIDENCE');
+    expect(contract.edgeTypes).toContain('PROVEN_BY_BENCHMARK');
     expect(contract.idConventions.Repository).toEqual(['canonical_repo_ref']);
     expect(contract.idConventions.File).toEqual(['repo_id', 'commit_sha', 'path', 'content_hash']);
+    expect(contract.idConventions.RoadmapItem).toEqual(['repo_id', 'roadmap_item_id']);
+    expect(contract.idConventions.AgentContextPack).toEqual(['repo_id', 'context_pack_id']);
+    expect(contract.idConventions.BenchmarkRunProof).toEqual(['repo_id', 'benchmark_run_id', 'proof_id']);
   });
 
   it('canonicalizes repo refs and derives UUIDv5 IDs compatible with kfdb-core', () => {
@@ -99,6 +109,54 @@ describe('Rickydata repo/execution graph SDK helpers', () => {
       from: runId,
       to: proofId,
       edge_type: 'PROVES',
+    });
+  });
+
+  it('builds Mission Control context and evidence graph writes compatible with kfdb-core', () => {
+    const repoRef = canonicalizeRickydataRepoRef('https://github.com/rickycambrian/rickydata_sales_coach.git');
+    const repoId = deriveRickydataGraphId(GraphEntityKind.Repository, [repoRef]);
+    const roadmapItemId = deriveRickydataGraphId(GraphEntityKind.RoadmapItem, [repoId, 'roadmap:bench-proof']);
+    const contextPackId = deriveRickydataGraphId(GraphEntityKind.AgentContextPack, [repoId, 'ctx:bench-proof']);
+    const evidenceRequirementId = deriveRickydataGraphId(GraphEntityKind.EvidenceRequirement, [repoId, 'ev:req:screenshot']);
+    const benchmarkProofId = deriveRickydataGraphId(GraphEntityKind.BenchmarkRunProof, [repoId, 'bench-run-1', 'proof-1']);
+    const contextEdgeId = deriveRickydataGraphEdgeId(contextPackId, GraphEdgeType.ProvidesContext, roadmapItemId);
+
+    const request = buildRickydataGraphWriteRequest({
+      nodes: [
+        { kind: GraphEntityKind.Repository, idParts: [repoRef] },
+        { kind: GraphEntityKind.RoadmapItem, idParts: [repoId, 'roadmap:bench-proof'] },
+        { kind: GraphEntityKind.AgentContextPack, idParts: [repoId, 'ctx:bench-proof'] },
+        { kind: GraphEntityKind.EvidenceRequirement, idParts: [repoId, 'ev:req:screenshot'] },
+        { kind: GraphEntityKind.BenchmarkRunProof, idParts: [repoId, 'bench-run-1', 'proof-1'] },
+      ],
+      edges: [
+        { from: contextPackId, to: roadmapItemId, edgeType: GraphEdgeType.ProvidesContext },
+        { from: roadmapItemId, to: evidenceRequirementId, edgeType: GraphEdgeType.RequiresEvidence },
+        { from: roadmapItemId, to: benchmarkProofId, edgeType: GraphEdgeType.ProvenByBenchmark },
+      ],
+    });
+
+    expect(roadmapItemId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(contextPackId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(evidenceRequirementId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(benchmarkProofId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(contextEdgeId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(deriveRickydataGraphId(GraphEntityKind.RoadmapItem, [repoId, 'roadmap:bench-proof'])).toBe(roadmapItemId);
+    expect(deriveRickydataGraphEdgeId(contextPackId, GraphEdgeType.ProvidesContext, roadmapItemId)).toBe(contextEdgeId);
+    expect(request.operations.map((op) => op.operation)).toEqual([
+      'create_node',
+      'create_node',
+      'create_node',
+      'create_node',
+      'create_node',
+      'create_edge',
+      'create_edge',
+      'create_edge',
+    ]);
+    expect(request.operations[5]).toMatchObject({
+      operation: 'create_edge',
+      id: contextEdgeId,
+      edge_type: 'PROVIDES_CONTEXT',
     });
   });
 

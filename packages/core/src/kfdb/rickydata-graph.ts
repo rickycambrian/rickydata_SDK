@@ -28,6 +28,19 @@ export enum GraphEntityKind {
   UnderstandingSummary = 'UnderstandingSummary',
   CodeConcept = 'CodeConcept',
   DesignDecision = 'DesignDecision',
+  RickydataProductEntity = 'RickydataProductEntity',
+  RoadmapItem = 'RoadmapItem',
+  EvidenceRecord = 'EvidenceRecord',
+  PriorityScoreSnapshot = 'PriorityScoreSnapshot',
+  AlignmentReviewItem = 'AlignmentReviewItem',
+  DecisionRecord = 'DecisionRecord',
+  RoadmapSnapshot = 'RoadmapSnapshot',
+  AgentContextPack = 'AgentContextPack',
+  EvidenceRequirement = 'EvidenceRequirement',
+  EvidenceBundle = 'EvidenceBundle',
+  ReleaseGate = 'ReleaseGate',
+  LearningItem = 'LearningItem',
+  BenchmarkRunProof = 'BenchmarkRunProof',
 }
 
 export enum GraphEdgeType {
@@ -53,6 +66,20 @@ export enum GraphEdgeType {
   ProjectedToKfdb = 'PROJECTED_TO_KFDB',
   SyncedToRelay = 'SYNCED_TO_RELAY',
   Summarizes = 'SUMMARIZES',
+  AboutProductEntity = 'ABOUT_PRODUCT_ENTITY',
+  RequiresEvidence = 'REQUIRES_EVIDENCE',
+  SatisfiesRequirement = 'SATISFIES_REQUIREMENT',
+  BundlesEvidence = 'BUNDLES_EVIDENCE',
+  CapturesPriority = 'CAPTURES_PRIORITY',
+  ReviewedForAlignment = 'REVIEWED_FOR_ALIGNMENT',
+  RecordsDecision = 'RECORDS_DECISION',
+  SnapshotsRoadmap = 'SNAPSHOTS_ROADMAP',
+  ProvidesContext = 'PROVIDES_CONTEXT',
+  GatesRelease = 'GATES_RELEASE',
+  CapturesLearning = 'CAPTURES_LEARNING',
+  SatisfiesWorkIntent = 'SATISFIES_WORK_INTENT',
+  ProvenByBenchmark = 'PROVEN_BY_BENCHMARK',
+  GeneratedBySession = 'GENERATED_BY_SESSION',
 }
 
 export type RickydataGraphPrimitiveValue =
@@ -136,6 +163,19 @@ const ENTITY_ID_PARTS: Record<GraphEntityKind, string[]> = {
   [GraphEntityKind.UnderstandingSummary]: ['repo_id', 'commit_sha', 'scope', 'summary_hash'],
   [GraphEntityKind.CodeConcept]: ['repo_id', 'concept_name', 'source_hash'],
   [GraphEntityKind.DesignDecision]: ['repo_id', 'decision_id'],
+  [GraphEntityKind.RickydataProductEntity]: ['repo_id', 'product_entity_id'],
+  [GraphEntityKind.RoadmapItem]: ['repo_id', 'roadmap_item_id'],
+  [GraphEntityKind.EvidenceRecord]: ['repo_id', 'evidence_record_id'],
+  [GraphEntityKind.PriorityScoreSnapshot]: ['repo_id', 'subject_id', 'snapshot_id'],
+  [GraphEntityKind.AlignmentReviewItem]: ['repo_id', 'review_item_id'],
+  [GraphEntityKind.DecisionRecord]: ['repo_id', 'decision_record_id'],
+  [GraphEntityKind.RoadmapSnapshot]: ['repo_id', 'roadmap_snapshot_id'],
+  [GraphEntityKind.AgentContextPack]: ['repo_id', 'context_pack_id'],
+  [GraphEntityKind.EvidenceRequirement]: ['repo_id', 'evidence_requirement_id'],
+  [GraphEntityKind.EvidenceBundle]: ['repo_id', 'evidence_bundle_id'],
+  [GraphEntityKind.ReleaseGate]: ['repo_id', 'release_gate_id'],
+  [GraphEntityKind.LearningItem]: ['repo_id', 'learning_item_id'],
+  [GraphEntityKind.BenchmarkRunProof]: ['repo_id', 'benchmark_run_id', 'proof_id'],
 };
 
 export function rickydataGraphContract(): RickydataGraphContract {
