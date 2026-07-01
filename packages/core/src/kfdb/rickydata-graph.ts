@@ -41,6 +41,12 @@ export enum GraphEntityKind {
   ReleaseGate = 'ReleaseGate',
   LearningItem = 'LearningItem',
   BenchmarkRunProof = 'BenchmarkRunProof',
+  /**
+   * memory-v1 (`rickydata.memory.v1`): an open/clarification question the system
+   * should ask a human. The ONE new label the memory contract adds; see
+   * `knowledgeflow_db/specs/MEMORY_V1_SPEC.md` and `./memory-v1.ts`.
+   */
+  OpenQuestion = 'OpenQuestion',
 }
 
 export enum GraphEdgeType {
@@ -176,6 +182,8 @@ const ENTITY_ID_PARTS: Record<GraphEntityKind, string[]> = {
   [GraphEntityKind.ReleaseGate]: ['repo_id', 'release_gate_id'],
   [GraphEntityKind.LearningItem]: ['repo_id', 'learning_item_id'],
   [GraphEntityKind.BenchmarkRunProof]: ['repo_id', 'benchmark_run_id', 'proof_id'],
+  // memory-v1: same `(source_ref, question)` ⇒ same id ⇒ idempotent merge.
+  [GraphEntityKind.OpenQuestion]: ['source_ref', 'question'],
 };
 
 export function rickydataGraphContract(): RickydataGraphContract {

@@ -16,6 +16,19 @@ export {
   rickydataGraphContract,
   rickydataGraphValue,
 } from './rickydata-graph.js';
+export {
+  MEMORY_V1_CONTRACT_VERSION,
+  OPEN_QUESTION_LABEL,
+  MEMORY_V1_NODE_LABELS,
+  MEMORY_V1_EDGE_TYPES,
+  MEMORY_V1_RESERVED_KEYS,
+  isMemoryV1NodeLabel,
+  isMemoryV1EdgeType,
+  assertMemoryV1NodeLabel,
+  assertMemoryV1EdgeType,
+  deriveOpenQuestionId,
+  buildOpenQuestionWriteRequest,
+} from './memory-v1.js';
 export { kfdbValue } from './values.js';
 export {
   generateSharingKeyPair,
@@ -42,6 +55,12 @@ export type {
   RickydataGraphWriteOperation,
   RickydataGraphWriteRequest,
 } from './rickydata-graph.js';
+export type {
+  MemoryV1NodeLabel,
+  MemoryV1EdgeType,
+  OpenQuestionStatus,
+  OpenQuestionInput,
+} from './memory-v1.js';
 
 export type {
   AutoDeriveOptions,
