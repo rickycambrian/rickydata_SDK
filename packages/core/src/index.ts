@@ -121,6 +121,23 @@ export {
   kfdbValue,
   rickydataGraphContract,
   rickydataGraphValue,
+  MEMORY_V1_CONTRACT_VERSION,
+  OPEN_QUESTION_LABEL,
+  MEMORY_V1_NODE_LABELS,
+  MEMORY_V1_EDGE_TYPES,
+  MEMORY_V1_RESERVED_KEYS,
+  isMemoryV1NodeLabel,
+  isMemoryV1EdgeType,
+  assertMemoryV1NodeLabel,
+  assertMemoryV1EdgeType,
+  deriveOpenQuestionId,
+  buildOpenQuestionWriteRequest,
+} from './kfdb/index.js';
+export type {
+  MemoryV1NodeLabel,
+  MemoryV1EdgeType,
+  OpenQuestionStatus,
+  OpenQuestionInput,
 } from './kfdb/index.js';
 export type {
   AgentChatTraceEvent,
