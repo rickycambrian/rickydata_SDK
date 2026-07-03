@@ -384,3 +384,96 @@ export function buildWikiEdgeOp(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// The AKC label registry (SPEC-001 §3) — one guard file owns ALL program labels.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every PRIVATE label the Agentic Knowledge Compiler program may write, across
+ * all phases. Wiki labels (Phase 3) + the ContextPack log node (Phase 4) + the
+ * reflect snapshot (Phase 5/6) + the canvas gate report (Phase 7). Adding a
+ * label is an SDK change by design — the registry IS the schema governance
+ * (there is no engine-side schema to update).
+ */
+export const AKC_PRIVATE_LABELS = [
+  ...WIKI_V1_NODE_LABELS,
+  'RickydataContextPack',
+  'RickydataReflectSnapshot',
+  'RickydataCanvasGateReport',
+] as const;
+
+export type AkcPrivateLabel = (typeof AKC_PRIVATE_LABELS)[number];
+
+export function assertAkcPrivateLabel(label: string): asserts label is AkcPrivateLabel {
+  if (!(AKC_PRIVATE_LABELS as readonly string[]).includes(label)) {
+    throw new Error(
+      `[akc] label "${label}" is not in the AKC private-label registry (${AKC_PRIVATE_LABELS.join(', ')})`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ContextPack log node (SPEC-003 §5, D4: log-only)
+// ---------------------------------------------------------------------------
+
+/** id = uuidv5('context-pack:<anchorKind>:<anchorKey>:<compiledAt>') in the HOME namespace. */
+export function deriveContextPackId(anchorKind: string, anchorKey: string, compiledAt: string): string {
+  return uuidv5(`context-pack:${anchorKind}:${anchorKey}:${compiledAt}`);
+}
+
+export interface ContextPackLogInput {
+  /** 'surface' | 'task' | 'repo' (SPEC-003 §2 anchor kinds; free string for forward-compat). */
+  anchorKind: string;
+  /** The anchor key (stage key, RoadmapItem slug, or repo id). */
+  anchorKey: string;
+  /** ISO-8601 compile timestamp (part of the node id — one log node per compile). */
+  compiledAt: string;
+  /** sha256 hex over the canonical input set (SPEC-003 §3.9). */
+  reproducibilityHash: string;
+  /** ~4 chars/token estimate of the compiled pack. */
+  tokenEstimate: number;
+  /** Which consumer asked ('voice-guide' | 'plugin' | 'canvas' | 'code-delegate' | …). */
+  consumer: string;
+  /** Per-section item counts, JSON-stringified into `section_counts_json`. */
+  sectionCounts: Record<string, number>;
+  /** The pack's `omitted` accounting, JSON-stringified into `omitted_json`. */
+  omitted: Array<{ section: string; count: number; reason: string }>;
+}
+
+/**
+ * The ContextPack LOG node write op (PRIVATE, merge, log-only — never a
+ * retrieval target, so callers pass `skip_embedding: true` on the request).
+ * Records that a pack was compiled, for what, and what the budget dropped —
+ * the pack CONTENT itself is not persisted (D4).
+ */
+export function buildContextPackLogOp(input: ContextPackLogInput): RickydataGraphWriteOperation {
+  assertAkcPrivateLabel('RickydataContextPack');
+  const anchorKind = input.anchorKind.trim();
+  const anchorKey = input.anchorKey.trim();
+  const compiledAt = input.compiledAt.trim();
+  if (!anchorKind || !anchorKey || !compiledAt) {
+    throw new Error('[akc] context-pack log requires anchorKind, anchorKey and compiledAt');
+  }
+  if (!/^[0-9a-f]{64}$/.test(input.reproducibilityHash)) {
+    throw new Error('[akc] reproducibilityHash must be a sha256 hex string');
+  }
+  return {
+    operation: 'create_node',
+    id: deriveContextPackId(anchorKind, anchorKey, compiledAt),
+    label: 'RickydataContextPack',
+    properties: {
+      anchor_kind: s(anchorKind),
+      anchor_key: s(anchorKey),
+      compiled_at: s(compiledAt),
+      reproducibility_hash: s(input.reproducibilityHash),
+      token_estimate: { Integer: Math.max(0, Math.round(input.tokenEstimate)) },
+      consumer: s(input.consumer.trim() || 'unknown'),
+      section_counts_json: s(JSON.stringify(input.sectionCounts)),
+      omitted_json: s(JSON.stringify(input.omitted)),
+      schema_version: s('context-pack/v1'),
+      rickydata_wiki_schema_version: s(WIKI_V1_SCHEMA_STAMP),
+    },
+    mode: 'merge',
+  };
+}

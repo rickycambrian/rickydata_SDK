@@ -250,3 +250,66 @@ describe('buildWikiEdgeOp', () => {
     });
   });
 });
+
+describe('AKC label registry + ContextPack log (SPEC-001 §3, SPEC-003 §5)', async () => {
+  const { AKC_PRIVATE_LABELS, assertAkcPrivateLabel, deriveContextPackId, buildContextPackLogOp } =
+    await import('../src/kfdb/index.js');
+
+  it('registers all program labels and guards the rest', () => {
+    expect(AKC_PRIVATE_LABELS).toEqual([
+      'WikiPage',
+      'WikiClaim',
+      'RickydataContextPack',
+      'RickydataReflectSnapshot',
+      'RickydataCanvasGateReport',
+    ]);
+    expect(() => assertAkcPrivateLabel('RickydataContextPack')).not.toThrow();
+    expect(() => assertAkcPrivateLabel('HomeDecision')).toThrow(/registry/);
+  });
+
+  it('derives byte-stable context-pack ids in the HOME namespace', () => {
+    // Pinned: uuidv5('context-pack:task:akc-p3-wiki-contract:2026-07-03T00:00:00.000Z', HOME ns).
+    const id = deriveContextPackId('task', 'akc-p3-wiki-contract', NOW);
+    expect(id).toBe(deriveContextPackId('task', 'akc-p3-wiki-contract', NOW)); // deterministic
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(deriveContextPackId('surface', 'plan', NOW)).not.toBe(id);
+  });
+
+  it('builds a merge-mode log node with JSON-stringified accounting', () => {
+    const op = buildContextPackLogOp({
+      anchorKind: 'task',
+      anchorKey: 'akc-p3-wiki-contract',
+      compiledAt: NOW,
+      reproducibilityHash: 'a'.repeat(64),
+      tokenEstimate: 1234.6,
+      consumer: 'voice-guide',
+      sectionCounts: { wiki: 3, lessons: 2 },
+      omitted: [{ section: 'lessons', count: 1, reason: 'budget' }],
+    });
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    expect(op.label).toBe('RickydataContextPack');
+    expect(op.mode).toBe('merge');
+    expect(op.id).toBe(deriveContextPackId('task', 'akc-p3-wiki-contract', NOW));
+    expect(op.properties).toMatchObject({
+      anchor_kind: { String: 'task' },
+      token_estimate: { Integer: 1235 },
+      section_counts_json: { String: '{"wiki":3,"lessons":2}' },
+      schema_version: { String: 'context-pack/v1' },
+    });
+  });
+
+  it('rejects a malformed hash and empty anchor', () => {
+    const base = {
+      anchorKind: 'task',
+      anchorKey: 'x',
+      compiledAt: NOW,
+      reproducibilityHash: 'a'.repeat(64),
+      tokenEstimate: 0,
+      consumer: 'plugin',
+      sectionCounts: {},
+      omitted: [],
+    };
+    expect(() => buildContextPackLogOp({ ...base, reproducibilityHash: 'nope' })).toThrow(/sha256/);
+    expect(() => buildContextPackLogOp({ ...base, anchorKey: ' ' })).toThrow(/anchor/);
+  });
+});

@@ -155,6 +155,10 @@ export {
   buildWikiPageWriteOps,
   buildWikiClaimWriteOps,
   buildWikiEdgeOp,
+  AKC_PRIVATE_LABELS,
+  assertAkcPrivateLabel,
+  deriveContextPackId,
+  buildContextPackLogOp,
 } from './kfdb/index.js';
 export type {
   MemoryV1NodeLabel,
@@ -170,6 +174,8 @@ export type {
   WikiFingerprintKind,
   WikiPageInput,
   WikiClaimInput,
+  AkcPrivateLabel,
+  ContextPackLogInput,
   KfdbSemanticSearchRequest,
   KfdbSemanticSearchResponse,
   KfdbSemanticSearchResult,

@@ -53,6 +53,10 @@ export {
   buildWikiPageWriteOps,
   buildWikiClaimWriteOps,
   buildWikiEdgeOp,
+  AKC_PRIVATE_LABELS,
+  assertAkcPrivateLabel,
+  deriveContextPackId,
+  buildContextPackLogOp,
 } from './wiki-v1.js';
 export type {
   WikiV1NodeLabel,
@@ -64,6 +68,8 @@ export type {
   WikiFingerprintKind,
   WikiPageInput,
   WikiClaimInput,
+  AkcPrivateLabel,
+  ContextPackLogInput,
 } from './wiki-v1.js';
 export { kfdbValue } from './values.js';
 export {
