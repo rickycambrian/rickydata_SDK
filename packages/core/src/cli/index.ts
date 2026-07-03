@@ -18,6 +18,7 @@ import { createKfdbCommands } from './commands/kfdb.js';
 import { createTrackingCommands } from './commands/tracking.js';
 import { createInitCommand } from './commands/init.js';
 import { createSpecialistCommands } from './commands/specialist.js';
+import { createBenchCommands } from './commands/bench.js';
 import { toCliError } from './errors.js';
 import { CLI_VERSION } from './version.js';
 import { handleResume } from './commands/resume.js';
@@ -49,6 +50,7 @@ export function createProgram(configManager?: ConfigManager, credentialStore?: C
   program.addCommand(createKfdbCommands(config, store));
   program.addCommand(createTrackingCommands(config, store));
   program.addCommand(createSpecialistCommands(config, store));
+  program.addCommand(createBenchCommands(config, store));
 
   return program;
 }

@@ -74,6 +74,7 @@
   },
   "bin": {
     "rickydata": "./bin/rickydata.js",
+    "rickydata-cli": "./bin/rickydata-cli.js",
     "mcpg": "./bin/mcpg.js",
     "rickydata-agent-proxy": "./bin/agent-proxy.js"
   },
