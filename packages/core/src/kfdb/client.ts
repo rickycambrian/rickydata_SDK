@@ -22,6 +22,10 @@ import type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbSemanticSearchRequest,
+  KfdbSemanticSearchResponse,
+  KfdbEmbedEntityRequest,
+  KfdbEmbedEntityResponse,
   KfdbShareNotebookRequest,
   KfdbShareNotebookResponse,
   KfdbSharingKey,
@@ -317,6 +321,48 @@ export class KFDBClient {
       signal: options.signal,
     });
     return this.parseJson<KfdbQueryResponse>(res, 'query SQL');
+  }
+
+  /**
+   * Semantic (HNSW cosine) search over embedded nodes. The tenant/keyspace is
+   * resolved from the auth headers (API key + wallet address + derive session),
+   * so with an active derive session this searches the wallet's PRIVATE
+   * embeddings. Wiki-v1 uses this over WikiPage summaries (SPEC-002 §6).
+   */
+  async semanticSearch(request: KfdbSemanticSearchRequest): Promise<KfdbSemanticSearchResponse> {
+    const payload: Record<string, unknown> = {
+      query: request.query,
+      limit: request.limit ?? 10,
+      threshold: request.threshold ?? 0.0,
+    };
+    if (request.label) payload.label = request.label;
+    if (request.taskType) payload.task_type = request.taskType;
+    const res = await this.request('/api/v1/semantic/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: request.signal,
+    });
+    return this.parseJson<KfdbSemanticSearchResponse>(res, 'semantic search');
+  }
+
+  /**
+   * Embed one graph entity for semantic search. Pass explicit `text` for nodes
+   * whose stored properties are encrypted at rest (the server cannot extract
+   * text from ciphertext) — e.g. a WikiPage's plaintext-safe `summary` (L6:
+   * embedding vectors are NOT encrypted, so the text must be secret-free).
+   */
+  async embedEntity(request: KfdbEmbedEntityRequest): Promise<KfdbEmbedEntityResponse> {
+    const payload: Record<string, unknown> = { label: request.label, node_id: request.nodeId };
+    if (request.text != null) payload.text = request.text;
+    if (request.properties) payload.properties = request.properties;
+    const res = await this.request('/api/v1/entities/embed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: request.signal,
+    });
+    return this.parseJson<KfdbEmbedEntityResponse>(res, 'embed entity');
   }
 
   async explainKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbExplainResponse> {

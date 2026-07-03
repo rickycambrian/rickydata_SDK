@@ -308,3 +308,53 @@ export interface KfdbSharedNotebookGroupKey {
 export interface KfdbListSharedNotebookGroupKeysResponse {
   keys: KfdbSharedNotebookGroupKey[];
 }
+
+// ---------------------------------------------------------------------------
+// Semantic search + entity embedding (wiki-v1 retrieval seam, SPEC-002 §6)
+// ---------------------------------------------------------------------------
+
+/** POST /api/v1/semantic/search — tenant/keyspace resolved from auth headers. */
+export interface KfdbSemanticSearchRequest {
+  query: string;
+  /** Optional node label filter (e.g. "WikiPage"). */
+  label?: string;
+  limit?: number;
+  /** Minimum similarity threshold (0.0–1.0). */
+  threshold?: number;
+  /** Query-embedding task type (e.g. "RETRIEVAL_QUERY"). */
+  taskType?: string;
+  signal?: AbortSignal;
+}
+
+export interface KfdbSemanticSearchResult {
+  id: string;
+  labels: string[];
+  properties: Record<string, unknown>;
+  similarity: number;
+}
+
+export interface KfdbSemanticSearchResponse {
+  results: KfdbSemanticSearchResult[];
+  total_hits: number;
+  embedding_dimensions: number;
+  embedding_model: string;
+  took_ms: number;
+}
+
+/**
+ * POST /api/v1/entities/embed — embed one graph entity. Pass explicit `text`
+ * when the node's stored properties are encrypted at rest (the server cannot
+ * extract text from ciphertext).
+ */
+export interface KfdbEmbedEntityRequest {
+  label: string;
+  nodeId: string;
+  text?: string;
+  /** Which properties to embed when `text` is absent (default: auto-detect). */
+  properties?: string[];
+  signal?: AbortSignal;
+}
+
+export interface KfdbEmbedEntityResponse {
+  [key: string]: unknown;
+}
