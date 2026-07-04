@@ -9,10 +9,14 @@ import {
   assertWikiV1NodeLabel,
   assertWikiV1EdgeType,
   normalizeWikiClaimText,
+  sha256Hex,
   deriveWikiPageId,
   deriveWikiClaimId,
+  deriveWikiClaimIdV1Legacy,
+  deriveWikiRevisionId,
   buildWikiPageWriteOps,
   buildWikiClaimWriteOps,
+  buildWikiRevisionWriteOps,
   buildWikiEdgeOp,
 } from '../src/kfdb/index.js';
 
@@ -21,7 +25,7 @@ const NOW = '2026-07-03T00:00:00.000Z';
 describe('wiki-v1 registry guard', () => {
   it('registers exactly the wiki-v1 vocabulary', () => {
     expect(WIKI_V1_CONTRACT_VERSION).toBe('rickydata.wiki.v1');
-    expect([...WIKI_V1_NODE_LABELS]).toEqual(['WikiPage', 'WikiClaim']);
+    expect([...WIKI_V1_NODE_LABELS]).toEqual(['WikiPage', 'WikiClaim', 'WikiRevision']);
     expect([...WIKI_V1_EDGE_TYPES]).toEqual([
       'HAS_CLAIM',
       'CITES',
@@ -32,6 +36,8 @@ describe('wiki-v1 registry guard', () => {
       'ABOUT',
       'SUPERSEDES',
       'VERIFIED_BY',
+      'CURRENT_REVISION',
+      'REVISION_OF',
     ]);
   });
 
@@ -68,18 +74,46 @@ describe('wiki-v1 id derivation (byte-compatible with rickydata_home)', () => {
     expect(normalizeWikiClaimText('KFDB requires UUID edge ids')).toBe('KFDB requires UUID edge ids');
   });
 
-  it('derives the pinned WikiClaim id (pageSlug + sha256 hash12 of normalized text)', () => {
-    const id = deriveWikiClaimId('edge-id-derivation', 'The  legacy   pipe template works live.');
-    expect(id).toBe('828c9a94-fa8b-5a71-91d3-ea5f13f6ddd4');
+  it('derives GLOBAL page-independent WikiClaim ids (v1.1: sha256 hash24 of normalized text)', () => {
+    const id = deriveWikiClaimId('The  legacy   pipe template works live.');
     // Same sentence, different whitespace → same claim node (merge).
-    expect(deriveWikiClaimId('edge-id-derivation', ' The legacy pipe template works live. ')).toBe(id);
-    // Same sentence on another page → a different claim (page-scoped truth).
-    expect(deriveWikiClaimId('kfdb-write-scope', 'The legacy pipe template works live.')).not.toBe(id);
+    expect(deriveWikiClaimId(' The legacy pipe template works live. ')).toBe(id);
+    // v1.1: claim identity is page-INDEPENDENT — the id derives from text alone,
+    // so the same sentence anywhere in the wiki is ONE node (dedup + rename-safety).
+    const hash24 = sha256Hex(normalizeWikiClaimText('The legacy pipe template works live.')).slice(0, 24);
+    expect(hash24).toHaveLength(24);
+    // Different sentence → different node.
+    expect(deriveWikiClaimId('KFDB requires UUID edge ids.')).not.toBe(id);
+    // Case is semantic — distinct casing stays distinct.
+    expect(deriveWikiClaimId('the legacy pipe template works live.')).not.toBe(id);
+  });
+
+  it('freezes the v1.0 page-scoped derivation byte-exact for the migration script', () => {
+    // Pinned against the pre-v1.1 deriveWikiClaimId(pageSlug, text) output —
+    // scripts/migrate-wiki-v1_1.ts reads legacy nodes by these ids.
+    const legacy = deriveWikiClaimIdV1Legacy('edge-id-derivation', 'The  legacy   pipe template works live.');
+    expect(legacy).toBe('828c9a94-fa8b-5a71-91d3-ea5f13f6ddd4');
+    expect(deriveWikiClaimIdV1Legacy('edge-id-derivation', ' The legacy pipe template works live. ')).toBe(legacy);
+    // Legacy ids WERE page-scoped — a different page yields a different id.
+    expect(deriveWikiClaimIdV1Legacy('kfdb-write-scope', 'The legacy pipe template works live.')).not.toBe(legacy);
+    // And the global v1.1 id differs from the legacy one (migration is a real rewrite).
+    expect(deriveWikiClaimId('The legacy pipe template works live.')).not.toBe(legacy);
+  });
+
+  it('derives WikiRevision ids from pageSlug + body hash (idempotent re-apply)', () => {
+    const body = '# Edge-id derivation\n\nTwo templates exist…';
+    const hash = sha256Hex(body);
+    const id = deriveWikiRevisionId('edge-id-derivation', hash);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(deriveWikiRevisionId('edge-id-derivation', hash)).toBe(id); // deterministic
+    expect(deriveWikiRevisionId('edge-id-derivation', sha256Hex(body + ' '))).not.toBe(id);
+    expect(deriveWikiRevisionId('another-page', hash)).not.toBe(id);
+    expect(() => deriveWikiRevisionId('edge-id-derivation', 'not-a-hash')).toThrow(/sha256/);
   });
 
   it('derives CANONICAL concatenated edge ids (no pipe delimiter)', () => {
     const pageId = deriveWikiPageId('edge-id-derivation');
-    const claimId = deriveWikiClaimId('edge-id-derivation', 'The legacy pipe template works live.');
+    const claimId = deriveWikiClaimIdV1Legacy('edge-id-derivation', 'The legacy pipe template works live.');
     const op = buildWikiEdgeOp(pageId, 'HAS_CLAIM', claimId, { now: NOW });
     expect(op.operation).toBe('create_edge');
     if (op.operation !== 'create_edge') throw new Error('expected create_edge');
@@ -139,6 +173,24 @@ describe('buildWikiPageWriteOps', () => {
       /secret/i,
     );
   });
+
+  it('omits sensitivity/embedding_allowed when absent, writes them when provided (v1.1)', () => {
+    const bare = buildWikiPageWriteOps(page, { now: NOW })[0]!;
+    if (bare.operation !== 'create_node') throw new Error('expected create_node');
+    expect(bare.properties).not.toHaveProperty('sensitivity');
+    expect(bare.properties).not.toHaveProperty('embedding_allowed');
+
+    const full = buildWikiPageWriteOps(
+      { ...page, sensitivity: 'restricted', embeddingAllowed: false },
+      { now: NOW },
+    )[0]!;
+    if (full.operation !== 'create_node') throw new Error('expected create_node');
+    expect(full.properties).toMatchObject({
+      sensitivity: { String: 'restricted' },
+      embedding_allowed: { Boolean: false },
+    });
+    expect(() => buildWikiPageWriteOps({ ...page, sensitivity: 'public' as never })).toThrow(/sensitivity/);
+  });
 });
 
 describe('buildWikiClaimWriteOps (confidence rubric, L4)', () => {
@@ -156,7 +208,7 @@ describe('buildWikiClaimWriteOps (confidence rubric, L4)', () => {
     const op = ops[0]!;
     if (op.operation !== 'create_node') throw new Error('expected create_node');
     expect(op.label).toBe('WikiClaim');
-    expect(op.id).toBe(deriveWikiClaimId(claim.pageSlug, claim.text));
+    expect(op.id).toBe(deriveWikiClaimId(claim.text));
     expect(op.properties).toMatchObject({
       page_slug: { String: 'edge-id-derivation' },
       text: { String: 'The legacy pipe template works live.' },
@@ -177,7 +229,39 @@ describe('buildWikiClaimWriteOps (confidence rubric, L4)', () => {
     const op = ops[0]!;
     if (op.operation !== 'create_node') throw new Error('expected create_node');
     expect(op.properties['text']).toEqual({ String: 'The legacy pipe template works live.' });
-    expect(op.id).toBe(deriveWikiClaimId(claim.pageSlug, claim.text));
+    expect(op.id).toBe(deriveWikiClaimId(claim.text));
+  });
+
+  it('omits the v1.1 props entirely when not provided (partial-merge-preserve)', () => {
+    const ops = buildWikiClaimWriteOps(claim, { now: NOW });
+    const op = ops[0]!;
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    expect(op.properties).not.toHaveProperty('quote_excerpt');
+    expect(op.properties).not.toHaveProperty('source_digest');
+    expect(op.properties).not.toHaveProperty('sensitivity');
+  });
+
+  it('writes quote_excerpt/source_digest/sensitivity when provided (v1.1 support-lite)', () => {
+    const digest = 'sha256:' + 'ab'.repeat(32);
+    const ops = buildWikiClaimWriteOps(
+      { ...claim, quoteExcerpt: 'the legacy pipe template is frozen to its deployed modules', sourceDigest: digest, sensitivity: 'restricted' },
+      { now: NOW },
+    );
+    const op = ops[0]!;
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    expect(op.properties).toMatchObject({
+      quote_excerpt: { String: 'the legacy pipe template is frozen to its deployed modules' },
+      source_digest: { String: digest },
+      sensitivity: { String: 'restricted' },
+    });
+  });
+
+  it('rejects an over-cap quote_excerpt, malformed source_digest, and bogus sensitivity', () => {
+    expect(() => buildWikiClaimWriteOps({ ...claim, quoteExcerpt: 'x'.repeat(301) })).toThrow(/quote_excerpt/);
+    expect(() => buildWikiClaimWriteOps({ ...claim, quoteExcerpt: 'x'.repeat(300) })).not.toThrow();
+    expect(() => buildWikiClaimWriteOps({ ...claim, sourceDigest: 'ab'.repeat(32) })).toThrow(/source_digest/);
+    expect(() => buildWikiClaimWriteOps({ ...claim, sourceDigest: 'sha256:zz' })).toThrow(/source_digest/);
+    expect(() => buildWikiClaimWriteOps({ ...claim, sensitivity: 'secret' as never })).toThrow(/sensitivity/);
   });
 
   it('enforces the discrete rubric: EXTRACTED must be 1.0', () => {
@@ -231,6 +315,69 @@ describe('buildWikiClaimWriteOps (confidence rubric, L4)', () => {
   });
 });
 
+describe('buildWikiRevisionWriteOps (v1.1 immutable snapshots, §3.5)', () => {
+  const body = '# Edge-id derivation\n\nTwo templates exist…';
+  const revision = {
+    pageSlug: 'edge-id-derivation',
+    bodyMd: body,
+    bodySha256: sha256Hex(body),
+    summary: 'How rickydata derives deterministic KFDB edge ids; canonical vs frozen legacy template.',
+    createdBy: 'manual-seed/1',
+  };
+
+  it('builds a merge create_node whose id IS the content hash (idempotent re-apply)', () => {
+    const ops = buildWikiRevisionWriteOps(revision, { now: NOW });
+    expect(ops).toHaveLength(1);
+    const op = ops[0]!;
+    expect(op).toMatchObject({ operation: 'create_node', label: 'WikiRevision', mode: 'merge' });
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    expect(op.id).toBe(deriveWikiRevisionId('edge-id-derivation', sha256Hex(body)));
+    expect(op.properties).toMatchObject({
+      page_slug: { String: 'edge-id-derivation' },
+      body_md: { String: body },
+      body_sha256: { String: sha256Hex(body) },
+      summary: { String: revision.summary },
+      created_at: { String: NOW },
+      created_by: { String: 'manual-seed/1' },
+      compiler_run_id: { Null: null },
+      diff_ref: { Null: null },
+      rickydata_wiki_schema_version: { String: 'v1' },
+    });
+    // Same body re-applied → same op id (the immutability law needs no update path).
+    expect((buildWikiRevisionWriteOps(revision, { now: NOW })[0] as { id: string }).id).toBe(op.id);
+  });
+
+  it('stamps compiler provenance when compiler-applied', () => {
+    const op = buildWikiRevisionWriteOps(
+      { ...revision, createdBy: 'wiki-compiler/0.1.0', compilerRunId: 'run-123', diffRef: 'wiki-update:edge-id-derivation:run-123' },
+      { now: NOW },
+    )[0]!;
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    expect(op.properties).toMatchObject({
+      created_by: { String: 'wiki-compiler/0.1.0' },
+      compiler_run_id: { String: 'run-123' },
+      diff_ref: { String: 'wiki-update:edge-id-derivation:run-123' },
+    });
+  });
+
+  it('THROWS when body_sha256 does not match sha256(body_md) — never a lying snapshot', () => {
+    expect(() =>
+      buildWikiRevisionWriteOps({ ...revision, bodySha256: sha256Hex(body + ' tampered') }),
+    ).toThrow(/body_sha256 mismatch/);
+    expect(() => buildWikiRevisionWriteOps({ ...revision, bodySha256: 'nope' })).toThrow(/mismatch/);
+  });
+
+  it('requires slug, body, summary and created_by; keeps the summary secret-free', () => {
+    expect(() => buildWikiRevisionWriteOps({ ...revision, pageSlug: ' ' })).toThrow(/page_slug/);
+    expect(() => buildWikiRevisionWriteOps({ ...revision, bodyMd: ' ', bodySha256: sha256Hex(' ') })).toThrow(/body_md/);
+    expect(() => buildWikiRevisionWriteOps({ ...revision, summary: ' ' })).toThrow(/summary/);
+    expect(() => buildWikiRevisionWriteOps({ ...revision, createdBy: '' })).toThrow(/created_by/);
+    expect(() =>
+      buildWikiRevisionWriteOps({ ...revision, summary: 'the key is 0x' + 'ab'.repeat(32) }),
+    ).toThrow(/secret/i);
+  });
+});
+
 describe('buildWikiEdgeOp', () => {
   it('refuses unregistered edge types and empty endpoints', () => {
     const a = deriveWikiPageId('a-page');
@@ -259,6 +406,7 @@ describe('AKC label registry + ContextPack log (SPEC-001 §3, SPEC-003 §5)', as
     expect(AKC_PRIVATE_LABELS).toEqual([
       'WikiPage',
       'WikiClaim',
+      'WikiRevision',
       'RickydataContextPack',
       'RickydataReflectSnapshot',
       'RickydataCanvasGateReport',
@@ -284,6 +432,9 @@ describe('AKC label registry + ContextPack log (SPEC-001 §3, SPEC-003 §5)', as
       tokenEstimate: 1234.6,
       consumer: 'voice-guide',
       sectionCounts: { wiki: 3, lessons: 2 },
+      selectedItems: [
+        { section: 'wiki', id: 'edge-id-derivation', contentHash: 'abc123def456', tokenEstimate: 320 },
+      ],
       omitted: [{ section: 'lessons', count: 1, reason: 'budget' }],
     });
     if (op.operation !== 'create_node') throw new Error('expected create_node');
@@ -298,7 +449,38 @@ describe('AKC label registry + ContextPack log (SPEC-001 §3, SPEC-003 §5)', as
     });
   });
 
-  it('rejects a malformed hash and empty anchor', () => {
+  it('round-trips the v1.1 selected-items manifest as snake_case wire JSON (SPEC-003 §5)', () => {
+    const op = buildContextPackLogOp({
+      anchorKind: 'surface',
+      anchorKey: 'plan',
+      compiledAt: NOW,
+      reproducibilityHash: 'b'.repeat(64),
+      tokenEstimate: 900,
+      consumer: 'plugin',
+      sectionCounts: { wiki: 2 },
+      selectedItems: [
+        { section: 'wiki', id: 'edge-id-derivation', contentHash: 'abc123def456', rankReason: 'verified-first', tokenEstimate: 320 },
+        { section: 'decisions', id: 'canvas-approval:r1:a1', contentHash: '0011aabbccdd', tokenEstimate: 80 },
+      ],
+      omitted: [
+        { section: 'wiki', count: 3, reason: 'budget' },
+        { section: 'wiki', id: 'kfdb-write-scope', reason: 'budget' }, // high-rank omission identity
+      ],
+    });
+    if (op.operation !== 'create_node') throw new Error('expected create_node');
+    const selected = JSON.parse((op.properties['selected_items_json'] as { String: string }).String);
+    expect(selected).toEqual([
+      { section: 'wiki', id: 'edge-id-derivation', content_hash: 'abc123def456', rank_reason: 'verified-first', token_estimate: 320 },
+      { section: 'decisions', id: 'canvas-approval:r1:a1', content_hash: '0011aabbccdd', token_estimate: 80 },
+    ]);
+    const omitted = JSON.parse((op.properties['omitted_json'] as { String: string }).String);
+    expect(omitted).toEqual([
+      { section: 'wiki', count: 3, reason: 'budget' },
+      { section: 'wiki', id: 'kfdb-write-scope', reason: 'budget' },
+    ]);
+  });
+
+  it('rejects a malformed hash, empty anchor, and an unaccounted selected item', () => {
     const base = {
       anchorKind: 'task',
       anchorKey: 'x',
@@ -307,9 +489,16 @@ describe('AKC label registry + ContextPack log (SPEC-001 §3, SPEC-003 §5)', as
       tokenEstimate: 0,
       consumer: 'plugin',
       sectionCounts: {},
+      selectedItems: [],
       omitted: [],
     };
     expect(() => buildContextPackLogOp({ ...base, reproducibilityHash: 'nope' })).toThrow(/sha256/);
     expect(() => buildContextPackLogOp({ ...base, anchorKey: ' ' })).toThrow(/anchor/);
+    expect(() =>
+      buildContextPackLogOp({
+        ...base,
+        selectedItems: [{ section: 'wiki', id: ' ', contentHash: 'abc123def456', tokenEstimate: 1 }],
+      }),
+    ).toThrow(/selected item/);
   });
 });

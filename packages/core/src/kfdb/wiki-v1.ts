@@ -2,9 +2,10 @@
  * kfdb/wiki-v1.ts — the `rickydata.wiki.v1` writer library + label-registry guard.
  *
  * The LLM Wiki contract (rickydata_home docs/specs/SPEC-002-llm-wiki.md): the
- * persistent, compounding knowledge artifact for the rickydata stack. Two node
- * labels (WikiPage, WikiClaim), nine edge types, PRIVATE scope only, merge-mode
- * writes, type-wrapped values. Design laws enforced here at build time:
+ * persistent, compounding knowledge artifact for the rickydata stack. Three
+ * node labels (WikiPage, WikiClaim, WikiRevision — v1.1), eleven edge types,
+ * PRIVATE scope only, merge-mode writes, type-wrapped values. Design laws
+ * enforced here at build time:
  *
  *   - L4 provenance: every claim carries the confidence triad
  *     (EXTRACTED 1.0 | INFERRED ∈ {0.95,0.85,0.75,0.65,0.55} | AMBIGUOUS ∈ [0.1,0.3])
@@ -40,7 +41,7 @@ export const WIKI_V1_SCHEMA_STAMP = 'v1';
  */
 export const WIKI_V1_NAMESPACE = '6f3a1e2c-9b47-5d8a-bc11-7e0f2a9d4c63';
 
-export const WIKI_V1_NODE_LABELS = ['WikiPage', 'WikiClaim'] as const;
+export const WIKI_V1_NODE_LABELS = ['WikiPage', 'WikiClaim', 'WikiRevision'] as const;
 
 export const WIKI_V1_EDGE_TYPES = [
   'HAS_CLAIM', // WikiPage → WikiClaim (ownership)
@@ -50,8 +51,10 @@ export const WIKI_V1_EDGE_TYPES = [
   'SUPPORTS', // WikiClaim → WikiClaim (corroboration)
   'REFINES', // WikiPage → WikiPage (narrower refines broader)
   'ABOUT', // WikiPage → Project|Feature|UseCase|RickydataProductEntity|RoadmapItem
-  'SUPERSEDES', // WikiPage(new) → WikiPage(old)
+  'SUPERSEDES', // WikiPage(new) → WikiPage(old) · WikiRevision(new) → WikiRevision(old) (v1.1 revision chain)
   'VERIFIED_BY', // WikiClaim → EvidenceRecord|BenchmarkRunProof (Phase 8)
+  'CURRENT_REVISION', // WikiPage → WikiRevision (v1.1 — exactly one per live page; re-pointed atomically on apply)
+  'REVISION_OF', // WikiRevision → WikiPage (v1.1 — every revision back-links its page)
 ] as const;
 
 export type WikiV1NodeLabel = (typeof WIKI_V1_NODE_LABELS)[number];
@@ -77,6 +80,13 @@ export type WikiFingerprintKind = (typeof WIKI_FINGERPRINT_KINDS)[number];
 
 /** Soft target ≤ ~600 chars; hard error above 700 (the retrieval surface must stay a summary). */
 export const WIKI_SUMMARY_MAX_CHARS = 700;
+
+/** v1.1 sensitivity-lite (SPEC-002 §13.4): `internal` (default) | `restricted`. */
+export const WIKI_SENSITIVITIES = ['internal', 'restricted'] as const;
+export type WikiSensitivity = (typeof WIKI_SENSITIVITIES)[number];
+
+/** v1.1 support-lite (SPEC-002 §3.2): quote_excerpt is a verbatim excerpt, hard cap 300 chars. */
+export const WIKI_QUOTE_EXCERPT_MAX_CHARS = 300;
 
 // ---------------------------------------------------------------------------
 // The guard (L7)
@@ -130,10 +140,15 @@ function uuidv5(name: string, namespace = WIKI_V1_NAMESPACE): string {
 /**
  * Claim-text normalization: trim + collapse internal whitespace runs to single
  * spaces. Case is PRESERVED (distinct casing can be semantically distinct).
- * The same sentence on the same page always merges to one node.
+ * The same sentence anywhere in the wiki always merges to one node (v1.1).
  */
 export function normalizeWikiClaimText(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
+}
+
+/** sha256 of `text` as lowercase hex (the revision identity + digest helper). */
+export function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 export function deriveWikiPageId(slug: string): string {
@@ -142,13 +157,47 @@ export function deriveWikiPageId(slug: string): string {
   return uuidv5(`WikiPage:${s}`);
 }
 
-export function deriveWikiClaimId(pageSlug: string, text: string): string {
+/**
+ * v1.1 GLOBAL claim id (SPEC-002 §3.2): uuidv5(`WikiClaim:<hash24>`) where
+ * hash24 = first 24 hex chars of sha256 over the NORMALIZED claim text. Claim
+ * identity is page-INDEPENDENT — the same sentence anywhere in the wiki is ONE
+ * node; page membership lives on HAS_CLAIM edges. Rename-safety: superseding
+ * or renaming a page re-links HAS_CLAIM without changing claim ids, so
+ * VERIFIED_BY/CONTRADICTS/SUPPORTS history survives renames.
+ */
+export function deriveWikiClaimId(text: string): string {
+  const normalized = normalizeWikiClaimText(text);
+  if (!normalized) throw new Error('[wiki-v1] claim text must not be empty');
+  const hash24 = sha256Hex(normalized).slice(0, 24);
+  return uuidv5(`WikiClaim:${hash24}`);
+}
+
+/**
+ * FROZEN v1.0 page-scoped claim derivation — migration-script use ONLY
+ * (scripts/migrate-wiki-v1_1.ts reads legacy nodes by this id to rewrite them
+ * onto the v1.1 global ids). Never call from a write path.
+ */
+export function deriveWikiClaimIdV1Legacy(pageSlug: string, text: string): string {
   const slug = pageSlug.trim();
   if (!slug) throw new Error('[wiki-v1] page slug must not be empty');
   const normalized = normalizeWikiClaimText(text);
   if (!normalized) throw new Error('[wiki-v1] claim text must not be empty');
   const hash12 = createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 12);
   return uuidv5(`WikiClaim:${slug}:${hash12}`);
+}
+
+/**
+ * v1.1 WikiRevision id (SPEC-002 §3.5): uuidv5(`WikiRevision:<pageSlug>:<bodySha256>`).
+ * Identical re-apply of the same body merges to the same node (idempotent no-op).
+ */
+export function deriveWikiRevisionId(pageSlug: string, bodySha256: string): string {
+  const slug = pageSlug.trim();
+  if (!slug) throw new Error('[wiki-v1] page slug must not be empty');
+  const hash = bodySha256.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) {
+    throw new Error('[wiki-v1] revision body_sha256 must be a sha256 hex string');
+  }
+  return uuidv5(`WikiRevision:${slug}:${hash}`);
 }
 
 /** Canonical concatenated edge id — byte-equal to home's canonicalEdgeId. */
@@ -195,6 +244,23 @@ function assertSecretFreeSummary(summary: string): void {
   }
 }
 
+function assertWikiSensitivity(sensitivity: string): asserts sensitivity is WikiSensitivity {
+  if (!(WIKI_SENSITIVITIES as readonly string[]).includes(sensitivity)) {
+    throw new Error(
+      `[wiki-v1] invalid sensitivity "${sensitivity}" (expected ${WIKI_SENSITIVITIES.join(' | ')})`,
+    );
+  }
+}
+
+/** v1.1 source_digest shape: `sha256:<hex>` over the full normalized source-atom text. */
+function assertSourceDigestShape(sourceDigest: string): void {
+  if (!/^sha256:[0-9a-f]{64}$/.test(sourceDigest)) {
+    throw new Error(
+      `[wiki-v1] source_digest must be \`sha256:<64 lowercase hex>\` (got "${sourceDigest}").`,
+    );
+  }
+}
+
 export interface WikiPageInput {
   /** Identity key — stable kebab slug for the page's life. */
   slug: string;
@@ -218,6 +284,17 @@ export interface WikiPageInput {
   lastCompiledAt?: string;
   /** e.g. `wiki-compiler/0.1.0`, `manual-seed/1`. */
   compilerVersion: string;
+  /**
+   * v1.1 (§13.4): `restricted` pages are excluded from packs whose consumer
+   * crosses the trust boundary. Written ONLY when provided (partial-merge-
+   * preserve: absent means the live prop is untouched).
+   */
+  sensitivity?: WikiSensitivity;
+  /**
+   * v1.1 (§13.4): when `false` the summary is NEVER embedded (the writer
+   * refuses, not just skips). Written ONLY when provided.
+   */
+  embeddingAllowed?: boolean;
 }
 
 export function buildWikiPageWriteOps(
@@ -255,6 +332,14 @@ export function buildWikiPageWriteOps(
     compiler_version: s(page.compilerVersion),
     rickydata_wiki_schema_version: s(WIKI_V1_SCHEMA_STAMP),
   };
+  // v1.1 fields ride ONLY when provided — merge-mode leaves absent props untouched.
+  if (page.sensitivity !== undefined) {
+    assertWikiSensitivity(page.sensitivity);
+    properties['sensitivity'] = s(page.sensitivity);
+  }
+  if (page.embeddingAllowed !== undefined) {
+    properties['embedding_allowed'] = { Boolean: page.embeddingAllowed };
+  }
 
   return [{ operation: 'create_node', id: deriveWikiPageId(slug), label: 'WikiPage', properties, mode: 'merge' }];
 }
@@ -274,6 +359,19 @@ export interface WikiClaimInput {
   sourceRef: string;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * v1.1 support-lite (§3.2/§13.3): ≤300-char VERBATIM excerpt from the cited
+   * source that grounds the claim. Written ONLY when provided.
+   */
+  quoteExcerpt?: string;
+  /**
+   * v1.1: `sha256:<hex>` of the full normalized source-atom text the claim was
+   * extracted from (computed by the compiler, never LLM-self-reported).
+   * Written ONLY when provided.
+   */
+  sourceDigest?: string;
+  /** v1.1 (§13.4). Written ONLY when provided. */
+  sensitivity?: WikiSensitivity;
 }
 
 function assertConfidenceRubric(tier: WikiConfidenceTier, score: number): void {
@@ -347,12 +445,104 @@ export function buildWikiClaimWriteOps(
     updated_at: s(claim.updatedAt ?? now),
     rickydata_wiki_schema_version: s(WIKI_V1_SCHEMA_STAMP),
   };
+  // v1.1 fields ride ONLY when provided — merge-mode leaves absent props untouched.
+  if (claim.quoteExcerpt !== undefined) {
+    if (claim.quoteExcerpt.length > WIKI_QUOTE_EXCERPT_MAX_CHARS) {
+      throw new Error(
+        `[wiki-v1] quote_excerpt is ${claim.quoteExcerpt.length} chars — the verbatim excerpt is hard-capped at ${WIKI_QUOTE_EXCERPT_MAX_CHARS} (§3.2 support-lite).`,
+      );
+    }
+    properties['quote_excerpt'] = s(claim.quoteExcerpt);
+  }
+  if (claim.sourceDigest !== undefined) {
+    assertSourceDigestShape(claim.sourceDigest);
+    properties['source_digest'] = s(claim.sourceDigest);
+  }
+  if (claim.sensitivity !== undefined) {
+    assertWikiSensitivity(claim.sensitivity);
+    properties['sensitivity'] = s(claim.sensitivity);
+  }
 
   return [
     {
       operation: 'create_node',
-      id: deriveWikiClaimId(pageSlug, text),
+      id: deriveWikiClaimId(text),
       label: 'WikiClaim',
+      properties,
+      mode: 'merge',
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// WikiRevision (v1.1, SPEC-002 §3.5) — immutable page-body snapshots
+// ---------------------------------------------------------------------------
+
+export interface WikiRevisionInput {
+  /** Owning page slug. */
+  pageSlug: string;
+  /** The FULL body at this revision (S2D-encrypted like page bodies). */
+  bodyMd: string;
+  /** sha256 hex of `bodyMd` — identity component; MUST match (throws otherwise). */
+  bodySha256: string;
+  /** The summary at this revision (secret-free; NOT embedded — the live page is the retrieval surface). */
+  summary: string;
+  /** `wiki-compiler/<ver>` | `manual-seed/<n>` | `migration/<script>`. */
+  createdBy: string;
+  /** ISO-8601 apply time; defaults to now. */
+  createdAt?: string;
+  /** The RickydataWikiCompilerRun id when compiler-applied. */
+  compilerRunId?: string | null;
+  /** `wiki-update:<pageSlug>:<runId>` — joins the HITL item + HomeDecision that approved it. */
+  diffRef?: string | null;
+}
+
+/**
+ * One merge-mode create_node for the immutable revision snapshot. Identical
+ * re-apply of the same body derives the same id and merges (idempotent no-op)
+ * — the immutability law (§3.5 extends L1) holds because the id IS the
+ * content hash: a different body is a DIFFERENT node, never a mutation.
+ * Revisions are provenance, not retrieval targets — callers always pass
+ * `skip_embedding: true` on the write request.
+ */
+export function buildWikiRevisionWriteOps(
+  input: WikiRevisionInput,
+  opts: { now?: string } = {},
+): RickydataGraphWriteOperation[] {
+  assertWikiV1NodeLabel('WikiRevision');
+  const now = opts.now ?? new Date().toISOString();
+  const pageSlug = input.pageSlug.trim();
+  if (!pageSlug) throw new Error('[wiki-v1] revision page_slug must not be empty');
+  if (!input.bodyMd.trim()) throw new Error('[wiki-v1] revision body_md must not be empty');
+  if (!input.summary.trim()) throw new Error('[wiki-v1] revision summary must not be empty');
+  assertSecretFreeSummary(input.summary);
+  if (!input.createdBy.trim()) throw new Error('[wiki-v1] revision created_by must not be empty');
+  const bodySha256 = input.bodySha256.trim().toLowerCase();
+  const actual = sha256Hex(input.bodyMd);
+  if (bodySha256 !== actual) {
+    throw new Error(
+      `[wiki-v1] revision body_sha256 mismatch: got "${input.bodySha256}", sha256(body_md) is "${actual}" — ` +
+        'the revision id IS the content hash; refusing to mint a lying snapshot.',
+    );
+  }
+
+  const properties: Record<string, RickydataGraphPrimitiveValue> = {
+    page_slug: s(pageSlug),
+    body_md: s(input.bodyMd),
+    body_sha256: s(bodySha256),
+    summary: s(input.summary),
+    created_at: s(input.createdAt ?? now),
+    created_by: s(input.createdBy.trim()),
+    compiler_run_id: input.compilerRunId == null ? nul() : s(input.compilerRunId),
+    diff_ref: input.diffRef == null ? nul() : s(input.diffRef),
+    rickydata_wiki_schema_version: s(WIKI_V1_SCHEMA_STAMP),
+  };
+
+  return [
+    {
+      operation: 'create_node',
+      id: deriveWikiRevisionId(pageSlug, bodySha256),
+      label: 'WikiRevision',
       properties,
       mode: 'merge',
     },
@@ -422,6 +612,33 @@ export function deriveContextPackId(anchorKind: string, anchorKey: string, compi
   return uuidv5(`context-pack:${anchorKind}:${anchorKey}:${compiledAt}`);
 }
 
+/**
+ * v1.1 manifest entry (SPEC-003 §5): one per pack item across all sections.
+ * `id` is the item's durable identity (wiki slug, claim id, decision
+ * source_ref_id, sheet id, trap name, question id); `contentHash` = sha256
+ * (12-hex prefix) of the item text AS RENDERED into the pack.
+ */
+export interface ContextPackSelectedItem {
+  section: string;
+  id: string;
+  contentHash: string;
+  rankReason?: string;
+  tokenEstimate: number;
+}
+
+/**
+ * v1.1 omitted entry (SPEC-003 §5): keeps the per-section counts and adds,
+ * for budget-pruned items that ranked ABOVE at least one included peer, their
+ * id — silent high-rank omissions are the manifest's blind spot otherwise.
+ */
+export interface ContextPackOmittedEntry {
+  section: string;
+  count?: number;
+  reason: string;
+  /** High-rank omission identity (present only for above-an-included-peer drops). */
+  id?: string;
+}
+
 export interface ContextPackLogInput {
   /** 'surface' | 'task' | 'repo' (SPEC-003 §2 anchor kinds; free string for forward-compat). */
   anchorKind: string;
@@ -437,8 +654,15 @@ export interface ContextPackLogInput {
   consumer: string;
   /** Per-section item counts, JSON-stringified into `section_counts_json`. */
   sectionCounts: Record<string, number>;
-  /** The pack's `omitted` accounting, JSON-stringified into `omitted_json`. */
-  omitted: Array<{ section: string; count: number; reason: string }>;
+  /**
+   * v1.1 REQUIRED ordered manifest — every included pack item, JSON-stringified
+   * into `selected_items_json` (spec wire keys: section, id, content_hash,
+   * rank_reason?, token_estimate). Same reproducibility hash ⟺ same ordered
+   * selected items. Callers must account for EVERY included item.
+   */
+  selectedItems: ContextPackSelectedItem[];
+  /** The pack's `omitted` accounting (v1.1 shape), JSON-stringified into `omitted_json`. */
+  omitted: ContextPackOmittedEntry[];
 }
 
 /**
@@ -458,6 +682,22 @@ export function buildContextPackLogOp(input: ContextPackLogInput): RickydataGrap
   if (!/^[0-9a-f]{64}$/.test(input.reproducibilityHash)) {
     throw new Error('[akc] reproducibilityHash must be a sha256 hex string');
   }
+  if (!Array.isArray(input.selectedItems)) {
+    throw new Error('[akc] selectedItems is required (v1.1 manifest — account for every included item)');
+  }
+  for (const item of input.selectedItems) {
+    if (!item.section?.trim() || !item.id?.trim() || !item.contentHash?.trim()) {
+      throw new Error('[akc] every selected item needs section, id and contentHash');
+    }
+  }
+  // Wire shape per SPEC-003 §5: snake_case keys, rank_reason only when present.
+  const selectedItemsWire = input.selectedItems.map((item) => ({
+    section: item.section,
+    id: item.id,
+    content_hash: item.contentHash,
+    ...(item.rankReason !== undefined ? { rank_reason: item.rankReason } : {}),
+    token_estimate: item.tokenEstimate,
+  }));
   return {
     operation: 'create_node',
     id: deriveContextPackId(anchorKind, anchorKey, compiledAt),
@@ -470,6 +710,7 @@ export function buildContextPackLogOp(input: ContextPackLogInput): RickydataGrap
       token_estimate: { Integer: Math.max(0, Math.round(input.tokenEstimate)) },
       consumer: s(input.consumer.trim() || 'unknown'),
       section_counts_json: s(JSON.stringify(input.sectionCounts)),
+      selected_items_json: s(JSON.stringify(selectedItemsWire)),
       omitted_json: s(JSON.stringify(input.omitted)),
       schema_version: s('context-pack/v1'),
       rickydata_wiki_schema_version: s(WIKI_V1_SCHEMA_STAMP),
