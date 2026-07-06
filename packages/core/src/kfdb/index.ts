@@ -30,6 +30,20 @@ export {
   buildOpenQuestionWriteRequest,
 } from './memory-v1.js';
 export {
+  ISSUE_SCORING_SCHEMA,
+  ISSUE_SCORING_KIND,
+  ISSUE_SCORING_WRITER,
+  ISSUE_SCORING_LABEL,
+  ISSUE_SCORING_SCAN_KQL,
+  HOME_ISSUE_SCORING_NAMESPACE,
+  issueScoreSnapshotDayId,
+  issueScoreSnapshotId,
+  decodeIssueScoreRows,
+  latestIssueScores,
+  topIssueCandidates,
+} from './issue-scoring-v1.js';
+export type { IssueScoreSnapshotRow, IssueScoreFilters } from './issue-scoring-v1.js';
+export {
   WIKI_V1_CONTRACT_VERSION,
   WIKI_V1_SCHEMA_STAMP,
   WIKI_V1_NAMESPACE,
