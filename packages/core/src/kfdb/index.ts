@@ -161,6 +161,8 @@ export type {
   KfdbSemanticSearchResult,
   KfdbEmbedEntityRequest,
   KfdbEmbedEntityResponse,
+  KfdbEmbedEntitiesBatchRequest,
+  KfdbEmbedEntitiesBatchResponse,
   KfdbDeleteEntityEmbeddingRequest,
   KfdbDeleteEntityEmbeddingResponse,
   KfdbShareNotebookRequest,

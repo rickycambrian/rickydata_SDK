@@ -359,6 +359,19 @@ export interface KfdbEmbedEntityResponse {
   [key: string]: unknown;
 }
 
+/** POST /api/v1/entities/embed/batch — embed up to 100 entities in one model batch. */
+export interface KfdbEmbedEntitiesBatchRequest {
+  entities: Array<Omit<KfdbEmbedEntityRequest, 'signal'>>;
+  signal?: AbortSignal;
+}
+
+export interface KfdbEmbedEntitiesBatchResponse {
+  embedded: number;
+  errors: number;
+  results: KfdbEmbedEntityResponse[];
+  error_details: Array<Record<string, unknown>>;
+}
+
 /** DELETE /api/v1/entities/embed — idempotently remove one entity vector. */
 export interface KfdbDeleteEntityEmbeddingRequest {
   label: string;

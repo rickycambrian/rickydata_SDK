@@ -26,6 +26,8 @@ import type {
   KfdbSemanticSearchResponse,
   KfdbEmbedEntityRequest,
   KfdbEmbedEntityResponse,
+  KfdbEmbedEntitiesBatchRequest,
+  KfdbEmbedEntitiesBatchResponse,
   KfdbDeleteEntityEmbeddingRequest,
   KfdbDeleteEntityEmbeddingResponse,
   KfdbShareNotebookRequest,
@@ -365,6 +367,28 @@ export class KFDBClient {
       signal: request.signal,
     });
     return this.parseJson<KfdbEmbedEntityResponse>(res, 'embed entity');
+  }
+
+  /** Embed up to 100 graph entities through KFDB's model-level batch path. */
+  async embedEntitiesBatch(
+    request: KfdbEmbedEntitiesBatchRequest,
+  ): Promise<KfdbEmbedEntitiesBatchResponse> {
+    const entities = request.entities.map((entity) => {
+      const payload: Record<string, unknown> = {
+        label: entity.label,
+        node_id: entity.nodeId,
+      };
+      if (entity.text != null) payload.text = entity.text;
+      if (entity.properties) payload.properties = entity.properties;
+      return payload;
+    });
+    const res = await this.request('/api/v1/entities/embed/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entities }),
+      signal: request.signal,
+    });
+    return this.parseJson<KfdbEmbedEntitiesBatchResponse>(res, 'embed entities batch');
   }
 
   /**

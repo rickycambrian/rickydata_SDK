@@ -116,6 +116,49 @@ describe('KFDBClient', () => {
     });
   });
 
+  it('embeds entities through one typed batch request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ embedded: 2, errors: 0, results: [], error_details: [] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    const response = await client.embedEntitiesBatch({
+      entities: [
+        {
+          label: 'WikiPage',
+          nodeId: '550e8400-e29b-41d4-a716-446655440000',
+          text: 'Incremental semantic maintenance',
+        },
+        {
+          label: 'OpenQuestion',
+          nodeId: '550e8400-e29b-41d4-a716-446655440001',
+          properties: ['question'],
+        },
+      ],
+    });
+
+    expect(response).toMatchObject({ embedded: 2, errors: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/embed/batch`);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      entities: [
+        {
+          label: 'WikiPage',
+          node_id: '550e8400-e29b-41d4-a716-446655440000',
+          text: 'Incremental semantic maintenance',
+        },
+        {
+          label: 'OpenQuestion',
+          node_id: '550e8400-e29b-41d4-a716-446655440001',
+          properties: ['question'],
+        },
+      ],
+    });
+  });
+
   it('exports KFDB property wrapper helpers', () => {
     expect(kfdbValue.string('hello')).toEqual({ String: 'hello' });
     expect(kfdbValue.integer(42)).toEqual({ Integer: 42 });
