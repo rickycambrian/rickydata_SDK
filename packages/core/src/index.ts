@@ -191,6 +191,8 @@ export type {
   KfdbSemanticSearchResult,
   KfdbEmbedEntityRequest,
   KfdbEmbedEntityResponse,
+  KfdbDeleteEntityEmbeddingRequest,
+  KfdbDeleteEntityEmbeddingResponse,
 } from './kfdb/index.js';
 export type {
   AgentChatTraceEvent,

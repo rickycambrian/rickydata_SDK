@@ -26,6 +26,8 @@ import type {
   KfdbSemanticSearchResponse,
   KfdbEmbedEntityRequest,
   KfdbEmbedEntityResponse,
+  KfdbDeleteEntityEmbeddingRequest,
+  KfdbDeleteEntityEmbeddingResponse,
   KfdbShareNotebookRequest,
   KfdbShareNotebookResponse,
   KfdbSharingKey,
@@ -363,6 +365,22 @@ export class KFDBClient {
       signal: request.signal,
     });
     return this.parseJson<KfdbEmbedEntityResponse>(res, 'embed entity');
+  }
+
+  /**
+   * Idempotently remove one graph entity's semantic embedding. The request
+   * follows the same tenant/derive-session routing as embedEntity.
+   */
+  async deleteEntityEmbedding(
+    request: KfdbDeleteEntityEmbeddingRequest,
+  ): Promise<KfdbDeleteEntityEmbeddingResponse> {
+    const res = await this.request('/api/v1/entities/embed', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: request.label, node_id: request.nodeId }),
+      signal: request.signal,
+    });
+    return this.parseJson<KfdbDeleteEntityEmbeddingResponse>(res, 'delete entity embedding');
   }
 
   async explainKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbExplainResponse> {

@@ -358,3 +358,19 @@ export interface KfdbEmbedEntityRequest {
 export interface KfdbEmbedEntityResponse {
   [key: string]: unknown;
 }
+
+/** DELETE /api/v1/entities/embed — idempotently remove one entity vector. */
+export interface KfdbDeleteEntityEmbeddingRequest {
+  label: string;
+  nodeId: string;
+  signal?: AbortSignal;
+}
+
+export interface KfdbDeleteEntityEmbeddingResponse {
+  node_id: string;
+  label: string;
+  file_id: string;
+  file_path: string;
+  /** True when a stored vector was removed; false when it was already absent. */
+  deleted: boolean;
+}

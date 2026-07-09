@@ -90,6 +90,32 @@ describe('KFDBClient', () => {
     expect(fetchMock.mock.calls[2][0]).toBe(`${BASE}/api/v1/query/explain`);
   });
 
+  it('deletes an entity embedding through the tenant-aware endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        label: 'WikiPage',
+        node_id: '550e8400-e29b-41d4-a716-446655440000',
+        deleted: true,
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    const response = await client.deleteEntityEmbedding({
+      label: 'WikiPage',
+      nodeId: '550e8400-e29b-41d4-a716-446655440000',
+    });
+
+    expect(response.deleted).toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/embed`);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(String(init.body))).toEqual({
+      label: 'WikiPage',
+      node_id: '550e8400-e29b-41d4-a716-446655440000',
+    });
+  });
+
   it('exports KFDB property wrapper helpers', () => {
     expect(kfdbValue.string('hello')).toEqual({ String: 'hello' });
     expect(kfdbValue.integer(42)).toEqual({ Integer: 42 });
