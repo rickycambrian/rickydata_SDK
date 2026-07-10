@@ -92,6 +92,10 @@ export interface KfdbWriteResponse {
 
 export interface KfdbQueryOptions {
   scope?: KfdbQueryScope;
+  /** API response page size (server default: 100, maximum: 10,000). */
+  pageSize?: number;
+  /** Opaque cursor returned by a previous query response. */
+  cursor?: string;
   signal?: AbortSignal;
 }
 

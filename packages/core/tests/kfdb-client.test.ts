@@ -90,6 +90,27 @@ describe('KFDBClient', () => {
     expect(fetchMock.mock.calls[2][0]).toBe(`${BASE}/api/v1/query/explain`);
   });
 
+  it('passes explicit KQL page sizing and cursors to the query endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ data: [], has_more: false }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    await client.queryKql('MATCH (n:Note) RETURN n.*', {
+      scope: 'private',
+      pageSize: 5_000,
+      cursor: 'ledger-page-2',
+    });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      query: 'MATCH (n:Note) RETURN n.*',
+      scope: 'private',
+      page_size: 5_000,
+      cursor: 'ledger-page-2',
+    });
+  });
+
   it('deletes an entity embedding through the tenant-aware endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({

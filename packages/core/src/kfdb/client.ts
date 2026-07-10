@@ -306,6 +306,8 @@ export class KFDBClient {
   async queryKql(query: string, options: KfdbQueryOptions = {}): Promise<KfdbQueryResponse> {
     const payload: Record<string, unknown> = { query };
     if (options.scope) payload.scope = options.scope;
+    if (options.pageSize != null) payload.page_size = options.pageSize;
+    if (options.cursor) payload.cursor = options.cursor;
     const res = await this.request('/api/v1/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
