@@ -140,7 +140,7 @@ describe('KFDBClient', () => {
 
     expect(response).toMatchObject({ embedded: 2, errors: 0 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/embed/batch`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/embed/model-batch`);
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({

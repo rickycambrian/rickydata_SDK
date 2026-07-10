@@ -382,7 +382,7 @@ export class KFDBClient {
       if (entity.properties) payload.properties = entity.properties;
       return payload;
     });
-    const res = await this.request('/api/v1/entities/embed/batch', {
+    const res = await this.request('/api/v1/entities/embed/model-batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entities }),
