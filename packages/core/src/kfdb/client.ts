@@ -40,6 +40,7 @@ import type {
   KfdbUpsertSharedNotebookGroupKeyRequest,
   KfdbWriteRequest,
   KfdbWriteResponse,
+  KfdbImmutableClaimResponse,
 } from './types.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
@@ -297,6 +298,44 @@ export class KFDBClient {
       body: JSON.stringify(payload),
     });
     return this.parseJson<KfdbWriteResponse>(res, 'write');
+  }
+
+  /**
+   * Acquire a permanent, tenant-private key exactly once using KFDB's Scylla
+   * SERIAL LWT seam. The reserved namespace cannot be overwritten or deleted.
+   * A false result includes the winning value so callers may recover only when
+   * an already-fsynced owner nonce matches exactly.
+   */
+  async claimImmutablePrivateKv(key: string, value: unknown): Promise<KfdbImmutableClaimResponse> {
+    if (!key.startsWith('immutable-claim:') || key.length > 1024) {
+      throw new Error('Immutable private KV claim key must start with immutable-claim: and fit 1024 characters');
+    }
+    if (this.walletAddress && !this.deriveSessionId) {
+      throw new Error(
+        'Sign-to-derive session required for immutable private KV claims when walletAddress is configured. ' +
+        'Call setDeriveSession() before claiming.',
+      );
+    }
+    const res = await this.request('/api/v1/kv', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value, if_absent: true }),
+    });
+    const wire = await this.parseJson<{
+      success: boolean;
+      message: string;
+      acquired?: unknown;
+      existing_value?: unknown;
+    }>(res, 'claim immutable private KV key');
+    if (typeof wire.acquired !== 'boolean') {
+      throw new Error('KFDB immutable private KV claim response omitted its LWT acquired result');
+    }
+    return {
+      success: wire.success,
+      message: wire.message,
+      acquired: wire.acquired,
+      ...(wire.existing_value !== undefined ? { existingValue: wire.existing_value } : {}),
+    };
   }
 
   async writeRickydataGraph(input: RickydataGraphWriteInput): Promise<KfdbWriteResponse> {

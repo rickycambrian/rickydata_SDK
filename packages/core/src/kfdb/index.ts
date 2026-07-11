@@ -144,6 +144,7 @@ export type {
   KfdbFilterEntitiesRequest,
   KfdbGetEntityOptions,
   KfdbLabelInfo,
+  KfdbImmutableClaimResponse,
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,

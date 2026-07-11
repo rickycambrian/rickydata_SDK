@@ -90,6 +90,15 @@ export interface KfdbWriteResponse {
   affected_ids: string[];
 }
 
+/** Result of a SERIAL, tenant-private, immutable KV create-if-absent claim. */
+export interface KfdbImmutableClaimResponse {
+  success: boolean;
+  message: string;
+  acquired: boolean;
+  /** Present when `acquired` is false so an exact owner nonce can recover. */
+  existingValue?: unknown;
+}
+
 export interface KfdbQueryOptions {
   scope?: KfdbQueryScope;
   /** API response page size (server default: 100, maximum: 10,000). */

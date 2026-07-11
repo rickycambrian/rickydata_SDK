@@ -265,6 +265,57 @@ describe('KFDBClient', () => {
     expect(headers.get('x-wallet-address')).toBe(walletAddress);
   });
 
+  it('acquires an immutable private KV claim with derive headers and exact LWT body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ success: true, message: 'claimed', acquired: true }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const walletAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    const client = new KFDBClient({ baseUrl: BASE, apiKey: 'kfdb_api_key', walletAddress });
+    client.setDeriveSession('derive-session', 'c'.repeat(64));
+    const result = await client.claimImmutablePrivateKv(
+      'immutable-claim:private-bench:v1:abc',
+      { ownerNonce: 'd'.repeat(64) },
+    );
+
+    expect(result).toEqual({ success: true, message: 'claimed', acquired: true });
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/kv`);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(String(init.body))).toEqual({
+      key: 'immutable-claim:private-bench:v1:abc',
+      value: { ownerNonce: 'd'.repeat(64) },
+      if_absent: true,
+    });
+    const headers = new Headers((init.headers ?? {}) as HeadersInit);
+    expect(headers.get('x-wallet-address')).toBe(walletAddress);
+    expect(headers.get('x-derive-session-id')).toBe('derive-session');
+  });
+
+  it('returns the immutable winner for exact crash recovery and rejects malformed responses', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        message: 'exists',
+        acquired: false,
+        existing_value: { ownerNonce: 'e'.repeat(64) },
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, message: 'bad' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    await expect(client.claimImmutablePrivateKv('immutable-claim:private-bench:v1:def', {}))
+      .resolves.toEqual({
+        success: true,
+        message: 'exists',
+        acquired: false,
+        existingValue: { ownerNonce: 'e'.repeat(64) },
+      });
+    await expect(client.claimImmutablePrivateKv('immutable-claim:private-bench:v1:ghi', {}))
+      .rejects.toThrow('omitted its LWT acquired result');
+  });
+
   it('writes Codex hook traces through the deterministic KG builder', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({ operations_executed: 5 }),
