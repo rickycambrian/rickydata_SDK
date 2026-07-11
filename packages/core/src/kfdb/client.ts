@@ -41,6 +41,7 @@ import type {
   KfdbWriteRequest,
   KfdbWriteResponse,
   KfdbImmutableClaimResponse,
+  KfdbImmutableValueResponse,
 } from './types.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
@@ -335,6 +336,38 @@ export class KFDBClient {
       message: wire.message,
       acquired: wire.acquired,
       ...(wire.existing_value !== undefined ? { existingValue: wire.existing_value } : {}),
+    };
+  }
+
+  /** Read a tenant-private immutable claim without mutating claim authority. */
+  async getImmutablePrivateKv(key: string): Promise<KfdbImmutableValueResponse> {
+    if (!key.startsWith('immutable-claim:') || key.length > 1024) {
+      throw new Error('Immutable private KV key must start with immutable-claim: and fit 1024 characters');
+    }
+    if (this.walletAddress && !this.deriveSessionId) {
+      throw new Error(
+        'Sign-to-derive session required for immutable private KV reads when walletAddress is configured. ' +
+        'Call setDeriveSession() before reading.',
+      );
+    }
+    const res = await this.request(`/api/v1/kv/${encodeURIComponent(key)}`);
+    const wire = await this.parseJson<{
+      success: boolean;
+      key?: unknown;
+      value?: unknown;
+      updated_at?: unknown;
+    }>(res, 'read immutable private KV key');
+    if (!wire.success) return { found: false };
+    if (wire.key !== key || !Object.prototype.hasOwnProperty.call(wire, 'value')) {
+      throw new Error('KFDB immutable private KV read returned a malformed success row');
+    }
+    if (wire.updated_at !== undefined && typeof wire.updated_at !== 'number') {
+      throw new Error('KFDB immutable private KV read returned a malformed timestamp');
+    }
+    return {
+      found: true,
+      value: wire.value,
+      ...(typeof wire.updated_at === 'number' ? { updatedAt: wire.updated_at } : {}),
     };
   }
 

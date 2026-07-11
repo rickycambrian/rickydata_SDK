@@ -316,6 +316,37 @@ describe('KFDBClient', () => {
       .rejects.toThrow('omitted its LWT acquired result');
   });
 
+  it('reads immutable private KV authority without issuing a mutating request', async () => {
+    const key = 'immutable-claim:private-bench:v1:abc';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        key,
+        value: { ownerNonce: 'f'.repeat(64) },
+        updated_at: 123,
+        message: 'Value retrieved',
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: false, message: 'Key not found' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const walletAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    const client = new KFDBClient({ baseUrl: BASE, apiKey: 'kfdb_api_key', walletAddress });
+    client.setDeriveSession('derive-session', 'a'.repeat(64));
+
+    await expect(client.getImmutablePrivateKv(key)).resolves.toEqual({
+      found: true,
+      value: { ownerNonce: 'f'.repeat(64) },
+      updatedAt: 123,
+    });
+    await expect(client.getImmutablePrivateKv('immutable-claim:private-bench:v1:missing'))
+      .resolves.toEqual({ found: false });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/kv/${encodeURIComponent(key)}`);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
+    const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers as HeadersInit);
+    expect(headers.get('x-derive-session-id')).toBe('derive-session');
+  });
+
   it('writes Codex hook traces through the deterministic KG builder', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({ operations_executed: 5 }),

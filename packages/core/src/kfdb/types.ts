@@ -99,6 +99,13 @@ export interface KfdbImmutableClaimResponse {
   existingValue?: unknown;
 }
 
+/** Strong private read of an immutable KV claim. */
+export interface KfdbImmutableValueResponse {
+  found: boolean;
+  value?: unknown;
+  updatedAt?: number;
+}
+
 export interface KfdbQueryOptions {
   scope?: KfdbQueryScope;
   /** API response page size (server default: 100, maximum: 10,000). */
