@@ -36,6 +36,9 @@ export interface ClaudeCodeHookTrace {
   completedAt: number;
   events: ClaudeCodeHookEventRecord[];
   benchmarkRunId?: string;
+  filesChanged?: number;
+  parentSessionId?: string;
+  initialPrompt?: string;
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-claude-code-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
@@ -267,10 +270,14 @@ export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): 
   const model = trace.model ?? '';
   const modelNodeId = model ? deterministicExecutionId('Model', ['anthropic', model]) : null;
   const executionEngineNodeId = deterministicExecutionId('ExecutionEngine', ['claude-code']);
+  const sessionProperties: Record<string, unknown> = { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt) };
+  if (trace.filesChanged !== undefined) sessionProperties.files_changed = value(trace.filesChanged);
+  if (trace.parentSessionId !== undefined) sessionProperties.parent_session_id = value(trace.parentSessionId);
+  if (trace.initialPrompt !== undefined) sessionProperties.initial_prompt = value(trace.initialPrompt);
   const operations: Array<Record<string, unknown>> = [
     { operation: 'create_node', id: walletNodeId, label: 'WalletTenant', mode: 'merge', properties: { wallet_address: value(wallet), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_node', id: agentNodeId, label: 'Agent', mode: 'merge', properties: { agent_id: value(trace.agentId), schema_version: value(TRACE_SCHEMA_VERSION) } },
-    { operation: 'create_node', id: sessionNodeId, label: 'ClaudeCodeSession', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt) } },
+    { operation: 'create_node', id: sessionNodeId, label: 'ClaudeCodeSession', mode: 'merge', properties: sessionProperties },
     { operation: 'create_node', id: turnNodeId, label: 'ClaudeCodeTurn', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), turn_index: value(trace.turnIndex), model: value(model), provider: value('anthropic'), execution_engine: value('claude-code'), cwd: value(trace.cwd ?? ''), started_at: value(trace.startedAt), completed_at: value(trace.completedAt), event_count: value(trace.events.length), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_edge', id: deterministicExecutionId('OWNS_EXECUTION_SESSION', [walletNodeId, sessionNodeId]), from: walletNodeId, to: sessionNodeId, edge_type: 'OWNS_EXECUTION_SESSION', properties: { source: value('claude-code-hooks') } },
     { operation: 'create_edge', id: deterministicExecutionId('EXECUTES_AGENT', [sessionNodeId, agentNodeId]), from: sessionNodeId, to: agentNodeId, edge_type: 'EXECUTES_AGENT', properties: { agent_id: value(trace.agentId) } },

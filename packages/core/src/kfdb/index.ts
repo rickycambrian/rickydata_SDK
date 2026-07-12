@@ -5,6 +5,13 @@ export { buildClaudeCodeHookTraceOperations, createClaudeCodeHookTraceFixture } 
 export { buildCodexHookTraceOperations, createCodexHookTraceFixture } from './codex-hook-trace.js';
 export { buildHermesHookTraceOperations, createHermesHookTraceFixture } from './hermes-hook-trace.js';
 export {
+  HARNESS_SESSION_KEY_LABEL,
+  SAME_SESSION_EDGE_TYPE,
+  sessionLinkNodeId,
+  buildSessionLinkOperations,
+} from './session-link.js';
+export type { SessionLinkInput, BuildSessionLinkInput } from './session-link.js';
+export {
   GraphEdgeType,
   GraphEntityKind,
   RICKYDATA_GRAPH_NAMESPACE,
