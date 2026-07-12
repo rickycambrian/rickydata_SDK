@@ -1,7 +1,7 @@
 export { KFDBClient } from './client.js';
 export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './derive-session-store.js';
 export { buildAgentChatTraceOperations, createAgentChatTraceFixture } from './agent-chat-trace.js';
-export { buildClaudeCodeHookTraceOperations, createClaudeCodeHookTraceFixture } from './claude-code-hook-trace.js';
+export { buildClaudeCodeHookTraceOperations, createClaudeCodeHookTraceFixture, claudeCodeSessionNodeId } from './claude-code-hook-trace.js';
 export { buildCodexHookTraceOperations, createCodexHookTraceFixture } from './codex-hook-trace.js';
 export { buildHermesHookTraceOperations, createHermesHookTraceFixture } from './hermes-hook-trace.js';
 export {

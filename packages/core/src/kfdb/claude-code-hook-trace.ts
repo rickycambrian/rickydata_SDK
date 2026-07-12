@@ -261,9 +261,22 @@ function addCommandOperation(operations: Array<Record<string, unknown>>, sourceN
   );
 }
 
+/**
+ * Deterministic node ID for the `ClaudeCodeSession` node that
+ * {@link buildClaudeCodeHookTraceOperations} emits for the same trace. Exported
+ * so callers (e.g. rd-plugin flush) can pass it as `fromNodeId` to
+ * `buildSessionLinkOperations` without re-deriving the recipe.
+ */
+export function claudeCodeSessionNodeId(
+  trace: Pick<ClaudeCodeHookTrace, 'walletAddress' | 'agentId' | 'sessionId' | 'claudeSessionId'>,
+): string {
+  const wallet = trace.walletAddress.toLowerCase();
+  return deterministicId('ClaudeCodeSession', [wallet, trace.agentId, trace.sessionId, trace.claudeSessionId]);
+}
+
 export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): Array<Record<string, unknown>> {
   const wallet = trace.walletAddress.toLowerCase();
-  const sessionNodeId = deterministicId('ClaudeCodeSession', [wallet, trace.agentId, trace.sessionId, trace.claudeSessionId]);
+  const sessionNodeId = claudeCodeSessionNodeId(trace);
   const turnNodeId = deterministicId('ClaudeCodeTurn', [wallet, trace.agentId, trace.sessionId, trace.turnIndex, trace.claudeSessionId]);
   const walletNodeId = deterministicExecutionId('WalletTenant', [wallet]);
   const agentNodeId = deterministicExecutionId('Agent', [trace.agentId]);

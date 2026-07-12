@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildClaudeCodeHookTraceOperations, type ClaudeCodeHookTrace } from '../src/kfdb/claude-code-hook-trace.js';
+import { buildClaudeCodeHookTraceOperations, claudeCodeSessionNodeId, type ClaudeCodeHookTrace } from '../src/kfdb/claude-code-hook-trace.js';
 
 function baseTrace(): ClaudeCodeHookTrace {
   return {
@@ -60,6 +60,20 @@ describe('buildClaudeCodeHookTraceOperations pass-through fields', () => {
     expect(props.files_changed).toEqual({ Integer: 3 });
     expect(props.parent_session_id).toEqual({ String: 'p-1' });
     expect(props.initial_prompt).toEqual({ String: 'hello' });
+  });
+
+  it('claudeCodeSessionNodeId matches the session node op id emitted by the builder', () => {
+    const trace = baseTrace();
+    const ops = buildClaudeCodeHookTraceOperations(trace);
+    const node = ops.find((op) => op.label === 'ClaudeCodeSession') as Record<string, unknown>;
+    expect(claudeCodeSessionNodeId(trace)).toBe(node.id);
+  });
+
+  it('claudeCodeSessionNodeId only needs the identity fields (Pick) and is wallet case-insensitive', () => {
+    const trace = baseTrace();
+    const picked = { walletAddress: trace.walletAddress, agentId: trace.agentId, sessionId: trace.sessionId, claudeSessionId: trace.claudeSessionId };
+    const lowerWallet = { ...picked, walletAddress: trace.walletAddress.toLowerCase() };
+    expect(claudeCodeSessionNodeId(picked)).toBe(claudeCodeSessionNodeId(lowerWallet));
   });
 
   it('does not alter existing emitted properties when pass-through fields are absent', () => {
