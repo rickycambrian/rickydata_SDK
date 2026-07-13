@@ -56,6 +56,26 @@ interface MCPToolResult {
   isError?: boolean;
 }
 
+/** Agent Gateway's agent-as-MCP endpoint flattens the first text content block
+ * to a string. Restore the MCP wire shape before forwarding it to clients;
+ * direct MCP servers already return the array form. */
+function normalizeToolResult(result: unknown): MCPToolResult {
+  if (result && typeof result === 'object') {
+    const value = result as { content?: unknown; isError?: unknown };
+    if (Array.isArray(value.content)) return result as MCPToolResult;
+    if (typeof value.content === 'string') {
+      return {
+        content: [{ type: 'text', text: value.content }],
+        ...(typeof value.isError === 'boolean' ? { isError: value.isError } : {}),
+      };
+    }
+  }
+  return {
+    content: [{ type: 'text', text: JSON.stringify({ error: 'Agent Gateway returned an invalid MCP tool result.' }) }],
+    isError: true,
+  };
+}
+
 // ── SSE Parsing ─────────────────────────────────────────────────────────────
 
 function parseSSEJsonRpc(body: string): { result?: unknown; error?: unknown } {
@@ -304,7 +324,7 @@ export class AgentMCPProxy {
         arguments: args,
       });
 
-      return result as MCPToolResult;
+      return normalizeToolResult(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {

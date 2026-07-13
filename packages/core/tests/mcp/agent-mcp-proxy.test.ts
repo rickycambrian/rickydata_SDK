@@ -187,6 +187,40 @@ describe('AgentMCPProxy', () => {
       expect(lastCallBody.params.name).toBe('web_search');
     });
 
+    it('normalizes the Agent Gateway flattened content shape to MCP content blocks', async () => {
+      registry.enableAgent('knowledge-agent');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      fetchSpy
+        .mockResolvedValueOnce(mockFetchResponse(sseResponse({
+          jsonrpc: '2.0', id: 1,
+          result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'knowledge', version: '1' } },
+        })))
+        .mockResolvedValueOnce(mockFetchResponse(sseResponse({
+          jsonrpc: '2.0', id: 2,
+          result: { tools: [{ name: 'session_brief', description: 'Brief' }] },
+        })));
+
+      const proxy = new AgentMCPProxy(GATEWAY, TOKEN, registry);
+      await proxy.handleRequest({ jsonrpc: '2.0', method: 'notifications/initialized' });
+
+      fetchSpy.mockResolvedValueOnce(mockFetchResponse(sseResponse({
+        jsonrpc: '2.0', id: 3,
+        result: { content: '{"pages":[]}', isError: false },
+      })));
+
+      const response = await proxy.handleRequest({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: { name: 'knowledge-agent__session_brief', arguments: {} },
+      });
+
+      expect(response?.result).toEqual({
+        content: [{ type: 'text', text: '{"pages":[]}' }],
+        isError: false,
+      });
+    });
+
     it('returns error for unknown tool namespace', async () => {
       const proxy = new AgentMCPProxy(GATEWAY, TOKEN, registry);
 
