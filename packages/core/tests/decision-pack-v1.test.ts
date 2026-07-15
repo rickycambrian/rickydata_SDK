@@ -26,6 +26,34 @@ describe('rickydata decision-pack v1 contract', () => {
     expect(schema.$defs.ContentArtifactRef.properties.chunkCount.maximum).toBe(4096);
   });
 
+  it('accepts and emits the canonical plan_review decision kind exactly', () => {
+    const schema = JSON.parse(readFileSync(new URL('../contracts/decision-pack-v1.schema.json', import.meta.url), 'utf8'));
+    expect(schema.$defs.DecisionPack.properties.decisionKind.enum).toContain('plan_review');
+
+    const built = buildDecisionPackOperations({
+      walletAddress: '0x0000000000000000000000000000000000000abc',
+      packKey: 'plan-review:plan_test123',
+      packHash: `sha256:${'4'.repeat(64)}`,
+      subject: {
+        nodeId: 'pending-plan-node',
+        label: 'PendingPlan',
+        sourceRef: 'plan-review:plan_test123',
+      },
+      decisionKind: 'plan_review',
+      completeness: 'bounded',
+      requiredSources: [],
+      sourceReceipts: [],
+      artifacts: [],
+      createdAt: '2026-07-15T12:00:00.000Z',
+    });
+
+    expect(built.operations[0]).toMatchObject({
+      operation: 'create_node',
+      label: DecisionPackNodeLabel.DecisionPack,
+      properties: { decision_kind: { String: 'plan_review' } },
+    });
+  });
+
   it('builds deterministic references and immutable private-KV payloads for observable content', () => {
     const first = buildContentArtifactOperations({
       content: '🚀 complete observable prompt',

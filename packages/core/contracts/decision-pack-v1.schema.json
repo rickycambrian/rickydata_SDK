@@ -98,7 +98,7 @@
         "packKey": { "type": "string", "minLength": 1 },
         "packHash": { "$ref": "#/$defs/Sha256" },
         "subject": { "$ref": "#/$defs/CanonicalGraphRef" },
-        "decisionKind": { "enum": ["wiki_change", "canvas_approval", "github_pr", "tool_permission", "roadmap", "other"] },
+        "decisionKind": { "enum": ["wiki_change", "canvas_approval", "github_pr", "plan_review", "tool_permission", "roadmap", "other"] },
         "completeness": { "enum": ["complete", "bounded", "incomplete"] },
         "requiredSources": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "sourceReceipts": { "type": "array", "items": { "$ref": "#/$defs/DecisionSourceReceipt" } },

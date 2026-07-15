@@ -41,7 +41,7 @@ export const DecisionPackEdgeType = {
 
 export type DecisionPackCompleteness = 'complete' | 'bounded' | 'incomplete';
 export type DecisionSourceStatus = 'complete' | 'bounded' | 'incomplete' | 'error' | 'not_configured';
-export type DecisionKind = 'wiki_change' | 'canvas_approval' | 'github_pr' | 'tool_permission' | 'roadmap' | 'other';
+export type DecisionKind = 'wiki_change' | 'canvas_approval' | 'github_pr' | 'plan_review' | 'tool_permission' | 'roadmap' | 'other';
 
 export interface CanonicalGraphRef {
   nodeId: string;
