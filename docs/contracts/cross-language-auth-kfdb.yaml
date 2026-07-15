@@ -584,6 +584,37 @@ components:
           type: integer
         delegationExpiresAt:
           type: integer
+x-rickydata-erc8128:
+  summary: Token-free KFDB auth via ERC-8128 HTTP Message Signatures (RFC 9421 + EIP-191).
+  description: |
+    KFDB (http://34.60.37.158) accepts per-request wallet signatures as its
+    priority-1 auth method. The wallet IS the credential: an unknown wallet is
+    auto-provisioned a tenant with read+write on first request, so no
+    operator-issued API key is needed. Reference implementations:
+    TypeScript `rickydata/kfdb` `signErc8128Request` (this repo,
+    packages/core/src/kfdb/erc8128.ts) and rd-plugin `src/lib/erc8128.ts`;
+    server: knowledgeflow_db `crates/kfdb-api/src/auth/erc8128.rs`.
+  requestHeaders:
+    Signature-Input: 'eth=(@method @path @authority;created={unix};expires={unix};nonce="{nonce}";keyid="erc8128:{chainId}:{address}")'
+    Signature: 'eth=:{base64 of 65-byte r||s||v, v=27/28}:'
+  signatureBase: |
+    "@method": POST
+    "@path": /api/v1/write
+    "@authority": 34.60.37.158
+    "@signature-params": (@method @path @authority;created=...;expires=...;nonce="...";keyid="...")
+  rules:
+    - Covered components are @method @path @authority ONLY. The server verifies
+      with an empty body slice at the middleware layer, so a content-digest
+      header would fail verification — never send one.
+    - No trailing newline after the @signature-params line.
+    - Sign the base bytes with EIP-191 personal_sign (prefix
+      "\x19Ethereum Signed Message:\n{byteLength}", keccak256, secp256k1).
+    - "@authority is URL.host (port only when non-default) — must equal the Host header the HTTP client sends."
+    - created may be backdated a few seconds for clock skew; expires - created
+      must be <= 120s (server max validity; clients use 90s).
+    - Nonces are single-use per keyid. Sign fresh headers for EVERY request;
+      replaying a header pair returns 401 "ERC-8128 nonce replay detected".
+    - chainId is 8453 (Base mainnet) on this platform.
 x-rickydata-notes:
   requestHeadersAfterDerive:
     - X-Wallet-Address

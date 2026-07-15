@@ -1,4 +1,11 @@
 export { KFDBClient } from './client.js';
+export {
+  ERC8128_CHAIN_ID,
+  ERC8128_LABEL,
+  buildErc8128SignatureBase,
+  signErc8128Request,
+} from './erc8128.js';
+export type { Erc8128Headers, Erc8128SignInput } from './erc8128.js';
 export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './derive-session-store.js';
 export { buildAgentChatTraceOperations, createAgentChatTraceFixture } from './agent-chat-trace.js';
 export { buildClaudeCodeHookTraceOperations, buildClaudeCodeHookTraceWriteBundle, createClaudeCodeHookTraceFixture, claudeCodeSessionNodeId } from './claude-code-hook-trace.js';
