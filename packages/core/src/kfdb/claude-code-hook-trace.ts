@@ -1,4 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  buildContentArtifactOperations,
+  buildDecisionObservationOperations,
+  buildContextDeliveryReceiptOperations,
+  type ContentArtifactRef,
+  type ImmutableContentArtifactWrite,
+  type RepositorySnapshot,
+  type ObservableContextDelivery,
+} from './decision-pack-v1.js';
 
 export interface ClaudeCodeHookEventRecord {
   sequence: number;
@@ -22,6 +31,14 @@ export interface ClaudeCodeHookEventRecord {
   stdout?: string;
   stderr?: string;
   durationMs?: number;
+  decisionKind?: 'ask_user' | 'tool_permission';
+  decisionQuestion?: string;
+  decisionOptions?: string[];
+  decisionAnswer?: string;
+  decisionPolicyRef?: string;
+  /** Complete observable hook envelope as received from the harness. */
+  hookPayload?: unknown;
+  contextDelivery?: ObservableContextDelivery;
 }
 
 export interface ClaudeCodeHookTrace {
@@ -39,6 +56,12 @@ export interface ClaudeCodeHookTrace {
   filesChanged?: number;
   parentSessionId?: string;
   initialPrompt?: string;
+  repository?: RepositorySnapshot;
+}
+
+export interface ClaudeCodeHookTraceWriteBundle {
+  operations: Array<Record<string, unknown>>;
+  contentArtifacts: ImmutableContentArtifactWrite[];
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-claude-code-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
@@ -154,7 +177,7 @@ function summarizeCommand(command: string): Record<string, unknown> {
   };
 }
 
-function eventData(event: ClaudeCodeHookEventRecord): Record<string, unknown> {
+function eventData(event: ClaudeCodeHookEventRecord, contentArtifacts: Record<string, ContentArtifactRef>): Record<string, unknown> {
   return {
     hookEventName: event.hookEventName,
     claudeSessionId: event.claudeSessionId,
@@ -177,6 +200,17 @@ function eventData(event: ClaudeCodeHookEventRecord): Record<string, unknown> {
     stdout: event.stdout === undefined ? undefined : summarizePayload(event.stdout),
     stderr: event.stderr === undefined ? undefined : summarizePayload(event.stderr),
     durationMs: event.durationMs,
+    contentArtifacts,
+    decisionKind: event.decisionKind,
+    decisionQuestion: event.decisionQuestion,
+    decisionOptions: event.decisionOptions,
+    decisionAnswer: event.decisionAnswer,
+    decisionPolicyRef: event.decisionPolicyRef,
+    hookPayload: event.hookPayload === undefined ? undefined : summarizePayload(event.hookPayload),
+    contextDelivery: event.contextDelivery === undefined ? undefined : {
+      ...event.contextDelivery,
+      renderedContent: summarizePayload(event.contextDelivery.renderedContent),
+    },
   };
 }
 
@@ -208,7 +242,7 @@ function addWorkspaceOperations(operations: Array<Record<string, unknown>>, sour
 }
 
 function addCodeFileOperations(operations: Array<Record<string, unknown>>, sourceNodeId: string, paths: string[]): void {
-  [...new Set(paths)].slice(0, 50).forEach((filePath) => {
+  [...new Set(paths)].forEach((filePath) => {
     const fileNodeId = deterministicExecutionId('CodeFile', [filePath]);
     operations.push(
       {
@@ -275,6 +309,10 @@ export function claudeCodeSessionNodeId(
 }
 
 export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): Array<Record<string, unknown>> {
+  return buildClaudeCodeHookTraceWriteBundle(trace).operations;
+}
+
+export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace): ClaudeCodeHookTraceWriteBundle {
   const wallet = trace.walletAddress.toLowerCase();
   const sessionNodeId = claudeCodeSessionNodeId(trace);
   const turnNodeId = deterministicId('ClaudeCodeTurn', [wallet, trace.agentId, trace.sessionId, trace.turnIndex, trace.claudeSessionId]);
@@ -283,7 +321,7 @@ export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): 
   const model = trace.model ?? '';
   const modelNodeId = model ? deterministicExecutionId('Model', ['anthropic', model]) : null;
   const executionEngineNodeId = deterministicExecutionId('ExecutionEngine', ['claude-code']);
-  const sessionProperties: Record<string, unknown> = { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt) };
+  const sessionProperties: Record<string, unknown> = { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt), repository: value(trace.repository) };
   if (trace.filesChanged !== undefined) sessionProperties.files_changed = value(trace.filesChanged);
   if (trace.parentSessionId !== undefined) sessionProperties.parent_session_id = value(trace.parentSessionId);
   if (trace.initialPrompt !== undefined) sessionProperties.initial_prompt = value(trace.initialPrompt);
@@ -291,13 +329,33 @@ export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): 
     { operation: 'create_node', id: walletNodeId, label: 'WalletTenant', mode: 'merge', properties: { wallet_address: value(wallet), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_node', id: agentNodeId, label: 'Agent', mode: 'merge', properties: { agent_id: value(trace.agentId), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_node', id: sessionNodeId, label: 'ClaudeCodeSession', mode: 'merge', properties: sessionProperties },
-    { operation: 'create_node', id: turnNodeId, label: 'ClaudeCodeTurn', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), turn_index: value(trace.turnIndex), model: value(model), provider: value('anthropic'), execution_engine: value('claude-code'), cwd: value(trace.cwd ?? ''), started_at: value(trace.startedAt), completed_at: value(trace.completedAt), event_count: value(trace.events.length), schema_version: value(TRACE_SCHEMA_VERSION) } },
+    { operation: 'create_node', id: turnNodeId, label: 'ClaudeCodeTurn', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), turn_index: value(trace.turnIndex), model: value(model), provider: value('anthropic'), execution_engine: value('claude-code'), cwd: value(trace.cwd ?? ''), started_at: value(trace.startedAt), completed_at: value(trace.completedAt), event_count: value(trace.events.length), schema_version: value(TRACE_SCHEMA_VERSION), repository: value(trace.repository) } },
     { operation: 'create_edge', id: deterministicExecutionId('OWNS_EXECUTION_SESSION', [walletNodeId, sessionNodeId]), from: walletNodeId, to: sessionNodeId, edge_type: 'OWNS_EXECUTION_SESSION', properties: { source: value('claude-code-hooks') } },
     { operation: 'create_edge', id: deterministicExecutionId('EXECUTES_AGENT', [sessionNodeId, agentNodeId]), from: sessionNodeId, to: agentNodeId, edge_type: 'EXECUTES_AGENT', properties: { agent_id: value(trace.agentId) } },
     { operation: 'create_edge', id: deterministicId('HAS_CLAUDE_CODE_TURN', [sessionNodeId, turnNodeId]), from: sessionNodeId, to: turnNodeId, edge_type: 'HAS_CLAUDE_CODE_TURN', properties: { turn_index: value(trace.turnIndex) } },
     { operation: 'create_node', id: executionEngineNodeId, label: 'ExecutionEngine', mode: 'merge', properties: { execution_engine: value('claude-code'), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_edge', id: deterministicExecutionId('USES_EXECUTION_ENGINE', [turnNodeId, executionEngineNodeId]), from: turnNodeId, to: executionEngineNodeId, edge_type: 'USES_EXECUTION_ENGINE', properties: { execution_engine: value('claude-code') } },
   ];
+  const contentArtifacts: ImmutableContentArtifactWrite[] = [];
+
+  if (trace.initialPrompt !== undefined) {
+    const initialPromptArtifact = buildContentArtifactOperations({
+      content: trace.initialPrompt,
+      mediaType: 'text/plain; charset=utf-8',
+      observableKind: 'initial-human-prompt',
+      sourceRef: `claude-code:${trace.claudeSessionId}:initial-prompt`,
+    });
+    contentArtifacts.push(...initialPromptArtifact.artifacts);
+    operations.push(...initialPromptArtifact.operations, {
+      operation: 'create_edge',
+      id: deterministicId('INCLUDES_ARTIFACT', [sessionNodeId, initialPromptArtifact.ref.artifactId]),
+      from: sessionNodeId,
+      to: initialPromptArtifact.ref.artifactId,
+      edge_type: 'INCLUDES_ARTIFACT',
+      properties: { role: value('initial-human-prompt'), content_hash: value(initialPromptArtifact.ref.contentHash) },
+    });
+    sessionProperties.initial_prompt_artifact = value(initialPromptArtifact.ref);
+  }
 
   if (modelNodeId) {
     operations.push(
@@ -310,10 +368,50 @@ export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): 
 
   trace.events.forEach((event) => {
     const eventId = deterministicId('ClaudeCodeHookEvent', [turnNodeId, event.sequence, event.hookEventName, event.toolUseId ?? '']);
+    const artifactRefs: Record<string, ContentArtifactRef> = {};
+    const observable: Array<{ role: string; content: string; mediaType: string }> = [];
+    if (event.prompt !== undefined) observable.push({ role: 'human-prompt', content: event.prompt, mediaType: 'text/plain; charset=utf-8' });
+    if (event.toolInput !== undefined) observable.push({ role: 'tool-input', content: stableJson(event.toolInput), mediaType: 'application/json' });
+    if (event.toolResponse !== undefined) observable.push({ role: 'tool-response', content: stableJson(event.toolResponse), mediaType: 'application/json' });
+    if (event.stdout !== undefined) observable.push({ role: 'tool-stdout', content: event.stdout, mediaType: 'text/plain; charset=utf-8' });
+    if (event.stderr !== undefined) observable.push({ role: 'tool-stderr', content: event.stderr, mediaType: 'text/plain; charset=utf-8' });
+    if (event.decisionQuestion !== undefined) observable.push({ role: 'decision-question', content: event.decisionQuestion, mediaType: 'text/plain; charset=utf-8' });
+    if (event.decisionOptions !== undefined) observable.push({ role: 'decision-options', content: stableJson(event.decisionOptions), mediaType: 'application/json' });
+    if (event.decisionAnswer !== undefined) observable.push({ role: 'decision-answer', content: event.decisionAnswer, mediaType: 'text/plain; charset=utf-8' });
+    if (event.hookPayload !== undefined) observable.push({ role: 'hook-envelope', content: stableJson(event.hookPayload), mediaType: 'application/json' });
+    if (event.contextDelivery !== undefined) observable.push({ role: 'rendered-context', content: event.contextDelivery.renderedContent, mediaType: 'text/plain; charset=utf-8' });
+    for (const item of observable) {
+      const built = buildContentArtifactOperations({
+        content: item.content,
+        mediaType: item.mediaType,
+        observableKind: item.role,
+        sourceRef: `claude-code:${trace.claudeSessionId}:${trace.turnIndex}:${event.sequence}:${item.role}`,
+      });
+      artifactRefs[item.role] = built.ref;
+      contentArtifacts.push(...built.artifacts);
+      operations.push(...built.operations);
+    }
     operations.push(
-      { operation: 'create_node', id: eventId, label: 'ClaudeCodeHookEvent', mode: 'merge', properties: { event_index: value(event.sequence), event_type: value(event.hookEventName), cwd: value(event.cwd ?? trace.cwd ?? ''), tool_name: value(event.toolName ?? ''), tool_use_id: value(event.toolUseId ?? ''), data: value(eventData(event)), schema_version: value(TRACE_SCHEMA_VERSION) } },
+      { operation: 'create_node', id: eventId, label: 'ClaudeCodeHookEvent', mode: 'merge', properties: { event_index: value(event.sequence), event_type: value(event.hookEventName), cwd: value(event.cwd ?? trace.cwd ?? ''), tool_name: value(event.toolName ?? ''), tool_use_id: value(event.toolUseId ?? ''), data: value(eventData(event, artifactRefs)), schema_version: value(TRACE_SCHEMA_VERSION) } },
       { operation: 'create_edge', id: deterministicId('EMITTED_CLAUDE_CODE_HOOK', [turnNodeId, eventId]), from: turnNodeId, to: eventId, edge_type: 'EMITTED_CLAUDE_CODE_HOOK', properties: { event_index: value(event.sequence) } },
     );
+    for (const [role, artifact] of Object.entries(artifactRefs)) {
+      operations.push({ operation: 'create_edge', id: deterministicId('INCLUDES_ARTIFACT', [eventId, artifact.artifactId]), from: eventId, to: artifact.artifactId, edge_type: 'INCLUDES_ARTIFACT', properties: { role: value(role), content_hash: value(artifact.contentHash) } });
+    }
+    if (event.contextDelivery && artifactRefs['rendered-context']) {
+      const receipt = buildContextDeliveryReceiptOperations({
+        deliveryKey: event.contextDelivery.deliveryKey,
+        session: { nodeId: sessionNodeId, label: 'ClaudeCodeSession' },
+        packId: event.contextDelivery.packId,
+        packHash: event.contextDelivery.packHash,
+        renderedArtifact: artifactRefs['rendered-context'],
+        interface: event.contextDelivery.interface,
+        coverageStatus: event.contextDelivery.coverageStatus,
+        omissions: event.contextDelivery.omissions,
+        deliveredAt: event.contextDelivery.deliveredAt,
+      });
+      operations.push(...receipt.operations);
+    }
     addWorkspaceOperations(operations, eventId, event.cwd ?? trace.cwd);
     const toolNodeId = event.toolName ? deterministicId('ClaudeCodeToolUse', [turnNodeId, event.toolUseId ?? event.sequence, event.toolName]) : null;
     if (toolNodeId) {
@@ -325,9 +423,44 @@ export function buildClaudeCodeHookTraceOperations(trace: ClaudeCodeHookTrace): 
     const projectionSourceId = toolNodeId ?? eventId;
     addCodeFileOperations(operations, projectionSourceId, [...collectFilePaths(event.toolInput), ...collectFilePaths(event.toolResponse)]);
     addCommandOperation(operations, projectionSourceId, extractCommand(event.toolInput));
+
+    const decisionKind = event.decisionKind ?? (event.permissionDecision !== undefined
+      ? 'tool_permission'
+      : event.toolName && /askuser|ask_user/i.test(event.toolName)
+        ? 'ask_user'
+        : null);
+    if (decisionKind) {
+      let questionArtifact = artifactRefs['decision-question'] ?? artifactRefs['tool-input'] ?? artifactRefs['human-prompt'];
+      if (!questionArtifact) {
+        const built = buildContentArtifactOperations({
+          content: stableJson({ toolName: event.toolName, reason: event.reason }),
+          mediaType: 'application/json',
+          observableKind: 'decision-question',
+          sourceRef: `claude-code:${trace.claudeSessionId}:${trace.turnIndex}:${event.sequence}:decision-question`,
+        });
+        questionArtifact = built.ref;
+        contentArtifacts.push(...built.artifacts);
+        operations.push(...built.operations);
+      }
+      const observation = buildDecisionObservationOperations({
+        observationKey: `${decisionKind}:${event.toolUseId ?? event.sequence}`,
+        session: { nodeId: sessionNodeId, label: 'ClaudeCodeSession' },
+        kind: decisionKind,
+        interface: 'claude-code',
+        questionArtifact,
+        optionsArtifact: artifactRefs['decision-options'] ?? artifactRefs['tool-input'],
+        rationaleArtifact: artifactRefs['decision-answer'],
+        optionsPresented: event.decisionOptions ?? [],
+        selectedOption: event.decisionAnswer ?? event.permissionDecision ?? (event.toolResponse === undefined ? undefined : stableJson(event.toolResponse)),
+        actor: 'human',
+        policyRef: event.decisionPolicyRef ?? event.permissionDecisionReason,
+        observedAt: new Date(event.receivedAt).toISOString(),
+      });
+      operations.push(...observation.operations);
+    }
   });
 
-  return operations;
+  return { operations, contentArtifacts };
 }
 
 export function createClaudeCodeHookTraceFixture(walletAddress: string): ClaudeCodeHookTrace {

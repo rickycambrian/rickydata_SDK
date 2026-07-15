@@ -41,6 +41,11 @@ export enum GraphEntityKind {
   ReleaseGate = 'ReleaseGate',
   LearningItem = 'LearningItem',
   BenchmarkRunProof = 'BenchmarkRunProof',
+  DecisionPack = 'DecisionPack',
+  DecisionSourceReceipt = 'DecisionSourceReceipt',
+  ContextDeliveryReceipt = 'ContextDeliveryReceipt',
+  DecisionObservation = 'DecisionObservation',
+  ContentArtifact = 'ContentArtifact',
   /**
    * memory-v1 (`rickydata.memory.v1`): an open/clarification question the system
    * should ask a human. The ONE new label the memory contract adds; see
@@ -86,6 +91,15 @@ export enum GraphEdgeType {
   SatisfiesWorkIntent = 'SATISFIES_WORK_INTENT',
   ProvenByBenchmark = 'PROVEN_BY_BENCHMARK',
   GeneratedBySession = 'GENERATED_BY_SESSION',
+  PacksSubject = 'PACKS_SUBJECT',
+  IncludesArtifact = 'INCLUDES_ARTIFACT',
+  HasSourceReceipt = 'HAS_SOURCE_RECEIPT',
+  ScoresPack = 'SCORES_PACK',
+  DecidesWithPack = 'DECIDES_WITH_PACK',
+  DeliveredToSession = 'DELIVERED_TO_SESSION',
+  DeliversPack = 'DELIVERS_PACK',
+  ObservedInSession = 'OBSERVED_IN_SESSION',
+  ObservedAgainstPack = 'OBSERVED_AGAINST_PACK',
 }
 
 export type RickydataGraphPrimitiveValue =
@@ -182,6 +196,11 @@ const ENTITY_ID_PARTS: Record<GraphEntityKind, string[]> = {
   [GraphEntityKind.ReleaseGate]: ['repo_id', 'release_gate_id'],
   [GraphEntityKind.LearningItem]: ['repo_id', 'learning_item_id'],
   [GraphEntityKind.BenchmarkRunProof]: ['repo_id', 'benchmark_run_id', 'proof_id'],
+  [GraphEntityKind.DecisionPack]: ['wallet_address', 'pack_key'],
+  [GraphEntityKind.DecisionSourceReceipt]: ['decision_pack_id', 'source', 'receipt_key'],
+  [GraphEntityKind.ContextDeliveryReceipt]: ['session_node_id', 'delivery_key'],
+  [GraphEntityKind.DecisionObservation]: ['session_node_id', 'observation_key'],
+  [GraphEntityKind.ContentArtifact]: ['content_hash', 'media_type'],
   // memory-v1: same `(source_ref, question)` ⇒ same id ⇒ idempotent merge.
   [GraphEntityKind.OpenQuestion]: ['source_ref', 'question'],
 };

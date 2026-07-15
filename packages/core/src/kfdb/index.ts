@@ -1,9 +1,40 @@
 export { KFDBClient } from './client.js';
 export { MemoryDeriveSessionStore, FileDeriveSessionStore } from './derive-session-store.js';
 export { buildAgentChatTraceOperations, createAgentChatTraceFixture } from './agent-chat-trace.js';
-export { buildClaudeCodeHookTraceOperations, createClaudeCodeHookTraceFixture, claudeCodeSessionNodeId } from './claude-code-hook-trace.js';
-export { buildCodexHookTraceOperations, createCodexHookTraceFixture } from './codex-hook-trace.js';
+export { buildClaudeCodeHookTraceOperations, buildClaudeCodeHookTraceWriteBundle, createClaudeCodeHookTraceFixture, claudeCodeSessionNodeId } from './claude-code-hook-trace.js';
+export { buildCodexHookTraceOperations, buildCodexHookTraceWriteBundle, codexSessionNodeId, createCodexHookTraceFixture } from './codex-hook-trace.js';
 export { buildHermesHookTraceOperations, createHermesHookTraceFixture } from './hermes-hook-trace.js';
+export {
+  CONTENT_ARTIFACT_CONTRACT_VERSION,
+  CONTENT_ARTIFACT_MANIFEST_CONTRACT_VERSION,
+  CONTENT_ARTIFACT_MAX_INLINE_BYTES,
+  DECISION_PACK_CONTRACT_VERSION,
+  DecisionPackEdgeType,
+  DecisionPackNodeLabel,
+  buildContentArtifactOperations,
+  buildContextDeliveryReceiptOperations,
+  buildDecisionObservationOperations,
+  buildDecisionPackLinkOperations,
+  buildDecisionPackOperations,
+  deriveContentArtifactId,
+  deriveDecisionPackId,
+} from './decision-pack-v1.js';
+export type {
+  CanonicalGraphRef,
+  ContentArtifactInput,
+  ContentArtifactRef,
+  ContextDeliveryReceiptInput,
+  DecisionKind,
+  DecisionObservationInput,
+  DecisionPackCompleteness,
+  DecisionPackGraphOperation,
+  DecisionPackInput,
+  DecisionSourceReceiptInput,
+  DecisionSourceStatus,
+  ImmutableContentArtifactWrite,
+  RepositorySnapshot,
+  ObservableContextDelivery,
+} from './decision-pack-v1.js';
 export {
   HARNESS_SESSION_KEY_LABEL,
   SAME_SESSION_EDGE_TYPE,
@@ -116,8 +147,8 @@ export {
 } from '../encryption.js';
 export type { SharingKeyPair, WrappedGroupKey } from '../encryption.js';
 export type { AgentChatTraceEvent, AgentChatTurnTrace } from './agent-chat-trace.js';
-export type { ClaudeCodeHookEventRecord, ClaudeCodeHookTrace } from './claude-code-hook-trace.js';
-export type { CodexHookEventRecord, CodexHookTrace } from './codex-hook-trace.js';
+export type { ClaudeCodeHookEventRecord, ClaudeCodeHookTrace, ClaudeCodeHookTraceWriteBundle } from './claude-code-hook-trace.js';
+export type { CodexHookEventRecord, CodexHookTrace, CodexHookTraceWriteBundle } from './codex-hook-trace.js';
 export type { HermesHookEventRecord, HermesHookTrace } from './hermes-hook-trace.js';
 export type {
   RickydataGraphContract,

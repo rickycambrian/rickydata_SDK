@@ -1,4 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  buildContentArtifactOperations,
+  buildContextDeliveryReceiptOperations,
+  buildDecisionObservationOperations,
+  type ContentArtifactRef,
+  type ImmutableContentArtifactWrite,
+  type RepositorySnapshot,
+  type ObservableContextDelivery,
+} from './decision-pack-v1.js';
 
 export interface CodexHookEventRecord {
   sequence: number;
@@ -15,6 +24,14 @@ export interface CodexHookEventRecord {
   toolUseId?: string;
   toolInput?: unknown;
   toolResponse?: unknown;
+  decisionKind?: 'ask_user' | 'tool_permission';
+  decisionQuestion?: string;
+  decisionOptions?: string[];
+  decisionAnswer?: string;
+  decisionPolicyRef?: string;
+  /** Complete observable hook envelope as received from the harness. */
+  hookPayload?: unknown;
+  contextDelivery?: ObservableContextDelivery;
 }
 
 export interface CodexHookTrace {
@@ -29,6 +46,12 @@ export interface CodexHookTrace {
   startedAt: number;
   completedAt: number;
   events: CodexHookEventRecord[];
+  repository?: RepositorySnapshot;
+}
+
+export interface CodexHookTraceWriteBundle {
+  operations: Array<Record<string, unknown>>;
+  contentArtifacts: ImmutableContentArtifactWrite[];
 }
 
 const KG_NAMESPACE = uuidV5('rickydata-codex-hook-knowledge-graph-v1', '6ba7b811-9dad-11d1-80b4-00c04fd430c8');
@@ -183,7 +206,7 @@ function addCodeFileOperations(
   sourceNodeId: string,
   paths: string[],
 ): void {
-  [...new Set(paths)].slice(0, 50).forEach((filePath) => {
+  [...new Set(paths)].forEach((filePath) => {
     const fileNodeId = deterministicExecutionId('CodeFile', [filePath]);
     operations.push(
       {
@@ -240,7 +263,7 @@ function addCommandOperation(
   );
 }
 
-function eventData(event: CodexHookEventRecord): Record<string, unknown> {
+function eventData(event: CodexHookEventRecord, contentArtifacts: Record<string, ContentArtifactRef>): Record<string, unknown> {
   return {
     hookEventName: event.hookEventName,
     codexSessionId: event.codexSessionId,
@@ -257,12 +280,38 @@ function eventData(event: CodexHookEventRecord): Record<string, unknown> {
     toolUseId: event.toolUseId,
     toolInput: event.toolInput === undefined ? undefined : summarizePayload(event.toolInput),
     toolResponse: event.toolResponse === undefined ? undefined : summarizePayload(event.toolResponse),
+    contentArtifacts,
+    decisionKind: event.decisionKind,
+    decisionQuestion: event.decisionQuestion,
+    decisionOptions: event.decisionOptions,
+    decisionAnswer: event.decisionAnswer,
+    decisionPolicyRef: event.decisionPolicyRef,
+    hookPayload: event.hookPayload === undefined ? undefined : summarizePayload(event.hookPayload),
+    contextDelivery: event.contextDelivery === undefined ? undefined : {
+      ...event.contextDelivery,
+      renderedContent: summarizePayload(event.contextDelivery.renderedContent),
+    },
   };
 }
 
 export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Record<string, unknown>> {
+  return buildCodexHookTraceWriteBundle(trace).operations;
+}
+
+export function codexSessionNodeId(
+  trace: Pick<CodexHookTrace, 'walletAddress' | 'agentId' | 'sessionId' | 'codexSessionId'>,
+): string {
+  return deterministicId('CodexSession', [
+    trace.walletAddress.toLowerCase(),
+    trace.agentId,
+    trace.sessionId,
+    trace.codexSessionId,
+  ]);
+}
+
+export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHookTraceWriteBundle {
   const wallet = trace.walletAddress.toLowerCase();
-  const sessionNodeId = deterministicId('CodexSession', [wallet, trace.agentId, trace.sessionId, trace.codexSessionId]);
+  const sessionNodeId = codexSessionNodeId(trace);
   const turnNodeId = deterministicId('CodexTurn', [wallet, trace.agentId, trace.sessionId, trace.turnIndex, trace.turnId]);
   const walletNodeId = deterministicExecutionId('WalletTenant', [wallet]);
   const agentNodeId = deterministicExecutionId('Agent', [trace.agentId]);
@@ -303,6 +352,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         source: value('codex-hooks'),
         schema_version: value(TRACE_SCHEMA_VERSION),
         updated_at: value(trace.completedAt),
+        repository: value(trace.repository),
       },
     },
     {
@@ -324,6 +374,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         completed_at: value(trace.completedAt),
         event_count: value(trace.events.length),
         schema_version: value(TRACE_SCHEMA_VERSION),
+        repository: value(trace.repository),
       },
     },
     {
@@ -351,6 +402,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
       properties: { turn_index: value(trace.turnIndex) },
     },
   ];
+  const contentArtifacts: ImmutableContentArtifactWrite[] = [];
 
   if (modelNodeId) {
     operations.push(
@@ -405,6 +457,30 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
       event.hookEventName,
       event.toolUseId ?? '',
     ]);
+    const artifactRefs: Record<string, ContentArtifactRef> = {};
+    const observable: Array<{ role: string; content: string; mediaType: string }> = [];
+    if (event.prompt !== undefined) observable.push({ role: 'human-prompt', content: event.prompt, mediaType: 'text/plain; charset=utf-8' });
+    if (event.lastAssistantMessage !== undefined && event.lastAssistantMessage !== null) {
+      observable.push({ role: 'assistant-message', content: event.lastAssistantMessage, mediaType: 'text/plain; charset=utf-8' });
+    }
+    if (event.toolInput !== undefined) observable.push({ role: 'tool-input', content: stableJson(event.toolInput), mediaType: 'application/json' });
+    if (event.toolResponse !== undefined) observable.push({ role: 'tool-response', content: stableJson(event.toolResponse), mediaType: 'application/json' });
+    if (event.decisionQuestion !== undefined) observable.push({ role: 'decision-question', content: event.decisionQuestion, mediaType: 'text/plain; charset=utf-8' });
+    if (event.decisionOptions !== undefined) observable.push({ role: 'decision-options', content: stableJson(event.decisionOptions), mediaType: 'application/json' });
+    if (event.decisionAnswer !== undefined) observable.push({ role: 'decision-answer', content: event.decisionAnswer, mediaType: 'text/plain; charset=utf-8' });
+    if (event.hookPayload !== undefined) observable.push({ role: 'hook-envelope', content: stableJson(event.hookPayload), mediaType: 'application/json' });
+    if (event.contextDelivery !== undefined) observable.push({ role: 'rendered-context', content: event.contextDelivery.renderedContent, mediaType: 'text/plain; charset=utf-8' });
+    for (const item of observable) {
+      const built = buildContentArtifactOperations({
+        content: item.content,
+        mediaType: item.mediaType,
+        observableKind: item.role,
+        sourceRef: `codex:${trace.codexSessionId}:${trace.turnId}:${event.sequence}:${item.role}`,
+      });
+      artifactRefs[item.role] = built.ref;
+      contentArtifacts.push(...built.artifacts);
+      operations.push(...built.operations);
+    }
     operations.push(
       {
         operation: 'create_node',
@@ -414,7 +490,7 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         properties: {
           event_index: value(event.sequence),
           event_type: value(event.hookEventName),
-          data: value(eventData(event)),
+          data: value(eventData(event, artifactRefs)),
           cwd: value(event.cwd ?? trace.cwd ?? ''),
           tool_name: value(event.toolName ?? ''),
           tool_use_id: value(event.toolUseId ?? ''),
@@ -430,6 +506,30 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
         properties: { event_index: value(event.sequence) },
       },
     );
+    for (const [role, artifact] of Object.entries(artifactRefs)) {
+      operations.push({
+        operation: 'create_edge',
+        id: deterministicId('INCLUDES_ARTIFACT', [eventId, artifact.artifactId]),
+        from: eventId,
+        to: artifact.artifactId,
+        edge_type: 'INCLUDES_ARTIFACT',
+        properties: { role: value(role), content_hash: value(artifact.contentHash) },
+      });
+    }
+    if (event.contextDelivery && artifactRefs['rendered-context']) {
+      const receipt = buildContextDeliveryReceiptOperations({
+        deliveryKey: event.contextDelivery.deliveryKey,
+        session: { nodeId: sessionNodeId, label: 'CodexSession' },
+        packId: event.contextDelivery.packId,
+        packHash: event.contextDelivery.packHash,
+        renderedArtifact: artifactRefs['rendered-context'],
+        interface: event.contextDelivery.interface,
+        coverageStatus: event.contextDelivery.coverageStatus,
+        omissions: event.contextDelivery.omissions,
+        deliveredAt: event.contextDelivery.deliveredAt,
+      });
+      operations.push(...receipt.operations);
+    }
     addWorkspaceOperations(operations, eventId, event.cwd ?? trace.cwd);
 
     if (event.toolName) {
@@ -474,9 +574,44 @@ export function buildCodexHookTraceOperations(trace: CodexHookTrace): Array<Reco
       );
       addCommandOperation(operations, eventId, extractCommand(event.toolInput));
     }
+
+    const decisionKind = event.decisionKind ?? (event.toolName && /askuser|ask_user/i.test(event.toolName)
+      ? 'ask_user'
+      : event.hookEventName.toLowerCase().includes('permission')
+        ? 'tool_permission'
+        : null);
+    if (decisionKind) {
+      let questionArtifact = artifactRefs['decision-question'] ?? artifactRefs['tool-input'] ?? artifactRefs['human-prompt'];
+      if (!questionArtifact) {
+        const built = buildContentArtifactOperations({
+          content: stableJson({ hookEventName: event.hookEventName, toolName: event.toolName }),
+          mediaType: 'application/json',
+          observableKind: 'decision-question',
+          sourceRef: `codex:${trace.codexSessionId}:${trace.turnId}:${event.sequence}:decision-question`,
+        });
+        questionArtifact = built.ref;
+        contentArtifacts.push(...built.artifacts);
+        operations.push(...built.operations);
+      }
+      const observation = buildDecisionObservationOperations({
+        observationKey: `${decisionKind}:${event.toolUseId ?? event.sequence}`,
+        session: { nodeId: sessionNodeId, label: 'CodexSession' },
+        kind: decisionKind,
+        interface: 'codex',
+        questionArtifact,
+        optionsArtifact: artifactRefs['decision-options'] ?? artifactRefs['tool-input'],
+        rationaleArtifact: artifactRefs['decision-answer'],
+        optionsPresented: event.decisionOptions ?? [],
+        selectedOption: event.decisionAnswer ?? (event.toolResponse === undefined ? undefined : stableJson(event.toolResponse)),
+        actor: 'human',
+        policyRef: event.decisionPolicyRef,
+        observedAt: new Date(event.receivedAt).toISOString(),
+      });
+      operations.push(...observation.operations);
+    }
   });
 
-  return operations;
+  return { operations, contentArtifacts };
 }
 
 export function createCodexHookTraceFixture(walletAddress: string): CodexHookTrace {

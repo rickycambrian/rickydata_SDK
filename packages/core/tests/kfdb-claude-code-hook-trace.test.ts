@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildClaudeCodeHookTraceOperations } from '../src/kfdb/claude-code-hook-trace.js';
+import { buildClaudeCodeHookTraceOperations, buildClaudeCodeHookTraceWriteBundle } from '../src/kfdb/claude-code-hook-trace.js';
 
 describe('buildClaudeCodeHookTraceOperations', () => {
   it('creates deterministic rich private KG operations from Claude Code hook records', () => {
@@ -64,5 +64,40 @@ describe('buildClaudeCodeHookTraceOperations', () => {
     expect(edges).toContain('INVOKED_CLAUDE_CODE_TOOL');
     expect(edges).toContain('RAN_IN_WORKSPACE');
     expect(edges).toContain('TOUCHED_FILE');
+    const bundle = buildClaudeCodeHookTraceWriteBundle(trace);
+    expect(bundle.contentArtifacts.filter((artifact) => artifact.value.contractVersion === 'content-artifact/v1').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('emits a canonical DecisionObservation for a permission ruling', () => {
+    const bundle = buildClaudeCodeHookTraceWriteBundle({
+      walletAddress: '0xabc', agentId: 'claude-code', sessionId: 's', claudeSessionId: 's', turnIndex: 1,
+      startedAt: 1, completedAt: 2,
+      events: [{
+        sequence: 0, hookEventName: 'PermissionRequest', claudeSessionId: 's', receivedAt: 2,
+        toolName: 'Bash', toolUseId: 'permission-1', toolInput: { command: 'deploy' }, permissionDecision: 'allow',
+        decisionKind: 'tool_permission', decisionQuestion: 'Allow Bash?', decisionOptions: ['allow', 'deny'], decisionAnswer: 'allow',
+      }],
+    });
+    expect(bundle.operations.map((op) => op.label)).toContain('DecisionObservation');
+    expect(bundle.operations.map((op) => op.edge_type)).toContain('OBSERVED_IN_SESSION');
+  });
+
+  it('binds the exact rendered SessionStart context to the receiving session', () => {
+    const bundle = buildClaudeCodeHookTraceWriteBundle({
+      walletAddress: '0xabc', agentId: 'claude-code', sessionId: 's', claudeSessionId: 's', turnIndex: 1,
+      startedAt: 1, completedAt: 2,
+      events: [{
+        sequence: 0, hookEventName: 'ContextDelivery', claudeSessionId: 's', receivedAt: 2,
+        contextDelivery: {
+          deliveryKey: 'session-start:s', packHash: `sha256:${'a'.repeat(64)}`,
+          renderedContent: 'exact compiled context', interface: 'claude-code-session-start',
+          coverageStatus: 'bounded', omissions: [{ source: 'wiki', reason: 'budget', count: 2 }],
+          deliveredAt: '2026-07-15T12:00:00.000Z',
+        },
+      }],
+    });
+    expect(bundle.operations.map((op) => op.label)).toContain('ContextDeliveryReceipt');
+    expect(bundle.operations.map((op) => op.edge_type)).toContain('DELIVERED_TO_SESSION');
+    expect(bundle.contentArtifacts.some((artifact) => artifact.value.contractVersion === 'content-artifact/v1' && artifact.value.content === 'exact compiled context')).toBe(true);
   });
 });
