@@ -1,6 +1,6 @@
 {
   "name": "rickydata",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "description": "TypeScript SDK and CLI for the MCP Gateway \u2014 auth, agents, tool calling, and x402 payments",
   "type": "module",
   "main": "dist/index.js",
