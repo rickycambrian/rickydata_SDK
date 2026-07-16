@@ -45,6 +45,11 @@ export enum GraphEntityKind {
   DecisionSourceReceipt = 'DecisionSourceReceipt',
   ContextDeliveryReceipt = 'ContextDeliveryReceipt',
   DecisionObservation = 'DecisionObservation',
+  ObjectiveObservation = 'ObjectiveObservation',
+  RepositoryStateReceipt = 'RepositoryStateReceipt',
+  VerificationObservation = 'VerificationObservation',
+  RunUsageReceipt = 'RunUsageReceipt',
+  RunOutcomeReceipt = 'RunOutcomeReceipt',
   ContentArtifact = 'ContentArtifact',
   /**
    * memory-v1 (`rickydata.memory.v1`): an open/clarification question the system
@@ -100,6 +105,12 @@ export enum GraphEdgeType {
   DeliversPack = 'DELIVERS_PACK',
   ObservedInSession = 'OBSERVED_IN_SESSION',
   ObservedAgainstPack = 'OBSERVED_AGAINST_PACK',
+  GovernedByContract = 'GOVERNED_BY_CONTRACT',
+  ObservedRepositoryState = 'OBSERVED_REPOSITORY_STATE',
+  VerifiesContract = 'VERIFIES_CONTRACT',
+  MeasuresRun = 'MEASURES_RUN',
+  ReportsOutcome = 'REPORTS_OUTCOME',
+  UsesUsageReceipt = 'USES_USAGE_RECEIPT',
 }
 
 export type RickydataGraphPrimitiveValue =
@@ -200,6 +211,11 @@ const ENTITY_ID_PARTS: Record<GraphEntityKind, string[]> = {
   [GraphEntityKind.DecisionSourceReceipt]: ['decision_pack_id', 'source', 'receipt_key'],
   [GraphEntityKind.ContextDeliveryReceipt]: ['session_node_id', 'delivery_key'],
   [GraphEntityKind.DecisionObservation]: ['session_node_id', 'observation_key'],
+  [GraphEntityKind.ObjectiveObservation]: ['session_node_id', 'observation_key'],
+  [GraphEntityKind.RepositoryStateReceipt]: ['session_node_id', 'receipt_key'],
+  [GraphEntityKind.VerificationObservation]: ['work_contract_id', 'verification_key'],
+  [GraphEntityKind.RunUsageReceipt]: ['run_node_id', 'receipt_key'],
+  [GraphEntityKind.RunOutcomeReceipt]: ['run_node_id', 'receipt_key'],
   [GraphEntityKind.ContentArtifact]: ['content_hash', 'media_type'],
   // memory-v1: same `(source_ref, question)` ⇒ same id ⇒ idempotent merge.
   [GraphEntityKind.OpenQuestion]: ['source_ref', 'question'],

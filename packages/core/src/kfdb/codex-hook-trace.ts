@@ -8,6 +8,7 @@ import {
   type RepositorySnapshot,
   type ObservableContextDelivery,
 } from './decision-pack-v1.js';
+import type { WorkContractRef } from './work-provenance-v1.js';
 
 export interface CodexHookEventRecord {
   sequence: number;
@@ -32,6 +33,10 @@ export interface CodexHookEventRecord {
   /** Complete observable hook envelope as received from the harness. */
   hookPayload?: unknown;
   contextDelivery?: ObservableContextDelivery;
+  /** Repository state at this event, rather than a session-wide approximation. */
+  repository?: RepositorySnapshot;
+  workContract?: WorkContractRef;
+  sourceIntentRef?: string;
 }
 
 export interface CodexHookTrace {
@@ -47,6 +52,10 @@ export interface CodexHookTrace {
   completedAt: number;
   events: CodexHookEventRecord[];
   repository?: RepositorySnapshot;
+  baseRepository?: RepositorySnapshot;
+  resultRepository?: RepositorySnapshot;
+  workContract?: WorkContractRef;
+  sourceIntentRef?: string;
 }
 
 export interface CodexHookTraceWriteBundle {
@@ -291,6 +300,9 @@ function eventData(event: CodexHookEventRecord, contentArtifacts: Record<string,
       ...event.contextDelivery,
       renderedContent: summarizePayload(event.contextDelivery.renderedContent),
     },
+    repository: event.repository,
+    workContract: event.workContract,
+    sourceIntentRef: event.sourceIntentRef,
   };
 }
 
@@ -353,6 +365,10 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
         schema_version: value(TRACE_SCHEMA_VERSION),
         updated_at: value(trace.completedAt),
         repository: value(trace.repository),
+        base_repository: value(trace.baseRepository),
+        result_repository: value(trace.resultRepository),
+        work_contract: value(trace.workContract),
+        source_intent_ref: value(trace.sourceIntentRef),
       },
     },
     {
@@ -375,6 +391,10 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
         event_count: value(trace.events.length),
         schema_version: value(TRACE_SCHEMA_VERSION),
         repository: value(trace.repository),
+        base_repository: value(trace.baseRepository),
+        result_repository: value(trace.resultRepository),
+        work_contract: value(trace.workContract),
+        source_intent_ref: value(trace.sourceIntentRef),
       },
     },
     {
@@ -527,6 +547,9 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
         coverageStatus: event.contextDelivery.coverageStatus,
         omissions: event.contextDelivery.omissions,
         deliveredAt: event.contextDelivery.deliveredAt,
+        policyHash: event.contextDelivery.policyHash,
+        selectedManifestHash: event.contextDelivery.selectedManifestHash,
+        corpusWatermark: event.contextDelivery.corpusWatermark,
       });
       operations.push(...receipt.operations);
     }

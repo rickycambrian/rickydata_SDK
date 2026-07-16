@@ -43,6 +43,26 @@ export type {
   ObservableContextDelivery,
 } from './decision-pack-v1.js';
 export {
+  WORK_PROVENANCE_CONTRACT_VERSION,
+  buildObjectiveObservationOperations,
+  buildRepositoryStateReceiptOperations,
+  buildVerificationObservationOperations,
+  buildRunUsageReceiptOperations,
+  buildRunOutcomeReceiptOperations,
+} from './work-provenance-v1.js';
+export type {
+  ObjectiveObservationInput,
+  RepositoryStateReceiptInput,
+  RunOutcomeReceiptInput,
+  RunOutcomeStatus,
+  RunUsageReceiptInput,
+  Sha256Ref,
+  VerificationObservationInput,
+  VerificationOutcome,
+  VerificationPhase,
+  WorkContractRef,
+} from './work-provenance-v1.js';
+export {
   HARNESS_SESSION_KEY_LABEL,
   SAME_SESSION_EDGE_TYPE,
   sessionLinkNodeId,

@@ -57,6 +57,10 @@ export interface RepositorySnapshot {
   remoteUrl: string;
   branch?: string;
   commitSha?: string;
+  treeHash?: string;
+  dirty?: boolean;
+  dirtyStateHash?: `sha256:${string}`;
+  observedAt?: string;
 }
 
 /**
@@ -147,6 +151,9 @@ export interface ContextDeliveryReceiptInput {
   coverageStatus: DecisionPackCompleteness;
   omissions: Array<{ source: string; reason: string; count?: number }>;
   deliveredAt: string;
+  policyHash?: `sha256:${string}`;
+  selectedManifestHash?: `sha256:${string}`;
+  corpusWatermark?: string;
 }
 
 /** Serializable hook-level input from an actual context injection. */
@@ -159,6 +166,9 @@ export interface ObservableContextDelivery {
   coverageStatus: DecisionPackCompleteness;
   omissions: Array<{ source: string; reason: string; count?: number }>;
   deliveredAt: string;
+  policyHash?: `sha256:${string}`;
+  selectedManifestHash?: `sha256:${string}`;
+  corpusWatermark?: string;
 }
 
 export interface DecisionObservationInput {
@@ -455,6 +465,8 @@ export function buildContextDeliveryReceiptOperations(input: ContextDeliveryRece
   operations: DecisionPackGraphOperation[];
 } {
   if (input.packHash) assertHash(input.packHash, 'packHash');
+  if (input.policyHash) assertHash(input.policyHash, 'policyHash');
+  if (input.selectedManifestHash) assertHash(input.selectedManifestHash, 'selectedManifestHash');
   const receiptId = deriveRickydataGraphId(GraphEntityKind.ContextDeliveryReceipt, [
     assertNonEmpty(input.session.nodeId, 'session.nodeId'),
     assertNonEmpty(input.deliveryKey, 'deliveryKey'),
@@ -472,6 +484,9 @@ export function buildContextDeliveryReceiptOperations(input: ContextDeliveryRece
       coverage_status: input.coverageStatus,
       omissions: input.omissions,
       delivered_at: input.deliveredAt,
+      policy_hash: input.policyHash,
+      selected_manifest_hash: input.selectedManifestHash,
+      corpus_watermark: input.corpusWatermark,
     }),
     edge(receiptId, GraphEdgeType.DeliveredToSession, input.session.nodeId, { session_label: input.session.label }),
     edge(receiptId, GraphEdgeType.IncludesArtifact, input.renderedArtifact.artifactId, { role: 'rendered-context' }),

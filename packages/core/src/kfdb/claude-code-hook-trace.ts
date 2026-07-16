@@ -8,6 +8,7 @@ import {
   type RepositorySnapshot,
   type ObservableContextDelivery,
 } from './decision-pack-v1.js';
+import type { WorkContractRef } from './work-provenance-v1.js';
 
 export interface ClaudeCodeHookEventRecord {
   sequence: number;
@@ -39,6 +40,10 @@ export interface ClaudeCodeHookEventRecord {
   /** Complete observable hook envelope as received from the harness. */
   hookPayload?: unknown;
   contextDelivery?: ObservableContextDelivery;
+  /** Repository state at this event, rather than a session-wide approximation. */
+  repository?: RepositorySnapshot;
+  workContract?: WorkContractRef;
+  sourceIntentRef?: string;
 }
 
 export interface ClaudeCodeHookTrace {
@@ -57,6 +62,10 @@ export interface ClaudeCodeHookTrace {
   parentSessionId?: string;
   initialPrompt?: string;
   repository?: RepositorySnapshot;
+  baseRepository?: RepositorySnapshot;
+  resultRepository?: RepositorySnapshot;
+  workContract?: WorkContractRef;
+  sourceIntentRef?: string;
 }
 
 export interface ClaudeCodeHookTraceWriteBundle {
@@ -211,6 +220,9 @@ function eventData(event: ClaudeCodeHookEventRecord, contentArtifacts: Record<st
       ...event.contextDelivery,
       renderedContent: summarizePayload(event.contextDelivery.renderedContent),
     },
+    repository: event.repository,
+    workContract: event.workContract,
+    sourceIntentRef: event.sourceIntentRef,
   };
 }
 
@@ -321,7 +333,7 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
   const model = trace.model ?? '';
   const modelNodeId = model ? deterministicExecutionId('Model', ['anthropic', model]) : null;
   const executionEngineNodeId = deterministicExecutionId('ExecutionEngine', ['claude-code']);
-  const sessionProperties: Record<string, unknown> = { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt), repository: value(trace.repository) };
+  const sessionProperties: Record<string, unknown> = { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), wallet_address: value(wallet), source: value('claude-code-hooks'), schema_version: value(TRACE_SCHEMA_VERSION), updated_at: value(trace.completedAt), repository: value(trace.repository), base_repository: value(trace.baseRepository), result_repository: value(trace.resultRepository), work_contract: value(trace.workContract), source_intent_ref: value(trace.sourceIntentRef) };
   if (trace.filesChanged !== undefined) sessionProperties.files_changed = value(trace.filesChanged);
   if (trace.parentSessionId !== undefined) sessionProperties.parent_session_id = value(trace.parentSessionId);
   if (trace.initialPrompt !== undefined) sessionProperties.initial_prompt = value(trace.initialPrompt);
@@ -329,7 +341,7 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
     { operation: 'create_node', id: walletNodeId, label: 'WalletTenant', mode: 'merge', properties: { wallet_address: value(wallet), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_node', id: agentNodeId, label: 'Agent', mode: 'merge', properties: { agent_id: value(trace.agentId), schema_version: value(TRACE_SCHEMA_VERSION) } },
     { operation: 'create_node', id: sessionNodeId, label: 'ClaudeCodeSession', mode: 'merge', properties: sessionProperties },
-    { operation: 'create_node', id: turnNodeId, label: 'ClaudeCodeTurn', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), turn_index: value(trace.turnIndex), model: value(model), provider: value('anthropic'), execution_engine: value('claude-code'), cwd: value(trace.cwd ?? ''), started_at: value(trace.startedAt), completed_at: value(trace.completedAt), event_count: value(trace.events.length), schema_version: value(TRACE_SCHEMA_VERSION), repository: value(trace.repository) } },
+    { operation: 'create_node', id: turnNodeId, label: 'ClaudeCodeTurn', mode: 'merge', properties: { agent_id: value(trace.agentId), session_id: value(trace.sessionId), claude_session_id: value(trace.claudeSessionId), turn_index: value(trace.turnIndex), model: value(model), provider: value('anthropic'), execution_engine: value('claude-code'), cwd: value(trace.cwd ?? ''), started_at: value(trace.startedAt), completed_at: value(trace.completedAt), event_count: value(trace.events.length), schema_version: value(TRACE_SCHEMA_VERSION), repository: value(trace.repository), base_repository: value(trace.baseRepository), result_repository: value(trace.resultRepository), work_contract: value(trace.workContract), source_intent_ref: value(trace.sourceIntentRef) } },
     { operation: 'create_edge', id: deterministicExecutionId('OWNS_EXECUTION_SESSION', [walletNodeId, sessionNodeId]), from: walletNodeId, to: sessionNodeId, edge_type: 'OWNS_EXECUTION_SESSION', properties: { source: value('claude-code-hooks') } },
     { operation: 'create_edge', id: deterministicExecutionId('EXECUTES_AGENT', [sessionNodeId, agentNodeId]), from: sessionNodeId, to: agentNodeId, edge_type: 'EXECUTES_AGENT', properties: { agent_id: value(trace.agentId) } },
     { operation: 'create_edge', id: deterministicId('HAS_CLAUDE_CODE_TURN', [sessionNodeId, turnNodeId]), from: sessionNodeId, to: turnNodeId, edge_type: 'HAS_CLAUDE_CODE_TURN', properties: { turn_index: value(trace.turnIndex) } },
@@ -409,6 +421,9 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
         coverageStatus: event.contextDelivery.coverageStatus,
         omissions: event.contextDelivery.omissions,
         deliveredAt: event.contextDelivery.deliveredAt,
+        policyHash: event.contextDelivery.policyHash,
+        selectedManifestHash: event.contextDelivery.selectedManifestHash,
+        corpusWatermark: event.contextDelivery.corpusWatermark,
       });
       operations.push(...receipt.operations);
     }
