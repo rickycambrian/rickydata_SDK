@@ -241,6 +241,7 @@ rickydata github review-status <run-id>                  # Check async run statu
 | `analysis-copilot-host-pattern` | Host-owned SQL/KQL execution and Agent Gateway proxying for analysis assistants, with SDK UI receiving only callbacks/results | (manual reference) |
 | `execution-trace-recording` | Dual-env trace recording (Node.js JSONL files + browser in-memory), TracedAgentClient wrapper, SSE event mapping | (manual reference) |
 | `trace-viewer-component` | TraceViewer scrollable event list, TraceTimeline SVG visualization, useTraceRecorder hook, CSS custom property theming | (manual reference) |
+| `git-worktree-secretscrub` | Create a clean SDK worktree when the repository-local smudge filter cannot run before checkout | (manual reference) |
 
 | Agent | Purpose |
 |-------|---------|
