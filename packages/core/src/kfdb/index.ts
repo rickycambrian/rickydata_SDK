@@ -227,6 +227,8 @@ export type {
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
+  KfdbKnowledgeBundleRequest,
+  KfdbKnowledgeBundleResponse,
   KfdbListSharedNotebookGroupKeysResponse,
   KfdbListSharedNotebookMembersResponse,
   KfdbListSharedNotebooksResponse,

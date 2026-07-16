@@ -133,6 +133,25 @@ export interface KfdbQueryResponse {
   [key: string]: unknown;
 }
 
+export interface KfdbKnowledgeBundleRequest {
+  exhaustive?: boolean;
+  scanPageSize?: number;
+  scanLimit?: number;
+  tokenBudget?: number;
+  pageLimit?: number;
+  claimLimit?: number;
+  questionLimit?: number;
+  signal?: AbortSignal;
+}
+
+export interface KfdbKnowledgeBundleResponse {
+  pages: Record<string, unknown>[];
+  claims: Record<string, unknown>[];
+  open_questions?: Record<string, unknown>[];
+  diagnostics: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface KfdbExplainResponse {
   plan?: unknown;
   query?: string;

@@ -73,7 +73,10 @@ export class KfdbReadSession {
   private once<T>(key: string, read: () => Promise<T>): Promise<T> {
     const existing = this.reads.get(key) as Promise<T> | undefined;
     if (existing) return existing;
-    const promise = read();
+    const promise = read().catch((error) => {
+      if (this.reads.get(key) === promise) this.reads.delete(key);
+      throw error;
+    });
     this.reads.set(key, promise);
     return promise;
   }

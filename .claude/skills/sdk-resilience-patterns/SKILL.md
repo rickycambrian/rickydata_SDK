@@ -1,6 +1,6 @@
 ---
 name: sdk-resilience-patterns
-description: Verified patterns for adding resilience to the rickydata SDK — structured errors, retry with backoff, file-backed persistence, and team workflow timeouts. Use when extending the agent client with new error handling, retry logic, or persistence features.
+description: Verified SDK resilience patterns: structured errors, retries, persistence, timeouts, and tenant-scoped knowledge caching. Use when extending client error handling, retry logic, persistence, or cached reads.
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Grep, Glob
 ---
@@ -170,3 +170,29 @@ export interface TeamWorkflowOptions {
   signal?: AbortSignal;  // Optional external signal
 }
 ```
+
+## Pattern 6: Tenant-Scoped Immutable Snapshot Cache
+
+**Provenance:** Verified 2026-07-16 in `KnowledgeWorkClient` with 1,018 passing
+core tests and a real local Home/UI reload. The settled IndexedDB reload rendered
+the seven-stage pipeline in 157ms with no additional Home request.
+
+### When to Use
+
+Use this for authenticated, expensive reads whose response exposes an immutable
+content/snapshot hash. Keep a request alias for freshness and a snapshot entry
+for content-addressed reuse.
+
+### Required Boundaries
+
+1. Include a stable tenant/wallet scope in every cache key.
+2. Clear the prior scope on wallet changes by default.
+3. Keep all stores bounded (`MemoryKnowledgeWorkCacheStore` defaults to 128;
+   the opt-in IndexedDB adapter defaults to 256).
+4. Serve stale entries immediately and coalesce one background refresh.
+5. Treat cache/store errors as fail-open retrieval errors, never auth bypasses.
+6. Remove rejected read-session promises so a transient failure is retryable.
+
+Persistent browser caching is opt-in because it stores decrypted private
+knowledge on the device. Hosts must pass the authenticated wallet address via
+`cacheScope`; a generic shared scope is not safe for multi-user hosts.

@@ -12,6 +12,8 @@ import type {
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
+  KfdbKnowledgeBundleRequest,
+  KfdbKnowledgeBundleResponse,
   KfdbExplainResponse,
   KfdbCreateSharedNotebookRequest,
   KfdbEnrollSharingKeyRequest,
@@ -184,6 +186,26 @@ export class KFDBClient {
   /** Create an explicit request-scoped read plan with promise coalescing. */
   readSession(options: KfdbReadSessionOptions = {}): KfdbReadSession {
     return new KfdbReadSession(this, options);
+  }
+
+  /** Fetch the authenticated, tenant-private server-compiled knowledge corpus. */
+  async getKnowledgeBundle(options: KfdbKnowledgeBundleRequest = {}): Promise<KfdbKnowledgeBundleResponse> {
+    const payload = Object.fromEntries(Object.entries({
+      exhaustive: options.exhaustive,
+      scan_page_size: options.scanPageSize,
+      scan_limit: options.scanLimit,
+      token_budget: (options.tokenBudget),
+      page_limit: options.pageLimit,
+      claim_limit: options.claimLimit,
+      question_limit: options.questionLimit,
+    }).filter(([, value]) => value !== undefined));
+    const res = await this.request('/api/v1/agent/knowledge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    return this.parseJson<KfdbKnowledgeBundleResponse>(res, 'get knowledge bundle');
   }
 
   async listLabels(scope?: KfdbQueryScope): Promise<KfdbListLabelsResponse> {

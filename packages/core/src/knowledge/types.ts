@@ -102,6 +102,17 @@ export interface KnowledgeWorkClientConfig {
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   consumer?: string;
+  /** Cache adapter. Omit for a bounded in-memory cache; pass null to disable. */
+  cache?: KnowledgeWorkCacheStore | null;
+  /** Stable tenant/wallet key. Required when one client can serve multiple users. */
+  cacheScope?: () => string | Promise<string>;
+  cacheTtlMs?: number;
+  staleWhileRevalidateMs?: number;
+  /** Clears the previous tenant's device entries when cacheScope changes. Default true. */
+  clearCacheOnScopeChange?: boolean;
+  onCacheEvent?: (event: KnowledgeWorkCacheEvent) => void;
+  /** Deterministic clock seam for tests. */
+  now?: () => number;
 }
 
 export interface KnowledgeContextPackOptions {
@@ -109,4 +120,29 @@ export interface KnowledgeContextPackOptions {
   consumer?: string;
   asOf?: string;
   signal?: AbortSignal;
+}
+
+export interface KnowledgeWorkCacheEntry {
+  storedAt: number;
+  scope?: string;
+  snapshotHash?: string;
+  pack: KnowledgeContextPack;
+}
+
+export interface KnowledgeWorkCacheStore {
+  get(key: string): Promise<KnowledgeWorkCacheEntry | null>;
+  set(key: string, entry: KnowledgeWorkCacheEntry): Promise<void>;
+  delete(key: string): Promise<void>;
+  clearScope?(scope: string): Promise<void>;
+}
+
+export type KnowledgeWorkCacheEventType =
+  | 'hit' | 'miss' | 'stale' | 'refresh' | 'refresh_error' | 'write' | 'cache_error';
+
+export interface KnowledgeWorkCacheEvent {
+  type: KnowledgeWorkCacheEventType;
+  scope: string;
+  key: string;
+  ageMs?: number;
+  durationMs?: number;
 }

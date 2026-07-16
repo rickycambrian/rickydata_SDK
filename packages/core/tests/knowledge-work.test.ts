@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  MemoryKnowledgeWorkCacheStore,
   KnowledgeWorkClient,
   KnowledgeWorkHttpError,
   createKnowledgeWorkPipeline,
@@ -76,5 +77,84 @@ describe('knowledge work SDK', () => {
     await expect(client.getContextPack({ kind: 'task', key: 'missing' })).rejects.toMatchObject({
       name: 'KnowledgeWorkHttpError', status: 400, message: 'anchor not found',
     } satisfies Partial<KnowledgeWorkHttpError>);
+  });
+
+  it('reuses immutable snapshot entries sequentially within one tenant and emits cache metrics', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(PACK), {
+      status: 200,
+      headers: { 'x-rickydata-context-snapshot-hash': 'f'.repeat(64) },
+    }));
+    const events: string[] = [];
+    const client = new KnowledgeWorkClient({
+      fetch: fetchMock,
+      cache: new MemoryKnowledgeWorkCacheStore(),
+      cacheScope: () => '0xabc',
+      onCacheEvent: (event) => events.push(event.type),
+    });
+
+    const first = await client.getPipeline({ kind: 'repo', key: 'rickydata_home' });
+    const second = await client.getPipeline({ kind: 'repo', key: 'rickydata_home' });
+
+    expect(second).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['miss', 'write', 'hit']);
+  });
+
+  it('isolates cache entries by tenant and clears the prior tenant on wallet change', async () => {
+    let scope = 'wallet-a';
+    const cache = new MemoryKnowledgeWorkCacheStore();
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(PACK), { status: 200 }));
+    const client = new KnowledgeWorkClient({ fetch: fetchMock, cache, cacheScope: () => scope });
+
+    await client.getPipeline({ kind: 'repo', key: 'rickydata_home' });
+    scope = 'wallet-b';
+    await client.getPipeline({ kind: 'repo', key: 'rickydata_home' });
+    scope = 'wallet-a';
+    await client.getPipeline({ kind: 'repo', key: 'rickydata_home' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('serves stale data immediately while one background refresh updates the snapshot', async () => {
+    let now = 0;
+    let release!: () => void;
+    const refresh = new Promise<void>((resolve) => { release = resolve; });
+    const updated = { ...PACK, reproducibility_hash: 'updated', compiled_at: '2026-07-16T10:01:00.000Z' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(PACK), { status: 200 }))
+      .mockImplementationOnce(async () => { await refresh; return new Response(JSON.stringify(updated), { status: 200 }); });
+    const events: string[] = [];
+    const client = new KnowledgeWorkClient({
+      fetch: fetchMock,
+      cacheScope: () => 'wallet',
+      cacheTtlMs: 10,
+      staleWhileRevalidateMs: 100,
+      now: () => now,
+      onCacheEvent: (event) => events.push(event.type),
+    });
+    const anchor = { kind: 'repo', key: 'rickydata_home' } as const;
+
+    await client.getPipeline(anchor);
+    now = 20;
+    const [a, b] = await Promise.all([client.getPipeline(anchor), client.getPipeline(anchor)]);
+    expect(a.reproducibilityHash).toBe('abc123');
+    expect(b.reproducibilityHash).toBe('abc123');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    release();
+    await vi.waitFor(async () => expect((await client.getPipeline(anchor)).reproducibilityHash).toBe('updated'));
+    expect(events).toContain('stale');
+    expect(events).toContain('refresh');
+  });
+
+  it('bounds the default memory store by least-recently-used entries', async () => {
+    const store = new MemoryKnowledgeWorkCacheStore({ maxEntries: 2 });
+    const entry = { storedAt: 1, pack: PACK };
+    await store.set('tenant:a', entry);
+    await store.set('tenant:b', entry);
+    await store.get('tenant:a');
+    await store.set('tenant:c', entry);
+    expect(await store.get('tenant:a')).not.toBeNull();
+    expect(await store.get('tenant:b')).toBeNull();
+    expect(await store.get('tenant:c')).not.toBeNull();
   });
 });

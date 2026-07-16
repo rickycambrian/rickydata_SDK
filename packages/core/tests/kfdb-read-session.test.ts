@@ -64,4 +64,19 @@ describe('KfdbReadSession', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('evicts rejected reads so a transient failure can be retried in the same session', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValueOnce(response({
+        label: 'Run', items: [], total: 0, limit: 1, offset: 0, source: 'kfdb-scylladb',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const reads = new KFDBClient({ baseUrl: 'https://kfdb.example', token: 'token' })
+      .readSession({ scope: 'private' });
+
+    await expect(reads.listEntities('Run', { limit: 1 })).rejects.toThrow('temporary network failure');
+    await expect(reads.listEntities('Run', { limit: 1 })).resolves.toMatchObject({ label: 'Run' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -250,6 +250,48 @@ Inside `rickydata chat`:
 
 For building applications that programmatically interact with the MCP Gateway.
 
+### Knowledge Work Pipelines
+
+Use the host-owned context-pack route and let the SDK normalize it into the
+same seven-step workflow in every UI or agent host. Authentication remains a
+host concern; decrypted private knowledge never requires a privileged KFDB key
+in the browser.
+
+```typescript
+import {
+  IndexedDbKnowledgeWorkCacheStore,
+  KnowledgeWorkClient,
+} from 'rickydata';
+
+const knowledge = new KnowledgeWorkClient({
+  baseUrl: 'http://localhost:8788',
+  consumer: 'my-local-ui',
+  headers: () => ({ Authorization: `Bearer ${walletSession}` }),
+  cacheScope: () => walletAddress,
+  cache: new IndexedDbKnowledgeWorkCacheStore({ maxEntries: 128 }),
+  onCacheEvent: (event) => metrics.increment(`knowledge.${event.type}`),
+});
+
+const pipeline = await knowledge.getPipeline({
+  kind: 'repo',
+  key: 'rickydata_home',
+});
+
+for (const step of pipeline.steps) {
+  renderStep(step.label, step.status, step.itemCount, step.omittedCount);
+}
+```
+
+The default cache is a bounded in-memory LRU. The IndexedDB adapter is opt-in
+because it persists decrypted private knowledge on the user's device. Both are
+tenant-scoped, reuse immutable snapshot hashes, coalesce concurrent requests,
+and serve stale entries immediately while one refresh runs in the background.
+Pass the authenticated wallet address as `cacheScope`; changing scopes clears
+the prior tenant's device entries by default.
+
+Use `getContextPack()` when a consumer needs the complete pack instead of the
+UI-ready step model. Set `cache: null` to disable caching.
+
 ### Browse Servers
 
 ```typescript
@@ -303,6 +345,19 @@ const privateNotes = await kfdb.withScope('private').listEntities('Note', { limi
 
 // Per-call override
 const privateTasks = await kfdb.listEntities('Task', { scope: 'private', limit: 50 });
+
+// Deduplicate repeated reads within one operation. Rejected reads remain retryable.
+const reads = kfdb.readSession({ scope: 'private' });
+const [pages, repeatedPages] = await Promise.all([
+  reads.listEntities('WikiPage', { limit: 100 }),
+  reads.listEntities('WikiPage', { limit: 100 }),
+]);
+
+// Public SDK method for KFDB's compiled private knowledge bundle.
+const bundle = await kfdb.getKnowledgeBundle({
+  labels: ['WikiPage', 'WikiClaim', 'HomeDecision', 'OpenQuestion'],
+  includeEdges: true,
+});
 
 // Writes always go through tenant-scoped /api/v1/write
 await kfdb.write({

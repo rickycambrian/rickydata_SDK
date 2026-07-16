@@ -1,7 +1,13 @@
 // Main client
 export { MCPGateway } from './client.js';
 export { KFDBClient, KfdbReadSession, KfdbHttpError } from './kfdb/index.js';
-export { KnowledgeWorkClient, KnowledgeWorkHttpError, createKnowledgeWorkPipeline } from './knowledge/index.js';
+export {
+  KnowledgeWorkClient,
+  KnowledgeWorkHttpError,
+  MemoryKnowledgeWorkCacheStore,
+  IndexedDbKnowledgeWorkCacheStore,
+  createKnowledgeWorkPipeline,
+} from './knowledge/index.js';
 export { BenchmarkEvidenceClient, ResearchClient, ResearchKFDBClient, SelfImprovementClient } from './research/index.js';
 
 // Auth
@@ -277,6 +283,8 @@ export type {
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
   KfdbListLabelsResponse,
+  KfdbKnowledgeBundleRequest,
+  KfdbKnowledgeBundleResponse,
   KfdbListSharedNotebookGroupKeysResponse,
   KfdbListSharedNotebookMembersResponse,
   KfdbListSharedNotebooksResponse,
@@ -306,6 +314,10 @@ export type {
   KnowledgeWorkAnchor,
   KnowledgeWorkAnchorKind,
   KnowledgeWorkClientConfig,
+  KnowledgeWorkCacheEntry,
+  KnowledgeWorkCacheEvent,
+  KnowledgeWorkCacheEventType,
+  KnowledgeWorkCacheStore,
   KnowledgeWorkPipelineModel,
   KnowledgeWorkStep,
   KnowledgeWorkStepId,
