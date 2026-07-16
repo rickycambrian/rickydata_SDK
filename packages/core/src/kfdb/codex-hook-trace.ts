@@ -8,6 +8,10 @@ import {
   type RepositorySnapshot,
   type ObservableContextDelivery,
 } from './decision-pack-v1.js';
+import {
+  buildSessionArtifactManifestOperations,
+  type SessionArtifactManifestEntry,
+} from './session-artifact-manifest.js';
 import type { WorkContractRef } from './work-provenance-v1.js';
 
 export interface CodexHookEventRecord {
@@ -423,6 +427,7 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
     },
   ];
   const contentArtifacts: ImmutableContentArtifactWrite[] = [];
+  const manifestEntries: SessionArtifactManifestEntry[] = [];
 
   if (modelNodeId) {
     operations.push(
@@ -500,6 +505,13 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
       artifactRefs[item.role] = built.ref;
       contentArtifacts.push(...built.artifacts);
       operations.push(...built.operations);
+      manifestEntries.push({
+        sequence: event.sequence,
+        eventType: event.hookEventName,
+        receivedAt: event.receivedAt,
+        role: item.role,
+        artifact: built.ref,
+      });
     }
     operations.push(
       {
@@ -633,6 +645,23 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
       operations.push(...observation.operations);
     }
   });
+
+  const manifest = buildSessionArtifactManifestOperations({
+    engine: 'codex',
+    session: { nodeId: sessionNodeId, label: 'CodexSession', externalSessionId: trace.codexSessionId },
+    turn: {
+      nodeId: turnNodeId,
+      label: 'CodexTurn',
+      externalTurnId: trace.turnId,
+      index: trace.turnIndex,
+      startedAt: trace.startedAt,
+      completedAt: trace.completedAt,
+    },
+    repository: trace.repository,
+    entries: manifestEntries,
+  });
+  operations.push(...manifest.operations);
+  contentArtifacts.push(...manifest.contentArtifacts);
 
   return { operations, contentArtifacts };
 }

@@ -71,6 +71,8 @@ describe('buildCodexHookTraceOperations', () => {
     const persistedContent = bundle.contentArtifacts.flatMap((artifact) => artifact.value.contractVersion === 'content-artifact/v1' ? [artifact.value.content] : []);
     expect(persistedContent).toEqual(expect.arrayContaining(['Use Codex hooks to write private KG traces.', 'The implementation is ready.']));
     expect(bundle.contentArtifacts.every((artifact) => artifact.ifAbsent)).toBe(true);
+    expect(bundle.operations.map((operation) => operation.label)).toContain('SessionArtifactManifest');
+    expect(bundle.operations.map((operation) => operation.edge_type)).toContain('HAS_ARTIFACT_MANIFEST');
     const session = first.find((op) => op.label === 'CodexSession') as { properties?: Record<string, unknown> };
     expect(session.properties?.repository).toEqual(expect.objectContaining({ Object: expect.any(Object) }));
   });

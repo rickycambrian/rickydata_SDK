@@ -12,6 +12,17 @@ export { buildClaudeCodeHookTraceOperations, buildClaudeCodeHookTraceWriteBundle
 export { buildCodexHookTraceOperations, buildCodexHookTraceWriteBundle, codexSessionNodeId, createCodexHookTraceFixture } from './codex-hook-trace.js';
 export { buildHermesHookTraceOperations, createHermesHookTraceFixture } from './hermes-hook-trace.js';
 export {
+  SESSION_ARTIFACT_MANIFEST_CONTRACT_VERSION,
+  SESSION_ARTIFACT_MANIFEST_MEDIA_TYPE,
+  buildSessionArtifactManifestOperations,
+} from './session-artifact-manifest.js';
+export type {
+  SessionArtifactManifestDocument,
+  SessionArtifactManifestEngine,
+  SessionArtifactManifestEntry,
+  SessionArtifactManifestInput,
+} from './session-artifact-manifest.js';
+export {
   CONTENT_ARTIFACT_CONTRACT_VERSION,
   CONTENT_ARTIFACT_MANIFEST_CONTRACT_VERSION,
   CONTENT_ARTIFACT_MAX_INLINE_BYTES,

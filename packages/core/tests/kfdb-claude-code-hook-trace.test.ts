@@ -43,6 +43,7 @@ describe('buildClaudeCodeHookTraceOperations', () => {
           transcriptPath: '/workspace/.claude/transcripts/claude-session-1.jsonl',
           cwd: '/workspace',
           receivedAt: 1_765_000_001_000,
+          lastAssistantMessage: 'The Claude implementation is ready.',
         },
       ],
     };
@@ -66,6 +67,10 @@ describe('buildClaudeCodeHookTraceOperations', () => {
     expect(edges).toContain('TOUCHED_FILE');
     const bundle = buildClaudeCodeHookTraceWriteBundle(trace);
     expect(bundle.contentArtifacts.filter((artifact) => artifact.value.contractVersion === 'content-artifact/v1').length).toBeGreaterThanOrEqual(2);
+    const persistedContent = bundle.contentArtifacts.flatMap((artifact) => artifact.value.contractVersion === 'content-artifact/v1' ? [artifact.value.content] : []);
+    expect(persistedContent).toContain('The Claude implementation is ready.');
+    expect(bundle.operations.map((operation) => operation.label)).toContain('SessionArtifactManifest');
+    expect(bundle.operations.map((operation) => operation.edge_type)).toContain('HAS_ARTIFACT_MANIFEST');
   });
 
   it('emits a canonical DecisionObservation for a permission ruling', () => {

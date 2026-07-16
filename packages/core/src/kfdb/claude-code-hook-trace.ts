@@ -8,6 +8,10 @@ import {
   type RepositorySnapshot,
   type ObservableContextDelivery,
 } from './decision-pack-v1.js';
+import {
+  buildSessionArtifactManifestOperations,
+  type SessionArtifactManifestEntry,
+} from './session-artifact-manifest.js';
 import type { WorkContractRef } from './work-provenance-v1.js';
 
 export interface ClaudeCodeHookEventRecord {
@@ -20,6 +24,8 @@ export interface ClaudeCodeHookEventRecord {
   source?: string;
   receivedAt: number;
   prompt?: string;
+  /** Observable final assistant text supplied by Claude Code's Stop hook. */
+  lastAssistantMessage?: string | null;
   reason?: string;
   stopHookActive?: boolean;
   toolName?: string;
@@ -349,6 +355,7 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
     { operation: 'create_edge', id: deterministicExecutionId('USES_EXECUTION_ENGINE', [turnNodeId, executionEngineNodeId]), from: turnNodeId, to: executionEngineNodeId, edge_type: 'USES_EXECUTION_ENGINE', properties: { execution_engine: value('claude-code') } },
   ];
   const contentArtifacts: ImmutableContentArtifactWrite[] = [];
+  const manifestEntries: SessionArtifactManifestEntry[] = [];
 
   if (trace.initialPrompt !== undefined) {
     const initialPromptArtifact = buildContentArtifactOperations({
@@ -358,6 +365,13 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
       sourceRef: `claude-code:${trace.claudeSessionId}:initial-prompt`,
     });
     contentArtifacts.push(...initialPromptArtifact.artifacts);
+    manifestEntries.push({
+      sequence: -1,
+      eventType: 'SessionInitialPrompt',
+      receivedAt: trace.startedAt,
+      role: 'initial-human-prompt',
+      artifact: initialPromptArtifact.ref,
+    });
     operations.push(...initialPromptArtifact.operations, {
       operation: 'create_edge',
       id: deterministicId('INCLUDES_ARTIFACT', [sessionNodeId, initialPromptArtifact.ref.artifactId]),
@@ -383,6 +397,9 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
     const artifactRefs: Record<string, ContentArtifactRef> = {};
     const observable: Array<{ role: string; content: string; mediaType: string }> = [];
     if (event.prompt !== undefined) observable.push({ role: 'human-prompt', content: event.prompt, mediaType: 'text/plain; charset=utf-8' });
+    if (event.lastAssistantMessage !== undefined && event.lastAssistantMessage !== null) {
+      observable.push({ role: 'assistant-message', content: event.lastAssistantMessage, mediaType: 'text/plain; charset=utf-8' });
+    }
     if (event.toolInput !== undefined) observable.push({ role: 'tool-input', content: stableJson(event.toolInput), mediaType: 'application/json' });
     if (event.toolResponse !== undefined) observable.push({ role: 'tool-response', content: stableJson(event.toolResponse), mediaType: 'application/json' });
     if (event.stdout !== undefined) observable.push({ role: 'tool-stdout', content: event.stdout, mediaType: 'text/plain; charset=utf-8' });
@@ -402,6 +419,13 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
       artifactRefs[item.role] = built.ref;
       contentArtifacts.push(...built.artifacts);
       operations.push(...built.operations);
+      manifestEntries.push({
+        sequence: event.sequence,
+        eventType: event.hookEventName,
+        receivedAt: event.receivedAt,
+        role: item.role,
+        artifact: built.ref,
+      });
     }
     operations.push(
       { operation: 'create_node', id: eventId, label: 'ClaudeCodeHookEvent', mode: 'merge', properties: { event_index: value(event.sequence), event_type: value(event.hookEventName), cwd: value(event.cwd ?? trace.cwd ?? ''), tool_name: value(event.toolName ?? ''), tool_use_id: value(event.toolUseId ?? ''), data: value(eventData(event, artifactRefs)), schema_version: value(TRACE_SCHEMA_VERSION) } },
@@ -474,6 +498,22 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
       operations.push(...observation.operations);
     }
   });
+
+  const manifest = buildSessionArtifactManifestOperations({
+    engine: 'claude-code',
+    session: { nodeId: sessionNodeId, label: 'ClaudeCodeSession', externalSessionId: trace.claudeSessionId },
+    turn: {
+      nodeId: turnNodeId,
+      label: 'ClaudeCodeTurn',
+      index: trace.turnIndex,
+      startedAt: trace.startedAt,
+      completedAt: trace.completedAt,
+    },
+    repository: trace.repository,
+    entries: manifestEntries,
+  });
+  operations.push(...manifest.operations);
+  contentArtifacts.push(...manifest.contentArtifacts);
 
   return { operations, contentArtifacts };
 }

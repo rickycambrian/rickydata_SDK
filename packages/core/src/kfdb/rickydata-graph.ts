@@ -51,6 +51,7 @@ export enum GraphEntityKind {
   RunUsageReceipt = 'RunUsageReceipt',
   RunOutcomeReceipt = 'RunOutcomeReceipt',
   ContentArtifact = 'ContentArtifact',
+  SessionArtifactManifest = 'SessionArtifactManifest',
   /**
    * memory-v1 (`rickydata.memory.v1`): an open/clarification question the system
    * should ask a human. The ONE new label the memory contract adds; see
@@ -98,6 +99,7 @@ export enum GraphEdgeType {
   GeneratedBySession = 'GENERATED_BY_SESSION',
   PacksSubject = 'PACKS_SUBJECT',
   IncludesArtifact = 'INCLUDES_ARTIFACT',
+  HasArtifactManifest = 'HAS_ARTIFACT_MANIFEST',
   HasSourceReceipt = 'HAS_SOURCE_RECEIPT',
   ScoresPack = 'SCORES_PACK',
   DecidesWithPack = 'DECIDES_WITH_PACK',
@@ -217,6 +219,7 @@ const ENTITY_ID_PARTS: Record<GraphEntityKind, string[]> = {
   [GraphEntityKind.RunUsageReceipt]: ['run_node_id', 'receipt_key'],
   [GraphEntityKind.RunOutcomeReceipt]: ['run_node_id', 'receipt_key'],
   [GraphEntityKind.ContentArtifact]: ['content_hash', 'media_type'],
+  [GraphEntityKind.SessionArtifactManifest]: ['session_node_id', 'turn_node_id'],
   // memory-v1: same `(source_ref, question)` ⇒ same id ⇒ idempotent merge.
   [GraphEntityKind.OpenQuestion]: ['source_ref', 'question'],
 };
