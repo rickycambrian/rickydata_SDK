@@ -204,6 +204,27 @@ describe('KFDBClient', () => {
     expect(url).toContain('limit=10');
   });
 
+  it('sends sparse field projections and abort signals through entity list reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ label: 'RickydataLintRun', items: [], total: 0, limit: 1, offset: 0, source: 'kfdb-scylladb' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    await client.listEntities('RickydataLintRun', {
+      scope: 'private',
+      limit: 1,
+      fields: ['run_id', 'findings_json'],
+      signal: controller.signal,
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(url).toContain('fields=run_id%2Cfindings_json');
+    expect(init.signal).toBe(controller.signal);
+  });
+
   it('write hits /api/v1/write with no scope', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({ operations_executed: 1, execution_time_ms: 2.3, affected_ids: ['node-1'] }),

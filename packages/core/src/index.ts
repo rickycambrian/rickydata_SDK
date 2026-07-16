@@ -1,6 +1,7 @@
 // Main client
 export { MCPGateway } from './client.js';
-export { KFDBClient } from './kfdb/index.js';
+export { KFDBClient, KfdbReadSession, KfdbHttpError } from './kfdb/index.js';
+export { KnowledgeWorkClient, KnowledgeWorkHttpError, createKnowledgeWorkPipeline } from './knowledge/index.js';
 export { BenchmarkEvidenceClient, ResearchClient, ResearchKFDBClient, SelfImprovementClient } from './research/index.js';
 
 // Auth
@@ -285,6 +286,7 @@ export type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbReadSessionOptions,
   KfdbShareNotebookRequest,
   KfdbShareNotebookResponse,
   KfdbSharedNotebook,
@@ -297,6 +299,18 @@ export type {
   KfdbWriteRequest,
   KfdbWriteResponse,
 } from './kfdb/index.js';
+export type {
+  KnowledgeContextPack,
+  KnowledgeContextPackOptions,
+  KnowledgeContextPackSourceHealth,
+  KnowledgeWorkAnchor,
+  KnowledgeWorkAnchorKind,
+  KnowledgeWorkClientConfig,
+  KnowledgeWorkPipelineModel,
+  KnowledgeWorkStep,
+  KnowledgeWorkStepId,
+  KnowledgeWorkStepStatus,
+} from './knowledge/index.js';
 export type {
   AppendResearchRunEventRequest,
   BacktestSkillCandidateRequest,

@@ -16,6 +16,10 @@ import {
   type RickyDataThemeName,
 } from '@rickydata/design-tokens';
 export {
+  KnowledgeWorkPipeline,
+  type KnowledgeWorkPipelineProps,
+} from './KnowledgeWorkPipeline';
+export {
   OrganizedBubbleAtlas,
   type OrganizedBubbleAtlasEdge,
   type OrganizedBubbleAtlasNode,

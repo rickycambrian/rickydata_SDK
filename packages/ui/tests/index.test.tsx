@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { Button, EmptyState, OrganizedBubbleAtlas, RelationshipGraph, RickyDataThemeProvider, SearchField } from '../src/index.js';
+import { Button, EmptyState, KnowledgeWorkPipeline, OrganizedBubbleAtlas, RelationshipGraph, RickyDataThemeProvider, SearchField } from '../src/index.js';
 
 describe('@rickydata/ui', () => {
   it('renders children with the theme provider', () => {
@@ -68,5 +68,29 @@ describe('@rickydata/ui', () => {
     expect(screen.getByLabelText('Organized atlas')).toBeTruthy();
     expect(screen.getByText('Agentic')).toBeTruthy();
     expect(screen.getByText('Knowledge graphs')).toBeTruthy();
+  });
+
+  it('renders knowledge-work steps with honest ready, omitted, and incomplete states', () => {
+    render(
+      <KnowledgeWorkPipeline
+        pipeline={{
+          version: 'knowledge-work/v1',
+          anchor: { kind: 'repo', key: 'rickydata_home' },
+          brief: 'Use verified context before changing code.',
+          coverage: 'bounded',
+          compiledAt: '2026-07-16T10:00:00.000Z',
+          reproducibilityHash: 'abc',
+          tokenEstimate: 123,
+          steps: [
+            { id: 'orient', label: 'Orient', description: 'Read the brief.', status: 'ready', itemCount: 1, omittedCount: 0, sections: ['brief'] },
+            { id: 'decisions', label: 'Prior decisions', description: 'Reuse decisions.', status: 'omitted', itemCount: 0, omittedCount: 2, sections: ['decisions'] },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('list', { name: 'Knowledge work pipeline' })).toBeTruthy();
+    expect(screen.getByText('Use verified context before changing code.')).toBeTruthy();
+    expect(screen.getByText(/2 omitted/)).toBeTruthy();
   });
 });

@@ -22,6 +22,7 @@ import type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbReadSessionOptions,
   KfdbSemanticSearchRequest,
   KfdbSemanticSearchResponse,
   KfdbEmbedEntityRequest,
@@ -43,6 +44,8 @@ import type {
   KfdbImmutableClaimResponse,
   KfdbImmutableValueResponse,
 } from './types.js';
+import { KfdbHttpError } from './errors.js';
+import { KfdbReadSession } from './read-session.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
 import { buildClaudeCodeHookTraceOperations, type ClaudeCodeHookTrace } from './claude-code-hook-trace.js';
@@ -178,6 +181,11 @@ export class KFDBClient {
     return scoped;
   }
 
+  /** Create an explicit request-scoped read plan with promise coalescing. */
+  readSession(options: KfdbReadSessionOptions = {}): KfdbReadSession {
+    return new KfdbReadSession(this, options);
+  }
+
   async listLabels(scope?: KfdbQueryScope): Promise<KfdbListLabelsResponse> {
     const resolvedScope = this.resolveScope(scope);
     const res = await this.request(`/api/v1/entities/labels?scope=${resolvedScope}`);
@@ -192,9 +200,10 @@ export class KFDBClient {
     if (options.sortBy) params.set('sort_by', options.sortBy);
     if (options.sortOrder) params.set('sort_order', options.sortOrder);
     if (options.includeEmbeddings != null) params.set('include_embeddings', String(options.includeEmbeddings));
+    if (options.fields?.length) params.set('fields', options.fields.join(','));
 
     const encodedLabel = encodeURIComponent(label);
-    const res = await this.request(`/api/v1/entities/${encodedLabel}?${params.toString()}`);
+    const res = await this.request(`/api/v1/entities/${encodedLabel}?${params.toString()}`, { signal: options.signal });
     const data = await this.parseJson<KfdbListEntitiesResponse>(res, 'list entities');
     if (this.encryptionKey && data.items.length > 0) {
       data.items = await decryptResponseRows(this.encryptionKey, data.items);
@@ -209,7 +218,7 @@ export class KFDBClient {
 
     const encodedLabel = encodeURIComponent(label);
     const encodedId = encodeURIComponent(id);
-    const res = await this.request(`/api/v1/entities/${encodedLabel}/${encodedId}?${params.toString()}`);
+    const res = await this.request(`/api/v1/entities/${encodedLabel}/${encodedId}?${params.toString()}`, { signal: options.signal });
     const data = await this.parseJson<KfdbEntityResponse>(res, 'get entity');
     if (this.encryptionKey) {
       const [decrypted] = await decryptResponseRows(this.encryptionKey, [data.properties]);
@@ -253,6 +262,7 @@ export class KFDBClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: request.signal,
     });
     const data = await this.parseJson<KfdbBatchGetEntitiesResponse>(res, 'batch get entities');
     if (this.encryptionKey) {
@@ -743,8 +753,8 @@ export class KFDBClient {
 
   private async parseJson<T>(res: Response, action: string): Promise<T> {
     if (!res.ok) {
-      const errorBody = await res.text().catch(() => '');
-      throw new Error(`Failed to ${action}: ${res.status}${errorBody ? ` ${errorBody}` : ''}`);
+      await res.body?.cancel().catch(() => {});
+      throw new KfdbHttpError(res.status, action);
     }
     return res.json() as Promise<T>;
   }

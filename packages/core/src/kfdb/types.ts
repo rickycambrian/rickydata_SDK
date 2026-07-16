@@ -29,6 +29,10 @@ export interface KfdbListEntitiesOptions {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   includeEmbeddings?: boolean;
+  /** Comma-delimited server projection. `_id` remains available for identity. */
+  fields?: string[];
+  /** Cancels the HTTP read without changing session state. */
+  signal?: AbortSignal;
 }
 
 export interface KfdbListEntitiesResponse {
@@ -43,6 +47,7 @@ export interface KfdbListEntitiesResponse {
 export interface KfdbGetEntityOptions {
   scope?: KfdbQueryScope;
   includeEmbeddings?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface KfdbEntityResponse {
@@ -70,6 +75,12 @@ export interface KfdbBatchGetEntitiesRequest {
   scope?: KfdbQueryScope;
   entities: KfdbEntityRef[];
   includeEmbeddings?: boolean;
+  signal?: AbortSignal;
+}
+
+/** Defaults applied by one request-scoped, promise-coalescing read session. */
+export interface KfdbReadSessionOptions {
+  scope?: KfdbQueryScope;
 }
 
 export interface KfdbBatchGetEntitiesResponse {
