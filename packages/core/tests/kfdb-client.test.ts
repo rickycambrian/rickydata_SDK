@@ -347,6 +347,31 @@ describe('KFDBClient', () => {
     expect(headers.get('x-derive-session-id')).toBe('derive-session');
   });
 
+  it('reads immutable content artifacts through the derive-authenticated private KV seam', async () => {
+    const key = `content-artifact:sha256:${'a'.repeat(64)}`;
+    const value = {
+      contractVersion: 'content-artifact/v1',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      byteLength: 5,
+      content: 'hello',
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ success: true, key, value }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({
+      baseUrl: BASE,
+      apiKey: 'kfdb_api_key',
+      walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+    });
+    client.setDeriveSession('derive-session', 'a'.repeat(64));
+
+    await expect(client.getPrivateKv(key)).resolves.toEqual({ found: true, value });
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/kv/${encodeURIComponent(key)}`);
+    const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers as HeadersInit);
+    expect(headers.get('x-derive-session-id')).toBe('derive-session');
+    await expect(client.getPrivateKv('unscoped-key')).rejects.toThrow('supported immutable namespace');
+  });
+
   it('writes Codex hook traces through the deterministic KG builder', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({ operations_executed: 5 }),

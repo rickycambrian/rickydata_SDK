@@ -344,6 +344,21 @@ export class KFDBClient {
     if (!key.startsWith('immutable-claim:') || key.length > 1024) {
       throw new Error('Immutable private KV key must start with immutable-claim: and fit 1024 characters');
     }
+    return this.getPrivateKv(key);
+  }
+
+  /**
+   * Read a derive-authenticated immutable private KV value. This deliberately
+   * exposes only the two immutable namespaces the SDK writes: authority claims
+   * and content-addressed observable artifacts.
+   */
+  async getPrivateKv(key: string): Promise<KfdbImmutableValueResponse> {
+    if (
+      (!key.startsWith('immutable-claim:') && !key.startsWith('content-artifact:'))
+      || key.length > 1024
+    ) {
+      throw new Error('Private KV key must use a supported immutable namespace and fit 1024 characters');
+    }
     if (this.walletAddress && !this.deriveSessionId) {
       throw new Error(
         'Sign-to-derive session required for immutable private KV reads when walletAddress is configured. ' +
