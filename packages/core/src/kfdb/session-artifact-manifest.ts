@@ -23,11 +23,14 @@ export interface SessionArtifactManifestEntry {
   eventType: string;
   receivedAt: number;
   role: string;
+  toolName?: string;
+  toolUseId?: string;
   artifact: ContentArtifactRef;
 }
 
 export interface SessionArtifactManifestInput {
   engine: SessionArtifactManifestEngine;
+  runtime: { agentId: string; model?: string; cwd?: string };
   session: CanonicalGraphRef & { externalSessionId: string };
   turn: CanonicalGraphRef & {
     externalTurnId?: string;
@@ -42,6 +45,7 @@ export interface SessionArtifactManifestInput {
 export interface SessionArtifactManifestDocument {
   contractVersion: typeof SESSION_ARTIFACT_MANIFEST_CONTRACT_VERSION;
   engine: SessionArtifactManifestEngine;
+  runtime: { agentId: string; model?: string; cwd?: string };
   session: { nodeId: string; label: string; externalSessionId: string };
   turn: {
     nodeId: string;
@@ -70,11 +74,18 @@ function manifestDocument(input: SessionArtifactManifestInput): SessionArtifactM
       eventType: nonEmpty(entry.eventType, 'entry.eventType'),
       receivedAt: entry.receivedAt,
       role: nonEmpty(entry.role, 'entry.role'),
+      ...(entry.toolName ? { toolName: entry.toolName } : {}),
+      ...(entry.toolUseId ? { toolUseId: entry.toolUseId } : {}),
       artifact: entry.artifact,
     }));
   return {
     contractVersion: SESSION_ARTIFACT_MANIFEST_CONTRACT_VERSION,
     engine: input.engine,
+    runtime: {
+      agentId: nonEmpty(input.runtime.agentId, 'runtime.agentId'),
+      ...(input.runtime.model ? { model: input.runtime.model } : {}),
+      ...(input.runtime.cwd ? { cwd: input.runtime.cwd } : {}),
+    },
     session: {
       nodeId: nonEmpty(input.session.nodeId, 'session.nodeId'),
       label: nonEmpty(input.session.label, 'session.label'),
@@ -127,6 +138,9 @@ export function buildSessionArtifactManifestOperations(input: SessionArtifactMan
       properties: {
         contract_version: rickydataGraphValue(SESSION_ARTIFACT_MANIFEST_CONTRACT_VERSION),
         engine: rickydataGraphValue(manifest.engine),
+        agent_id: rickydataGraphValue(manifest.runtime.agentId),
+        model: rickydataGraphValue(manifest.runtime.model),
+        cwd: rickydataGraphValue(manifest.runtime.cwd),
         session_node_id: rickydataGraphValue(manifest.session.nodeId),
         session_label: rickydataGraphValue(manifest.session.label),
         external_session_id: rickydataGraphValue(manifest.session.externalSessionId),

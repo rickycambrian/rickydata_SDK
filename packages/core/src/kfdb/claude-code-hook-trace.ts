@@ -424,6 +424,8 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
         eventType: event.hookEventName,
         receivedAt: event.receivedAt,
         role: item.role,
+        ...(event.toolName ? { toolName: event.toolName } : {}),
+        ...(event.toolUseId ? { toolUseId: event.toolUseId } : {}),
         artifact: built.ref,
       });
     }
@@ -501,6 +503,7 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
 
   const manifest = buildSessionArtifactManifestOperations({
     engine: 'claude-code',
+    runtime: { agentId: trace.agentId, ...(trace.model ? { model: trace.model } : {}), ...(trace.cwd ? { cwd: trace.cwd } : {}) },
     session: { nodeId: sessionNodeId, label: 'ClaudeCodeSession', externalSessionId: trace.claudeSessionId },
     turn: {
       nodeId: turnNodeId,

@@ -510,6 +510,8 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
         eventType: event.hookEventName,
         receivedAt: event.receivedAt,
         role: item.role,
+        ...(event.toolName ? { toolName: event.toolName } : {}),
+        ...(event.toolUseId ? { toolUseId: event.toolUseId } : {}),
         artifact: built.ref,
       });
     }
@@ -648,6 +650,7 @@ export function buildCodexHookTraceWriteBundle(trace: CodexHookTrace): CodexHook
 
   const manifest = buildSessionArtifactManifestOperations({
     engine: 'codex',
+    runtime: { agentId: trace.agentId, ...(trace.model ? { model: trace.model } : {}), ...(trace.cwd ? { cwd: trace.cwd } : {}) },
     session: { nodeId: sessionNodeId, label: 'CodexSession', externalSessionId: trace.codexSessionId },
     turn: {
       nodeId: turnNodeId,

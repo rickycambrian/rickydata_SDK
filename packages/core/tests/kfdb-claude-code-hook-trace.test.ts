@@ -71,6 +71,15 @@ describe('buildClaudeCodeHookTraceOperations', () => {
     expect(persistedContent).toContain('The Claude implementation is ready.');
     expect(bundle.operations.map((operation) => operation.label)).toContain('SessionArtifactManifest');
     expect(bundle.operations.map((operation) => operation.edge_type)).toContain('HAS_ARTIFACT_MANIFEST');
+    const manifestContent = persistedContent.find((content) => content.includes('"contractVersion":"rickydata.session_artifact_manifest.v1"'));
+    const manifest = manifestContent
+      ? JSON.parse(manifestContent) as { runtime?: unknown; entries?: unknown[] }
+      : undefined;
+    expect(manifest?.runtime).toEqual({ agentId: 'erc8004-expert', model: 'claude-sonnet-4-6', cwd: '/workspace' });
+    expect(manifest?.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'tool-input', toolName: 'Edit', toolUseId: 'tool-1' }),
+      expect.objectContaining({ role: 'tool-response', toolName: 'Edit', toolUseId: 'tool-1' }),
+    ]));
   });
 
   it('emits a canonical DecisionObservation for a permission ruling', () => {

@@ -21,6 +21,7 @@ describe('buildSessionArtifactManifestOperations', () => {
     });
     const input = {
       engine: 'codex' as const,
+      runtime: { agentId: 'codex', model: 'gpt-5.3-codex', cwd: '/workspace/repo' },
       session: { nodeId: 'session-node', label: 'CodexSession', externalSessionId: 'session-1' },
       turn: {
         nodeId: 'turn-node', label: 'CodexTurn', externalTurnId: 'turn-1', index: 2,
@@ -32,7 +33,7 @@ describe('buildSessionArtifactManifestOperations', () => {
       },
       entries: [
         { sequence: 1, eventType: 'Stop', receivedAt: 20, role: 'assistant-message', artifact: answer.ref },
-        { sequence: 0, eventType: 'UserPromptSubmit', receivedAt: 10, role: 'human-prompt', artifact: prompt.ref },
+        { sequence: 0, eventType: 'UserPromptSubmit', receivedAt: 10, role: 'human-prompt', toolName: 'AskUser', toolUseId: 'call-1', artifact: prompt.ref },
       ],
     };
 
@@ -50,10 +51,12 @@ describe('buildSessionArtifactManifestOperations', () => {
     if (!root || root.value.contractVersion !== 'content-artifact/v1') throw new Error('expected inline manifest');
     const manifest = JSON.parse(root.value.content);
     expect(manifest.contractVersion).toBe(SESSION_ARTIFACT_MANIFEST_CONTRACT_VERSION);
+    expect(manifest.runtime).toEqual({ agentId: 'codex', model: 'gpt-5.3-codex', cwd: '/workspace/repo' });
     expect(manifest.entries.map((entry: { role: string }) => entry.role)).toEqual([
       'human-prompt',
       'assistant-message',
     ]);
+    expect(manifest.entries[0]).toMatchObject({ toolName: 'AskUser', toolUseId: 'call-1' });
     expect(root.value.content).not.toContain('What changed?');
     expect(root.value.content).not.toContain('The tests now pass.');
   });

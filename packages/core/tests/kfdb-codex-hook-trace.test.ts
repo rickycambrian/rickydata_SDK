@@ -73,6 +73,15 @@ describe('buildCodexHookTraceOperations', () => {
     expect(bundle.contentArtifacts.every((artifact) => artifact.ifAbsent)).toBe(true);
     expect(bundle.operations.map((operation) => operation.label)).toContain('SessionArtifactManifest');
     expect(bundle.operations.map((operation) => operation.edge_type)).toContain('HAS_ARTIFACT_MANIFEST');
+    const manifestContent = persistedContent.find((content) => content.includes('"contractVersion":"rickydata.session_artifact_manifest.v1"'));
+    const manifest = manifestContent
+      ? JSON.parse(manifestContent) as { runtime?: unknown; entries?: unknown[] }
+      : undefined;
+    expect(manifest?.runtime).toEqual({ agentId: 'erc8004-expert', model: 'gpt-5.3-codex', cwd: '/workspace' });
+    expect(manifest?.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'tool-input', toolName: 'Bash', toolUseId: 'tool-1' }),
+      expect.objectContaining({ role: 'tool-response', toolName: 'Bash', toolUseId: 'tool-1' }),
+    ]));
     const session = first.find((op) => op.label === 'CodexSession') as { properties?: Record<string, unknown> };
     expect(session.properties?.repository).toEqual(expect.objectContaining({ Object: expect.any(Object) }));
   });
