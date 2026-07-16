@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { KFDBClient } from '../src/kfdb/client.js';
+import { KfdbEntityNotFoundError, KfdbHttpError } from '../src/kfdb/errors.js';
 import { kfdbValue } from '../src/kfdb/index.js';
 
 const BASE = 'http://localhost:8080';
@@ -223,6 +224,59 @@ describe('KFDBClient', () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(url).toContain('fields=run_id%2Cfindings_json');
     expect(init.signal).toBe(controller.signal);
+  });
+
+  it('distinguishes a missing entity from an unavailable Entity API route', async () => {
+    const id = '550e8400-e29b-41d4-a716-446655440000';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({
+        status: 404,
+        message: `Entity not found: Note:${id}`,
+      }, 404))
+      .mockResolvedValueOnce(mockJsonResponse({
+        status: 404,
+        message: 'Not Found',
+      }, 404));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    const missing = await client.getEntity('Note', id).catch((error: unknown) => error);
+    expect(missing).toBeInstanceOf(KfdbEntityNotFoundError);
+    expect(missing).toMatchObject({ status: 404, action: 'get entity', label: 'Note', id });
+
+    const unavailable = await client.getEntity('Note', id).catch((error: unknown) => error);
+    expect(unavailable).toBeInstanceOf(KfdbHttpError);
+    expect(unavailable).not.toBeInstanceOf(KfdbEntityNotFoundError);
+    expect(unavailable).toMatchObject({ status: 404, action: 'get entity', serverMessage: 'Not Found' });
+  });
+
+  it('reports request correlation and backend timing metadata for every response', async () => {
+    const onResponseMeta = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ labels: [], count: 0 }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-123',
+        'x-kfdb-backend': 'scylla-private',
+        'server-timing': 'auth;dur=1.2, app;dur=8.7',
+      },
+    })));
+
+    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123', onResponseMeta });
+    await client.listLabels('private');
+
+    expect(onResponseMeta).toHaveBeenCalledTimes(1);
+    expect(onResponseMeta).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'GET',
+      path: '/api/v1/entities/labels?scope=private',
+      status: 200,
+      ok: true,
+      requestId: 'req-123',
+      backend: 'scylla-private',
+      serverTiming: 'auth;dur=1.2, app;dur=8.7',
+      serverMs: 8.7,
+    }));
+    expect(onResponseMeta.mock.calls[0]![0].clientWaitMs).toBeGreaterThanOrEqual(0);
   });
 
   it('write hits /api/v1/write with no scope', async () => {

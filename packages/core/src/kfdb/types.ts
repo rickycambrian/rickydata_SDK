@@ -2,6 +2,24 @@ import type { WrappedGroupKey } from '../encryption.js';
 
 export type KfdbQueryScope = 'global' | 'private';
 
+/** Transport metadata emitted after KFDB returns an HTTP response. */
+export interface KfdbResponseMeta {
+  method: string;
+  path: string;
+  status: number;
+  ok: boolean;
+  /** Client-observed time until response headers arrived. */
+  clientWaitMs: number;
+  /** End-to-end correlation id returned by KFDB's request-context middleware. */
+  requestId?: string;
+  /** Storage/backend identifier when the deployment exposes one. */
+  backend?: string;
+  /** Raw W3C Server-Timing header, preserved for metric-specific consumers. */
+  serverTiming?: string;
+  /** Best available server duration from KFDB headers or Server-Timing. */
+  serverMs?: number;
+}
+
 export interface KfdbClientConfig {
   baseUrl: string;
   token?: string;
@@ -10,6 +28,8 @@ export interface KfdbClientConfig {
   encryptionKey?: CryptoKey;
   /** Ethereum wallet address (0x-prefixed). When set, write() enforces that sign-to-derive is active. */
   walletAddress?: string;
+  /** Observe request ids and timing without patching SDK internals. Observer failures are ignored. */
+  onResponseMeta?: (meta: KfdbResponseMeta) => void;
 }
 
 export interface KfdbLabelInfo {

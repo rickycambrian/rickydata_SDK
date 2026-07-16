@@ -1,6 +1,6 @@
 export { KFDBClient } from './client.js';
 export { KfdbReadSession } from './read-session.js';
-export { KfdbHttpError } from './errors.js';
+export { KfdbEntityNotFoundError, KfdbHttpError } from './errors.js';
 export {
   ERC8128_CHAIN_ID,
   ERC8128_LABEL,
@@ -238,6 +238,7 @@ export type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbResponseMeta,
   KfdbReadSessionOptions,
   KfdbSemanticSearchRequest,
   KfdbSemanticSearchResponse,

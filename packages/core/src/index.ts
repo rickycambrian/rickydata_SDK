@@ -1,6 +1,6 @@
 // Main client
 export { MCPGateway } from './client.js';
-export { KFDBClient, KfdbReadSession, KfdbHttpError } from './kfdb/index.js';
+export { KFDBClient, KfdbReadSession, KfdbEntityNotFoundError, KfdbHttpError } from './kfdb/index.js';
 export {
   KnowledgeWorkClient,
   KnowledgeWorkHttpError,
@@ -294,6 +294,7 @@ export type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbResponseMeta,
   KfdbReadSessionOptions,
   KfdbShareNotebookRequest,
   KfdbShareNotebookResponse,

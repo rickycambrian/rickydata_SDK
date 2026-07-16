@@ -173,7 +173,7 @@ export interface TeamWorkflowOptions {
 
 ## Pattern 6: Tenant-Scoped Immutable Snapshot Cache
 
-**Provenance:** Verified 2026-07-16 in `KnowledgeWorkClient` with 1,018 passing
+**Provenance:** Verified 2026-07-16 in `KnowledgeWorkClient` with 1,020 passing
 core tests and a real local Home/UI reload. The settled IndexedDB reload rendered
 the seven-stage pipeline in 157ms with no additional Home request.
 
@@ -196,3 +196,35 @@ for content-addressed reuse.
 Persistent browser caching is opt-in because it stores decrypted private
 knowledge on the device. Hosts must pass the authenticated wallet address via
 `cacheScope`; a generic shared scope is not safe for multi-user hosts.
+
+## Pattern 7: KFDB Error Identity + Response Metadata
+
+**Provenance:** Verified 2026-07-16 with 25 focused KFDB client tests, all 1,020
+core tests, all-package typecheck/tests/build, and Home's 3,735-test gate. Home
+integrated both seams without private request patches.
+
+### When to Use
+
+Use this whenever a consumer performs exact Entity API reads or needs to
+attribute client latency to KFDB without monkey-patching fetch.
+
+### Required Boundaries
+
+1. `KfdbEntityNotFoundError` means the exact endpoint ran successfully and its
+   structured response identified the requested entity as absent.
+2. A generic route/API 404 remains `KfdbHttpError`. Do not treat it as entity
+   absence; consumers may need a compatibility scan fallback.
+3. Preserve structured server fields on `KfdbHttpError`: status, message, code,
+   details, request id, backend, Server-Timing, and parsed server duration.
+4. Observe successful and failed HTTP responses through `onResponseMeta`.
+   Observer exceptions are swallowed so telemetry cannot change retrieval.
+5. `clientWaitMs` is client-observed header wait. Prefer `serverMs` only when
+   the server exposes a duration header or parseable Server-Timing metric; do
+   not infer server execution time from client wait.
+
+Focused verification:
+
+```bash
+npx vitest run packages/core/tests/kfdb-client.test.ts
+npm run build -w packages/core
+```

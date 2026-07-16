@@ -329,12 +329,20 @@ wallet.destroy();
 ### Direct KFDB API (Global/Private Scope)
 
 ```typescript
-import { KFDBClient } from 'rickydata';
+import {
+  KFDBClient,
+  KfdbEntityNotFoundError,
+} from 'rickydata';
 
 const kfdb = new KFDBClient({
   baseUrl: 'http://34.60.37.158',
   apiKey: process.env.KFDB_API_KEY!,
   // defaultReadScope defaults to "global"
+  onResponseMeta: (meta) => {
+    metrics.observe('kfdb.client_wait_ms', meta.clientWaitMs);
+    if (meta.serverMs !== undefined) metrics.observe('kfdb.server_ms', meta.serverMs);
+    trace.setAttribute('kfdb.request_id', meta.requestId ?? 'unknown');
+  },
 });
 
 // Global read (default)
@@ -345,6 +353,18 @@ const privateNotes = await kfdb.withScope('private').listEntities('Note', { limi
 
 // Per-call override
 const privateTasks = await kfdb.listEntities('Task', { scope: 'private', limit: 50 });
+
+// A real missing entity is typed. A routing/API 404 remains KfdbHttpError so
+// callers can safely fall back without mistaking an unavailable API for absence.
+try {
+  await kfdb.getEntity('Task', 'task-id', { scope: 'private' });
+} catch (error) {
+  if (error instanceof KfdbEntityNotFoundError) {
+    // The exact lookup succeeded and this entity does not exist.
+  } else {
+    throw error;
+  }
+}
 
 // Deduplicate repeated reads within one operation. Rejected reads remain retryable.
 const reads = kfdb.readSession({ scope: 'private' });
@@ -449,6 +469,8 @@ const result = await client.callTool('research-agent', 'web_research', { topic: 
 | `getEntity(label, id, opts?)` | Get a single entity by label + ID |
 | `filterEntities(label, request)` | Filter entities with scoped body request |
 | `batchGetEntities(request)` | Batch fetch entities with scoped request |
+| `getKnowledgeBundle(request)` | Fetch KFDB's compiled private knowledge bundle |
+| `readSession(opts?)` | Coalesce identical reads within one operation |
 | `withScope(scope)` | Create a scoped client view (`global` or `private`) |
 | `write(request)` | Tenant-isolated writes via `/api/v1/write` |
 

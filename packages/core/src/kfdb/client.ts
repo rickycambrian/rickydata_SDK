@@ -24,6 +24,7 @@ import type {
   KfdbQueryOptions,
   KfdbQueryResponse,
   KfdbQueryScope,
+  KfdbResponseMeta,
   KfdbReadSessionOptions,
   KfdbSemanticSearchRequest,
   KfdbSemanticSearchResponse,
@@ -46,7 +47,7 @@ import type {
   KfdbImmutableClaimResponse,
   KfdbImmutableValueResponse,
 } from './types.js';
-import { KfdbHttpError } from './errors.js';
+import { KfdbEntityNotFoundError, KfdbHttpError } from './errors.js';
 import { KfdbReadSession } from './read-session.js';
 import { deriveKeyFromSignature, encryptProperties, decryptResponseRows } from '../encryption.js';
 import { buildAgentChatTraceOperations, type AgentChatTurnTrace } from './agent-chat-trace.js';
@@ -59,6 +60,47 @@ function normalizeKfdbExpiresAt(raw: number): number {
   return raw < 10_000_000_000 ? raw * 1000 : raw;
 }
 
+function responseHeader(res: Response, name: string): string | undefined {
+  const value = res.headers?.get(name)?.trim();
+  return value || undefined;
+}
+
+function parseDuration(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw.replace(/ms$/i, '').trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function serverTimingDuration(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const timings = raw.split(',').flatMap((entry) => {
+    const [name = '', ...params] = entry.trim().split(';');
+    const duration = params
+      .map((part) => /^dur=(.+)$/i.exec(part.trim())?.[1])
+      .map(parseDuration)
+      .find((value) => value !== undefined);
+    return duration === undefined ? [] : [{ name: name.toLowerCase(), duration }];
+  });
+  for (const preferred of ['total', 'app', 'request', 'kfdb']) {
+    const match = timings.find((timing) => timing.name === preferred);
+    if (match) return match.duration;
+  }
+  return timings.length > 0 ? Math.max(...timings.map((timing) => timing.duration)) : undefined;
+}
+
+function responseMeta(res: Response): Pick<KfdbResponseMeta, 'requestId' | 'backend' | 'serverTiming' | 'serverMs'> {
+  const serverTiming = responseHeader(res, 'server-timing');
+  const serverMs = parseDuration(responseHeader(res, 'x-kfdb-duration-ms'))
+    ?? parseDuration(responseHeader(res, 'x-response-time'))
+    ?? serverTimingDuration(serverTiming);
+  return {
+    ...(responseHeader(res, 'x-request-id') ? { requestId: responseHeader(res, 'x-request-id') } : {}),
+    ...(responseHeader(res, 'x-kfdb-backend') ? { backend: responseHeader(res, 'x-kfdb-backend') } : {}),
+    ...(serverTiming ? { serverTiming } : {}),
+    ...(serverMs !== undefined ? { serverMs } : {}),
+  };
+}
+
 export class KFDBClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -66,6 +108,7 @@ export class KFDBClient {
   private readonly defaultReadScope: KfdbQueryScope;
   private readonly encryptionKey?: CryptoKey;
   private readonly walletAddress?: string;
+  private readonly onResponseMeta?: (meta: KfdbResponseMeta) => void;
   private deriveSessionId: string | null = null;
   private deriveKeyHex: string | null = null;
   private deriveExpiresAt: number | null = null;
@@ -83,6 +126,7 @@ export class KFDBClient {
     this.defaultReadScope = config.defaultReadScope ?? 'global';
     this.encryptionKey = config.encryptionKey;
     this.walletAddress = config.walletAddress;
+    this.onResponseMeta = config.onResponseMeta;
 
     if (!this.token && !this.apiKey) {
       throw new Error('KFDBClient requires either token or apiKey');
@@ -173,6 +217,7 @@ export class KFDBClient {
       defaultReadScope: scope,
       encryptionKey: this.encryptionKey,
       walletAddress: this.walletAddress,
+      onResponseMeta: this.onResponseMeta,
     });
     scoped.deriveSessionId = this.deriveSessionId;
     scoped.deriveKeyHex = this.deriveKeyHex;
@@ -241,7 +286,7 @@ export class KFDBClient {
     const encodedLabel = encodeURIComponent(label);
     const encodedId = encodeURIComponent(id);
     const res = await this.request(`/api/v1/entities/${encodedLabel}/${encodedId}?${params.toString()}`, { signal: options.signal });
-    const data = await this.parseJson<KfdbEntityResponse>(res, 'get entity');
+    const data = await this.parseJson<KfdbEntityResponse>(res, 'get entity', { entity: { label, id } });
     if (this.encryptionKey) {
       const [decrypted] = await decryptResponseRows(this.encryptionKey, [data.properties]);
       data.properties = decrypted;
@@ -689,10 +734,26 @@ export class KFDBClient {
       headers.set('X-Derive-Key', this.deriveKeyHex);
     }
 
-    return fetch(`${this.baseUrl}${path}`, {
+    const startedAt = performance.now();
+    const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers,
     });
+    if (this.onResponseMeta) {
+      try {
+        this.onResponseMeta({
+          method: init?.method ?? 'GET',
+          path,
+          status: response.status,
+          ok: response.ok,
+          clientWaitMs: performance.now() - startedAt,
+          ...responseMeta(response),
+        });
+      } catch {
+        // Observability must never change the outcome of a KFDB request.
+      }
+    }
+    return response;
   }
 
   /** Re-derive if session is near expiry and autoDerive was configured. */
@@ -773,10 +834,36 @@ export class KFDBClient {
     }
   }
 
-  private async parseJson<T>(res: Response, action: string): Promise<T> {
+  private async parseJson<T>(
+    res: Response,
+    action: string,
+    options: { entity?: { label: string; id: string } } = {},
+  ): Promise<T> {
     if (!res.ok) {
-      await res.body?.cancel().catch(() => {});
-      throw new KfdbHttpError(res.status, action);
+      const raw = await res.text().catch(() => '');
+      let payload: { message?: unknown; code?: unknown; details?: unknown } = {};
+      try {
+        const decoded = JSON.parse(raw) as unknown;
+        if (decoded && typeof decoded === 'object') payload = decoded as typeof payload;
+      } catch {
+        // Non-JSON routing errors still retain their plain response text.
+      }
+      const serverMessage = typeof payload.message === 'string' ? payload.message : raw.trim() || undefined;
+      const errorOptions = {
+        ...responseMeta(res),
+        ...(serverMessage ? { serverMessage } : {}),
+        ...(typeof payload.code === 'string' ? { code: payload.code } : {}),
+        ...(typeof payload.details === 'string' ? { details: payload.details } : {}),
+      };
+      const entity = options.entity;
+      if (
+        res.status === 404
+        && entity
+        && (payload.code === 'ENTITY_NOT_FOUND' || serverMessage === `Entity not found: ${entity.label}:${entity.id}`)
+      ) {
+        throw new KfdbEntityNotFoundError(entity.label, entity.id, errorOptions);
+      }
+      throw new KfdbHttpError(res.status, action, errorOptions);
     }
     return res.json() as Promise<T>;
   }
