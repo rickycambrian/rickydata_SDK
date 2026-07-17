@@ -52,6 +52,17 @@ export interface ClaudeCodeHookEventRecord {
   sourceIntentRef?: string;
 }
 
+/**
+ * A plan-mode plan associated with the session. Sourced from transcript
+ * signals (plan_mode attachments, ExitPlanMode input, Writes to
+ * ~/.claude/plans/); either the file path or the markdown body may be absent.
+ */
+export interface ClaudeCodePlanRecord {
+  planFilePath?: string;
+  content?: string;
+  updatedAt?: number;
+}
+
 export interface ClaudeCodeHookTrace {
   walletAddress: string;
   agentId: string;
@@ -67,6 +78,8 @@ export interface ClaudeCodeHookTrace {
   filesChanged?: number;
   parentSessionId?: string;
   initialPrompt?: string;
+  /** Plan-mode plans observed in the session; emitted as Plan nodes + HAS_PLAN edges. */
+  plans?: ClaudeCodePlanRecord[];
   repository?: RepositorySnapshot;
   baseRepository?: RepositorySnapshot;
   resultRepository?: RepositorySnapshot;
@@ -288,6 +301,75 @@ function addCodeFileOperations(operations: Array<Record<string, unknown>>, sourc
   });
 }
 
+/**
+ * Plan-mode plans: one Plan node per plan document (path-keyed so every
+ * session touching the same plan merges into one node), a HAS_PLAN edge from
+ * the session, and a PLAN_FILE edge to the CodeFile node for on-disk plans.
+ * Id recipes MUST stay in lockstep with rd-plugin's src/lib/plan.ts, which
+ * emits the same ops on the direct sink for vendored SDKs without this
+ * builder — both writers merging into identical ids is the contract.
+ */
+function addPlanOperations(operations: Array<Record<string, unknown>>, sessionNodeId: string, plans: ClaudeCodePlanRecord[]): void {
+  for (const plan of plans) {
+    if (!plan.planFilePath && !plan.content) continue;
+    const planId = plan.planFilePath
+      ? deterministicExecutionId('Plan', [plan.planFilePath])
+      : deterministicExecutionId('Plan', ['content', stableHash(plan.content ?? '')]);
+    const properties: Record<string, unknown> = {
+      source: value('claude-code-plan-mode'),
+      schema_version: value(TRACE_SCHEMA_VERSION),
+    };
+    if (plan.planFilePath) {
+      properties.path = value(plan.planFilePath);
+      properties.path_hash = value(stableHash(plan.planFilePath));
+      properties.slug = value(basename(plan.planFilePath).replace(/\.md$/, ''));
+    }
+    if (plan.content) {
+      properties.content = value(plan.content);
+      properties.content_hash = value(stableHash(plan.content));
+      properties.content_length = value(plan.content.length);
+    }
+    if (plan.updatedAt !== undefined) properties.updated_at = value(plan.updatedAt);
+    operations.push(
+      { operation: 'create_node', id: planId, label: 'Plan', mode: 'merge', properties },
+      {
+        operation: 'create_edge',
+        id: deterministicId('HAS_PLAN', [sessionNodeId, planId]),
+        from: sessionNodeId,
+        to: planId,
+        edge_type: 'HAS_PLAN',
+        properties: { source: value('claude-code-plan-mode') },
+      },
+    );
+    if (plan.planFilePath) {
+      const fileNodeId = deterministicExecutionId('CodeFile', [plan.planFilePath]);
+      operations.push(
+        {
+          operation: 'create_node',
+          id: fileNodeId,
+          label: 'CodeFile',
+          mode: 'merge',
+          properties: {
+            path: value(plan.planFilePath),
+            path_hash: value(stableHash(plan.planFilePath)),
+            basename: value(basename(plan.planFilePath)),
+            extension: value(extension(plan.planFilePath)),
+            schema_version: value(TRACE_SCHEMA_VERSION),
+          },
+        },
+        {
+          operation: 'create_edge',
+          id: deterministicId('PLAN_FILE', [planId, fileNodeId]),
+          from: planId,
+          to: fileNodeId,
+          edge_type: 'PLAN_FILE',
+          properties: { source: value('claude-code-plan-mode') },
+        },
+      );
+    }
+  }
+}
+
 function addCommandOperation(operations: Array<Record<string, unknown>>, sourceNodeId: string, command: string | null): void {
   if (!command) return;
   const commandNodeId = deterministicExecutionId('CodeCommand', [stableHash(command)]);
@@ -391,6 +473,7 @@ export function buildClaudeCodeHookTraceWriteBundle(trace: ClaudeCodeHookTrace):
   }
 
   addWorkspaceOperations(operations, turnNodeId, trace.cwd);
+  if (trace.plans?.length) addPlanOperations(operations, sessionNodeId, trace.plans);
 
   trace.events.forEach((event) => {
     const eventId = deterministicId('ClaudeCodeHookEvent', [turnNodeId, event.sequence, event.hookEventName, event.toolUseId ?? '']);

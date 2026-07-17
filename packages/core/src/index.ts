@@ -260,6 +260,7 @@ export type {
   ClaudeCodeHookEventRecord,
   ClaudeCodeHookTrace,
   ClaudeCodeHookTraceWriteBundle,
+  ClaudeCodePlanRecord,
   CodexHookEventRecord,
   CodexHookTrace,
   CodexHookTraceWriteBundle,

@@ -187,7 +187,7 @@ export {
 } from '../encryption.js';
 export type { SharingKeyPair, WrappedGroupKey } from '../encryption.js';
 export type { AgentChatTraceEvent, AgentChatTurnTrace } from './agent-chat-trace.js';
-export type { ClaudeCodeHookEventRecord, ClaudeCodeHookTrace, ClaudeCodeHookTraceWriteBundle } from './claude-code-hook-trace.js';
+export type { ClaudeCodeHookEventRecord, ClaudeCodeHookTrace, ClaudeCodeHookTraceWriteBundle, ClaudeCodePlanRecord } from './claude-code-hook-trace.js';
 export type { CodexHookEventRecord, CodexHookTrace, CodexHookTraceWriteBundle } from './codex-hook-trace.js';
 export type { HermesHookEventRecord, HermesHookTrace } from './hermes-hook-trace.js';
 export type {

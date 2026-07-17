@@ -115,3 +115,34 @@ describe('buildClaudeCodeHookTraceOperations', () => {
     expect(bundle.contentArtifacts.some((artifact) => artifact.value.contractVersion === 'content-artifact/v1' && artifact.value.content === 'exact compiled context')).toBe(true);
   });
 });
+
+describe('plan-mode plans', () => {
+  it('emits Plan + HAS_PLAN + PLAN_FILE ops with the rd-plugin-locked id recipe', () => {
+    const planFilePath = '/Users/riccardoesclapon/.claude/plans/hidden-gathering-brooks.md';
+    const bundle = buildClaudeCodeHookTraceWriteBundle({
+      walletAddress: '0xabc', agentId: 'claude-code', sessionId: 's', claudeSessionId: 's', turnIndex: 1,
+      startedAt: 1, completedAt: 2, events: [],
+      plans: [{ planFilePath, content: '# The plan', updatedAt: 1751364180000 }],
+    });
+    const planOp = bundle.operations.find((op) => op.label === 'Plan') as Record<string, any>;
+    // Locked against rd-plugin src/lib/plan.ts — both writers must merge into this id.
+    expect(planOp.id).toBe('0f0b35df-21b7-5caf-b964-349fd3965844');
+    expect(planOp.mode).toBe('merge');
+    expect(planOp.properties.slug).toEqual({ String: 'hidden-gathering-brooks' });
+    expect(planOp.properties.content).toEqual({ String: '# The plan' });
+    expect(bundle.operations.map((op) => op.edge_type)).toEqual(expect.arrayContaining(['HAS_PLAN', 'PLAN_FILE']));
+    const codeFile = bundle.operations.find((op) => op.label === 'CodeFile') as Record<string, any>;
+    expect(codeFile.properties.path).toEqual({ String: planFilePath });
+  });
+
+  it('supports pathless plans keyed by content hash and omits file ops', () => {
+    const bundle = buildClaudeCodeHookTraceWriteBundle({
+      walletAddress: '0xabc', agentId: 'claude-code', sessionId: 's', claudeSessionId: 's', turnIndex: 1,
+      startedAt: 1, completedAt: 2, events: [],
+      plans: [{ content: 'inline plan' }],
+    });
+    expect(bundle.operations.some((op) => op.label === 'Plan')).toBe(true);
+    expect(bundle.operations.some((op) => op.edge_type === 'HAS_PLAN')).toBe(true);
+    expect(bundle.operations.some((op) => op.edge_type === 'PLAN_FILE')).toBe(false);
+  });
+});
