@@ -179,4 +179,14 @@ describe('agents commands', () => {
       expect(mockFetch.mock.calls[0][0]).toBe('https://test.example.com/agents/agent-1');
     });
   });
+
+  it('describes claude-compat as hybrid local execution with TEE services', () => {
+    const source = fs.readFileSync(new URL('../../src/cli/commands/agents.ts', import.meta.url), 'utf8');
+    expect(source).toContain('Hybrid: Local Claude Code + RickyData Gateway');
+    expect(source).toContain('local files/git; model and agent services use the TEE gateway');
+    expect(source).toContain('Claude Code runs on this machine');
+    expect(source).toContain('model requests and RickyData agent tools use the TEE gateway');
+    expect(source).not.toContain('tools stay local');
+    expect(source).not.toContain('agent runs through rickydata TEE gateway');
+  });
 });

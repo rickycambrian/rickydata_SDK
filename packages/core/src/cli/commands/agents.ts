@@ -298,7 +298,7 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
   // agents use <id>
   agents
     .command('use <id>')
-    .description('Use an agent with Claude Code (Gateway or Local+Teammate mode)')
+    .description('Use an agent from local Claude Code with RickyData Gateway services')
     .option('--profile <profile>', 'Profile to use')
     .option('--gateway <url>', 'Override agent gateway URL')
     .option('--dangerously-skip-permissions', 'Skip permission prompts in Claude Code')
@@ -363,17 +363,17 @@ export function createAgentsCommands(config: ConfigManager, store: CredentialSto
       console.log();
 
       const selected = await promptSelector([
-        { label: 'Gateway Claude Code', description: '— agent runs through rickydata TEE gateway' },
-        { label: 'Local Claude Code + Agent Teammate', description: '— your subscription + free agent delegate' },
+        { label: 'Hybrid: Local Claude Code + RickyData Gateway', description: '— local files/git; model and agent services use the TEE gateway' },
+        { label: 'Local Claude Code + Remote Agent Teammate', description: '— your local subscription; agent delegation uses RickyData services' },
       ]);
 
       if (selected === 0) {
-        // Option 1: Gateway Claude Code
+        // Option 1: Local Claude Code with Gateway-routed model and agent services
         const claudePath = findClaude() ?? 'claude';
 
         console.log();
-        console.log(chalk.green('  ✓') + ' Launching Gateway Claude Code...');
-        console.log(chalk.dim(`  Routing through rickydata TEE gateway as: ${agent.name ?? id}`));
+        console.log(chalk.green('  ✓') + ' Launching local Claude Code with RickyData Gateway...');
+        console.log(chalk.dim(`  Claude Code runs on this machine as ${agent.name ?? id}; model requests and RickyData agent tools use the TEE gateway.`));
         console.log();
 
         // Build rich identity prompt so Claude Code acts AS the agent
