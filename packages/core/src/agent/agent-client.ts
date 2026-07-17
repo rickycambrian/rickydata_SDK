@@ -78,7 +78,7 @@ const PROVIDER_CONFIG: Record<MarketplaceProvider, {
   opencode: { statusPath: '/wallet/opencode-apikey/status', setPath: '/wallet/opencode-apikey', bodyKey: 'opencodeApiKey' },
 };
 
-function providerFromModel(model?: string, fallback?: string): MarketplaceProvider | null {
+export function providerFromModel(model?: string, fallback?: string): MarketplaceProvider | null {
   const value = (model || fallback || '').toLowerCase();
   if (!value) return null;
   if (value.startsWith('opencode-go/')) return 'opencode';
@@ -87,7 +87,7 @@ function providerFromModel(model?: string, fallback?: string): MarketplaceProvid
   if (value.startsWith('glm') || value.includes('z.ai') || value.includes('zai')) return 'zai';
   if (value.startsWith('deepseek')) return 'deepseek';
   if (value.startsWith('gemini')) return 'gemini';
-  if (value.startsWith('kimi') || value === 'kimi-for-coding') return 'kimi';
+  if (value.startsWith('kimi') || value === 'kimi-for-coding' || value === 'k3' || value === 'k3[1m]') return 'kimi';
   if (value.startsWith('gpt-') || value.startsWith('o1') || value.startsWith('o3') || value.startsWith('o4') || value.includes('openai')) return 'openai';
   if (value === 'haiku' || value === 'sonnet' || value === 'opus' || value.includes('claude')) return 'anthropic';
   return null;

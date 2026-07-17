@@ -24,12 +24,12 @@ async function getFreeTierModel(client: AgentClient): Promise<string> {
   }
 }
 
-function defaultModelForProvider(provider: unknown): string {
+export function defaultModelForProvider(provider: unknown): string {
   if (provider === 'openrouter') return 'google/gemma-4-26b-a4b-it';
   if (provider === 'zai') return 'glm-5.1';
   if (provider === 'deepseek') return 'deepseek-v4-pro';
   if (provider === 'gemini') return 'gemini-3.1-pro-preview';
-  if (provider === 'kimi') return 'kimi-k2.7-code';
+  if (provider === 'kimi') return 'k3[1m]';
   if (provider === 'opencode') return 'opencode-go/deepseek-v4-flash';
   return FREE_TIER_MODEL;
 }
@@ -66,7 +66,7 @@ async function unlockProviderVaultIfPossible(
  * Critical: the model string must start with 'MiniMax' (title case) for the
  * backend to route through the free-tier path. Lowercase 'minimax' does NOT work.
  */
-async function resolveModel(
+export async function resolveModel(
   token: string,
   gatewayUrl: string,
   explicitModel: string | undefined,
@@ -83,7 +83,8 @@ async function resolveModel(
       if (
         settings.modelProvider === 'openrouter' ||
         settings.modelProvider === 'zai' ||
-        settings.modelProvider === 'deepseek'
+        settings.modelProvider === 'deepseek' ||
+        settings.modelProvider === 'kimi'
       ) {
         return settings.defaultModel || defaultModelForProvider(settings.modelProvider);
       }
@@ -116,7 +117,7 @@ async function resolveModel(
     }
 
     if (settings.plan === 'kimi_byok') {
-      return settings.defaultModel || 'kimi-k2.7-code';
+      return settings.defaultModel || 'k3[1m]';
     }
 
     if (settings.plan === 'opencode_byok') {

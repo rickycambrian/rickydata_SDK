@@ -138,4 +138,33 @@ describe('wallet transport overrides', () => {
       defaultModel: 'glm-5.1',
     });
   });
+
+  it('preserves a free-plan Kimi membership provider when switching plans', async () => {
+    const transport = {
+      getWalletSettings: vi.fn().mockResolvedValue({
+        plan: 'free',
+        modelProvider: 'kimi',
+        defaultModel: 'k3[1m]',
+      }),
+      updateWalletSettings: vi.fn().mockImplementation(async (settings) => ({
+        plan: settings.plan || 'free',
+        modelProvider: settings.modelProvider || 'kimi',
+        defaultModel: settings.defaultModel || 'k3[1m]',
+      })),
+    } satisfies RickyDataWalletTransport;
+
+    const { result } = renderWalletHook(() => useWalletPlan(), transport);
+
+    await waitFor(() => {
+      expect(result.current.modelProvider).toBe('kimi');
+    });
+
+    await result.current.switchPlan('free');
+
+    expect(transport.updateWalletSettings).toHaveBeenCalledWith({
+      plan: 'free',
+      modelProvider: 'kimi',
+      defaultModel: 'k3[1m]',
+    });
+  });
 });
