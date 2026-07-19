@@ -3,6 +3,10 @@ import chalk from 'chalk';
 import * as crypto from 'crypto';
 import * as http from 'http';
 import * as readline from 'readline';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { AddressInfo } from 'net';
 import { AgentClient } from '../../agent/agent-client.js';
 import type { AnthropicOAuthBundle } from '../../agent/types.js';
@@ -230,6 +234,56 @@ export function buildBundle(tokens: TokenResponse, nowMs: number): AnthropicOAut
   };
 }
 
+export function normalizeLocalClaudeOAuthBundle(value: unknown): AnthropicOAuthBundle {
+  if (!value || typeof value !== 'object') throw new Error('Local Claude credential is not a JSON object.');
+  const root = value as Record<string, unknown>;
+  const raw = root.claudeAiOauth && typeof root.claudeAiOauth === 'object'
+    ? root.claudeAiOauth as Record<string, unknown>
+    : root;
+  if (typeof raw.accessToken !== 'string' || typeof raw.refreshToken !== 'string') {
+    throw new Error('Local Claude credential is missing its OAuth access or refresh token.');
+  }
+  const expiresAt = Number(raw.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+    throw new Error('Local Claude credential has an invalid expiry.');
+  }
+  const scopes = Array.isArray(raw.scopes)
+    ? raw.scopes.filter((scope): scope is string => typeof scope === 'string' && scope.length > 0)
+    : [];
+  return {
+    claudeAiOauth: {
+      accessToken: raw.accessToken,
+      refreshToken: raw.refreshToken,
+      expiresAt,
+      scopes: scopes.length ? scopes : SCOPES,
+      ...(typeof raw.subscriptionType === 'string' && raw.subscriptionType
+        ? { subscriptionType: raw.subscriptionType }
+        : {}),
+    },
+  };
+}
+
+export function readLocalClaudeOAuthBundle(authPath?: string): AnthropicOAuthBundle {
+  let raw: string;
+  if (authPath) {
+    raw = readFileSync(authPath, 'utf8');
+  } else if (process.platform === 'darwin') {
+    raw = execFileSync('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } else {
+    raw = readFileSync(join(homedir(), '.claude', '.credentials.json'), 'utf8');
+  }
+  try {
+    return normalizeLocalClaudeOAuthBundle(JSON.parse(raw));
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error('Local Claude credential is not valid JSON.');
+    throw error;
+  }
+}
+
 export function createClaudeCommands(config: ConfigManager, store: CredentialStore): Command {
   const claude = new Command('claude').description('Manage Claude (Anthropic) OAuth subscription auth for RickyData execution');
 
@@ -244,7 +298,7 @@ export function createClaudeCommands(config: ConfigManager, store: CredentialSto
         const remote = await client.getAnthropicOAuthStatus();
         console.log(`Remote: ${remote.configured ? chalk.green('Configured') : chalk.yellow('Not configured')}`);
         if (remote.configured) {
-          console.log(chalk.dim(`Tokens present: ${remote.hasTokens ? 'yes' : 'no'}`));
+          console.log(chalk.dim(`Tokens present: ${(remote.hasRefreshToken ?? remote.hasTokens) ? 'yes' : 'no'}`));
           if (remote.scopes?.length) console.log(chalk.dim(`Scopes: ${remote.scopes.join(' ')}`));
           if (remote.subscriptionType) console.log(chalk.dim(`Subscription: ${remote.subscriptionType}`));
           if (remote.expiresAt) console.log(chalk.dim(`Access token expires: ${new Date(remote.expiresAt).toISOString()}`));
@@ -263,40 +317,49 @@ export function createClaudeCommands(config: ConfigManager, store: CredentialSto
     .description('Run the Claude OAuth login and upload the credential for subscription-backed Claude execution')
     .option('--paste', 'Use the paste-the-code flow instead of the loopback listener')
     .option('--console', 'Authorize via console.anthropic.com (Console/API account) instead of claude.ai')
+    .option('--from-local', 'Upload the OAuth credential from the local Claude Code login')
+    .option('--auth-path <path>', 'Read a local Claude credential JSON file instead of the platform credential store')
+    .option('--yes', 'Confirm noninteractive local credential sync')
     .option('--profile <profile>', 'Config profile to use')
     .option('--gateway <url>', 'Override agent gateway URL')
     .action(async (opts) => {
       try {
         // Construct the client first so auth/signing problems surface before login.
         const client = makeClient(config, store, opts);
-        const base = opts.console ? AUTHORIZE_URL_CONSOLE : AUTHORIZE_URL_CLAUDE;
-        const { verifier, challenge } = generatePkce();
-        const state = base64url(crypto.randomBytes(32));
-
-        let result: { captured: CapturedCode; redirectUri: string };
-        if (opts.paste) {
-          result = await captureViaPaste({ base, challenge, state });
+        let bundle: AnthropicOAuthBundle;
+        if (opts.fromLocal) {
+          if (!opts.yes) fail('Pass --yes to confirm noninteractive upload of the local Claude Code credential.');
+          bundle = readLocalClaudeOAuthBundle(opts.authPath);
         } else {
-          try {
-            result = await captureViaLoopback({ base, challenge, state });
-          } catch (loopbackErr) {
-            console.log(chalk.yellow(`\nLoopback capture unavailable (${loopbackErr instanceof Error ? loopbackErr.message : 'error'}). Falling back to paste flow.`));
+          if (opts.authPath) fail('--auth-path requires --from-local.');
+          const base = opts.console ? AUTHORIZE_URL_CONSOLE : AUTHORIZE_URL_CLAUDE;
+          const { verifier, challenge } = generatePkce();
+          const state = base64url(crypto.randomBytes(32));
+
+          let result: { captured: CapturedCode; redirectUri: string };
+          if (opts.paste) {
             result = await captureViaPaste({ base, challenge, state });
+          } else {
+            try {
+              result = await captureViaLoopback({ base, challenge, state });
+            } catch (loopbackErr) {
+              console.log(chalk.yellow(`\nLoopback capture unavailable (${loopbackErr instanceof Error ? loopbackErr.message : 'error'}). Falling back to paste flow.`));
+              result = await captureViaPaste({ base, challenge, state });
+            }
           }
-        }
 
-        if (result.captured.state !== state) {
-          fail('State mismatch — the authorization response did not match this request. Aborting for safety.');
-        }
+          if (result.captured.state !== state) {
+            fail('State mismatch — the authorization response did not match this request. Aborting for safety.');
+          }
 
-        const tokens = await exchangeCode({
-          code: result.captured.code,
-          state,
-          verifier,
-          redirectUri: result.redirectUri,
-        });
-        // Stamp expiry here; Date.now is intentionally read at the call site (not in pure helpers).
-        const bundle = buildBundle(tokens, Date.now());
+          const tokens = await exchangeCode({
+            code: result.captured.code,
+            state,
+            verifier,
+            redirectUri: result.redirectUri,
+          });
+          bundle = buildBundle(tokens, Date.now());
+        }
 
         const status = await client.setAnthropicOAuth(bundle);
         console.log(chalk.green('\nClaude OAuth credential encrypted and synced.'));

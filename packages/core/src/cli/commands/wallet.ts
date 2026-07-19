@@ -9,6 +9,8 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'defaultModel',
   'modelProvider',
   'plan',
+  'anthropicAuthMode',
+  'codexAuthMode',
   'persistConversations',
   'conversationRetentionDays',
   'autoImprove',

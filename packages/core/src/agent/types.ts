@@ -530,6 +530,7 @@ export interface AnthropicOAuthBundle {
 export interface AnthropicOAuthStatus {
   configured: boolean;
   hasTokens?: boolean;
+  hasRefreshToken?: boolean;
   scopes?: string[];
   expiresAt?: number;
   subscriptionType?: string;

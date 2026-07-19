@@ -165,6 +165,29 @@ describe('wallet commands', () => {
       expect(call[1].body).toBe(JSON.stringify({ persistConversations: true }));
     });
 
+    it('allows subscription-only provider auth modes', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+        text: async () => '',
+      } as Partial<Response>);
+      vi.stubGlobal('fetch', mockFetch);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const program = createProgram(config, store);
+
+      await program.parseAsync([
+        'node', 'rickydata', 'wallet', 'settings', 'set', 'anthropicAuthMode', 'subscription_only',
+      ]);
+      await program.parseAsync([
+        'node', 'rickydata', 'wallet', 'settings', 'set', 'codexAuthMode', 'subscription_only',
+      ]);
+
+      expect(mockFetch.mock.calls.map((call) => call[1].body)).toEqual([
+        JSON.stringify({ anthropicAuthMode: 'subscription_only' }),
+        JSON.stringify({ codexAuthMode: 'subscription_only' }),
+      ]);
+    });
+
     it('rejects unknown setting keys before making a request', async () => {
       const mockFetch = vi.fn();
       vi.stubGlobal('fetch', mockFetch);

@@ -11,6 +11,7 @@ import {
   generatePkce,
   buildAuthorizeUrl,
   buildBundle,
+  normalizeLocalClaudeOAuthBundle,
 } from '../../src/cli/commands/claude.js';
 
 // `open` would try to launch a real browser — stub it.
@@ -87,6 +88,24 @@ describe('claude OAuth helpers', () => {
     ]);
     expect(bundle.claudeAiOauth.expiresAt).toBe(3600 * 1000);
   });
+
+  it('normalizes the credential shape written by Claude Code', () => {
+    const bundle = normalizeLocalClaudeOAuthBundle({ claudeAiOauth: {
+      accessToken: 'sk-ant-oat-LOCAL',
+      refreshToken: 'sk-ant-ort-LOCAL',
+      expiresAt: 123_456,
+      scopes: ['user:inference'],
+      subscriptionType: 'max',
+    } });
+
+    expect(bundle.claudeAiOauth).toEqual({
+      accessToken: 'sk-ant-oat-LOCAL',
+      refreshToken: 'sk-ant-ort-LOCAL',
+      expiresAt: 123_456,
+      scopes: ['user:inference'],
+      subscriptionType: 'max',
+    });
+  });
 });
 
 describe('claude commands', () => {
@@ -125,6 +144,21 @@ describe('claude commands', () => {
       expect(output).toContain('Configured');
       expect(output).toContain('user:inference');
       expect(output).not.toContain('0xtest');
+    });
+
+    it('uses the gateway hasRefreshToken field for token status', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ configured: true, hasRefreshToken: true, unlocked: true }),
+        text: async () => '',
+      } as Partial<Response>);
+      vi.stubGlobal('fetch', mockFetch);
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const program = createProgram(config, store);
+      await program.parseAsync(['node', 'rickydata', 'claude', 'status']);
+
+      expect(consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('Tokens present: yes');
     });
 
     it('shows not configured status', async () => {
@@ -263,6 +297,44 @@ describe('claude commands', () => {
       expect(output).toContain('synced');
       expect(output).not.toContain(ACCESS);
       expect(output).not.toContain(REFRESH);
+    });
+  });
+
+  describe('claude sync --from-local', () => {
+    it('uploads the current local Claude Code bundle without a browser login', async () => {
+      store.setPrivateKey('0x' + 'a'.repeat(64));
+      const credentialsPath = path.join(tmpDir, 'claude-credentials.json');
+      fs.writeFileSync(credentialsPath, JSON.stringify({ claudeAiOauth: {
+        accessToken: 'sk-ant-oat-LOCAL',
+        refreshToken: 'sk-ant-ort-LOCAL',
+        expiresAt: 123_456,
+        scopes: ['user:inference'],
+        subscriptionType: 'max',
+      } }));
+      const calls: Array<{ url: string; opts: RequestInit }> = [];
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, opts?: RequestInit) => {
+        calls.push({ url, opts: opts ?? {} });
+        if (url.includes('derive-challenge')) {
+          return { ok: true, json: async () => ({ message: 'Sign Anthropic OAuth', nonce: 'n-1' }), text: async () => '' };
+        }
+        return { ok: true, json: async () => ({ configured: true, hasRefreshToken: true, unlocked: true }), text: async () => '' };
+      }));
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const program = createProgram(config, store);
+      await program.parseAsync([
+        'node', 'rickydata', 'claude', 'sync', '--from-local', '--yes', '--auth-path', credentialsPath,
+      ]);
+
+      const put = calls.find((call) => call.opts.method === 'PUT');
+      expect(put).toBeDefined();
+      const body = JSON.parse(put!.opts.body as string);
+      expect(body.credentials.claudeAiOauth.subscriptionType).toBe('max');
+      const output = consoleSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(output).toContain('synced');
+      expect(output).not.toContain('sk-ant-oat-LOCAL');
+      expect(output).not.toContain('sk-ant-ort-LOCAL');
+      expect(output).not.toContain('oauth/authorize');
     });
   });
 });
