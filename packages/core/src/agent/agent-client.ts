@@ -316,10 +316,7 @@ export class AgentClient {
 
   /** Get wallet Codex subscription auth status. */
   async getCodexAuthStatus(): Promise<CodexAuthStatus> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/status`, {
-      headers: this.authHeaders(),
-    });
+    const res = await this.fetchWalletAuth('/wallet/codex-auth/status');
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to get Codex auth status: ${res.status} ${body}`);
@@ -332,9 +329,8 @@ export class AgentClient {
     await this.ensureAuthenticated();
     const { message, nonce } = await this.getCodexAuthDeriveChallenge();
     const signature = await this.signWithPrivateKey(message, 'Codex subscription auth sync requires the owner wallet private key');
-    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth`, {
+    const res = await this.fetchWalletAuth('/wallet/codex-auth', {
       method: 'PUT',
-      headers: this.authHeaders(),
       body: JSON.stringify({ authJson, signature, nonce }),
     });
     if (!res.ok) {
@@ -349,9 +345,8 @@ export class AgentClient {
     await this.ensureAuthenticated();
     const { message } = await this.getCodexAuthDeriveChallenge();
     const signature = await this.signWithPrivateKey(message, 'Codex subscription auth unlock requires the owner wallet private key');
-    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/unlock`, {
+    const res = await this.fetchWalletAuth('/wallet/codex-auth/unlock', {
       method: 'POST',
-      headers: this.authHeaders(),
       body: JSON.stringify({ signature }),
     });
     if (!res.ok) {
@@ -363,18 +358,14 @@ export class AgentClient {
 
   /** Delete wallet Codex subscription auth. */
   async deleteCodexAuth(): Promise<void> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth`, {
+    const res = await this.fetchWalletAuth('/wallet/codex-auth', {
       method: 'DELETE',
-      headers: this.authHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to delete Codex auth: ${res.status}`);
   }
 
   private async getCodexAuthDeriveChallenge(): Promise<{ message: string; nonce: string }> {
-    const res = await fetch(`${this.gatewayUrl}/wallet/codex-auth/derive-challenge`, {
-      headers: this.authHeaders(),
-    });
+    const res = await this.fetchWalletAuth('/wallet/codex-auth/derive-challenge');
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to get Codex auth signing challenge: ${res.status} ${body}`);
@@ -386,10 +377,7 @@ export class AgentClient {
 
   /** Get wallet Anthropic OAuth (Claude Code subscription) credential status. */
   async getAnthropicOAuthStatus(): Promise<AnthropicOAuthStatus> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/status`, {
-      headers: this.authHeaders(),
-    });
+    const res = await this.fetchWalletAuth('/wallet/anthropic-oauth/status');
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to get Anthropic OAuth status: ${res.status} ${body}`);
@@ -410,9 +398,8 @@ export class AgentClient {
     // does `req.body?.credentials ?? req.body?.claudeAiOauth ?? req.body`). Sending
     // it under a `bundle` key falls through to the whole body and fails validation,
     // so the SHARED CONTRACT key here is `credentials` (carrying the claudeAiOauth wrapper).
-    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth`, {
+    const res = await this.fetchWalletAuth('/wallet/anthropic-oauth', {
       method: 'PUT',
-      headers: this.authHeaders(),
       body: JSON.stringify({ credentials: bundle, signature, nonce }),
     });
     if (!res.ok) {
@@ -427,9 +414,8 @@ export class AgentClient {
     await this.ensureAuthenticated();
     const { message } = await this.getAnthropicOAuthDeriveChallenge();
     const signature = await this.signWithPrivateKey(message, 'Anthropic OAuth unlock requires the owner wallet private key');
-    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/unlock`, {
+    const res = await this.fetchWalletAuth('/wallet/anthropic-oauth/unlock', {
       method: 'POST',
-      headers: this.authHeaders(),
       body: JSON.stringify({ signature }),
     });
     if (!res.ok) {
@@ -441,18 +427,14 @@ export class AgentClient {
 
   /** Delete wallet Anthropic OAuth credential. */
   async deleteAnthropicOAuth(): Promise<void> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth`, {
+    const res = await this.fetchWalletAuth('/wallet/anthropic-oauth', {
       method: 'DELETE',
-      headers: this.authHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to delete Anthropic OAuth: ${res.status}`);
   }
 
   private async getAnthropicOAuthDeriveChallenge(): Promise<{ message: string; nonce: string }> {
-    const res = await fetch(`${this.gatewayUrl}/wallet/anthropic-oauth/derive-challenge`, {
-      headers: this.authHeaders(),
-    });
+    const res = await this.fetchWalletAuth('/wallet/anthropic-oauth/derive-challenge');
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Failed to get Anthropic OAuth signing challenge: ${res.status} ${body}`);
@@ -1215,6 +1197,24 @@ export class AgentClient {
     }
     const { token } = await verifyRes.json();
     this.token = token;
+  }
+
+  /** Wallet-scoped vault calls must survive a gateway JWT rotation just like
+   * ordinary agent calls. The owner key never leaves this process: it signs a
+   * fresh gateway challenge and the original request is retried once. */
+  private async fetchWalletAuth(path: string, init: Omit<RequestInit, 'headers'> = {}): Promise<Response> {
+    await this.ensureAuthenticated();
+    const send = () => fetch(`${this.gatewayUrl}${path}`, {
+      ...init,
+      headers: this.authHeaders(),
+    });
+    let response = await send();
+    if (response.status === 401 && (this.privateKey || this.tokenGetter)) {
+      this.token = null;
+      await this.ensureAuthenticated({ forceRefresh: true });
+      response = await send();
+    }
+    return response;
   }
 
   private canSignForDerive(): boolean {

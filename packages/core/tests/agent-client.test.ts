@@ -1096,6 +1096,25 @@ describe('AgentClient — Anthropic OAuth (Claude Code subscription)', () => {
     );
   });
 
+  it('reauthenticates a stale gateway token before reading subscription status', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce({ ok: false, status: 401, text: () => Promise.resolve('expired') } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'auth-nonce', message: 'Sign in' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'fresh-wallet-token' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ configured: true, hasTokens: true }) } as Response);
+
+    const client = new AgentClient({ token: 'stale-wallet-token', privateKey: PRIVATE_KEY, gatewayUrl: GATEWAY, sessionStorePath: null });
+    const status = await client.getAnthropicOAuthStatus();
+
+    expect(status.configured).toBe(true);
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      `${GATEWAY}/wallet/anthropic-oauth/status`,
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer fresh-wallet-token' }) }),
+    );
+  });
+
   it('unlocks via a wallet-signed POST', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy.mockResolvedValueOnce({
@@ -1127,6 +1146,32 @@ describe('AgentClient — Anthropic OAuth (Claude Code subscription)', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       `${GATEWAY}/wallet/anthropic-oauth`,
       expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+});
+
+describe('AgentClient — Codex subscription auth', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reauthenticates a stale gateway token before the signed sync challenge', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce({ ok: false, status: 401, text: () => Promise.resolve('expired') } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'auth-nonce', message: 'Sign in' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'fresh-wallet-token' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nonce: 'derive-nonce', message: 'Sign Codex auth' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ configured: true, hasTokens: true }) } as Response);
+
+    const client = new AgentClient({ token: 'stale-wallet-token', privateKey: PRIVATE_KEY, gatewayUrl: GATEWAY, sessionStorePath: null });
+    const status = await client.setCodexAuth({ auth_mode: 'chatgpt', tokens: { access_token: 'subscription-token' } });
+
+    expect(status.configured).toBe(true);
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      `${GATEWAY}/wallet/codex-auth/derive-challenge`,
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer fresh-wallet-token' }) }),
     );
   });
 });
