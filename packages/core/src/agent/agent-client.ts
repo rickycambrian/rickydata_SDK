@@ -894,20 +894,15 @@ export class AgentClient {
 
   /** Get wallet settings. */
   async getWalletSettings(): Promise<WalletSettings> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/settings`, {
-      headers: this.authHeaders(),
-    });
+    const res = await this.fetchWalletAuth('/wallet/settings');
     if (!res.ok) throw new Error(`Failed to get wallet settings: ${res.status}`);
     return res.json();
   }
 
   /** Update wallet settings (partial merge). */
   async updateWalletSettings(settings: Partial<WalletSettings>): Promise<WalletSettings> {
-    await this.ensureAuthenticated();
-    const res = await fetch(`${this.gatewayUrl}/wallet/settings`, {
+    const res = await this.fetchWalletAuth('/wallet/settings', {
       method: 'PUT',
-      headers: this.authHeaders(),
       body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error(`Failed to update wallet settings: ${res.status}`);

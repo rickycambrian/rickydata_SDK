@@ -188,6 +188,25 @@ describe('wallet commands', () => {
       ]);
     });
 
+    it('reauthenticates with the stored owner key after a gateway restart', async () => {
+      store.setPrivateKey('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ ok: false, status: 401, text: async () => 'expired' } as Partial<Response>)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ nonce: 'n', message: 'Sign in' }) } as Partial<Response>)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'fresh-wallet-token' }) } as Partial<Response>)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ codexAuthMode: 'subscription_only' }) } as Partial<Response>);
+      vi.stubGlobal('fetch', mockFetch);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const program = createProgram(config, store);
+      await program.parseAsync([
+        'node', 'rickydata', 'wallet', 'settings', 'set', 'codexAuthMode', 'subscription_only',
+      ]);
+
+      expect(mockFetch.mock.calls[3][0]).toContain('/wallet/settings');
+      expect(mockFetch.mock.calls[3][1].headers.Authorization).toBe('Bearer fresh-wallet-token');
+    });
+
     it('rejects unknown setting keys before making a request', async () => {
       const mockFetch = vi.fn();
       vi.stubGlobal('fetch', mockFetch);

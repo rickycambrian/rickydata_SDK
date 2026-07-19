@@ -1,5 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { AgentClient } from '../../agent/agent-client.js';
+import type { WalletSettings } from '../../agent/types.js';
 import { ConfigManager } from '../config/config-manager.js';
 import { CredentialStore } from '../config/credential-store.js';
 import { formatOutput, formatJson, formatKeyValue, type OutputFormat } from '../output/formatter.js';
@@ -30,6 +32,15 @@ function requireAuth(store: CredentialStore, profile: string): string {
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+function walletClient(store: CredentialStore, profile: string, gatewayUrl: string): AgentClient {
+  return new AgentClient({
+    token: requireAuth(store, profile),
+    privateKey: store.getPrivateKey(profile) ?? undefined,
+    gatewayUrl,
+    sessionStorePath: null,
+  });
 }
 
 function parseSettingValue(value: string): unknown {
@@ -303,15 +314,10 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
     .action(async (opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
-      const token = requireAuth(store, profile);
       const format = opts.format as OutputFormat;
 
       try {
-        const res = await fetch(`${gatewayUrl}/wallet/settings`, {
-          headers: authHeaders(token),
-        });
-        if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-        const data = await res.json();
+        const data = await walletClient(store, profile, gatewayUrl).getWalletSettings();
 
         if (format === 'json') {
           console.log(formatJson(data));
@@ -336,17 +342,11 @@ export function createWalletCommands(config: ConfigManager, store: CredentialSto
     .action(async (key: string, value: string, opts) => {
       const profile = opts.profile ?? config.getActiveProfile();
       const gatewayUrl = (opts.gateway ?? config.getAgentGatewayUrl(profile)).replace(/\/$/, '');
-      const token = requireAuth(store, profile);
 
       try {
         validateWalletSettingKey(key);
         const parsedValue = parseSettingValue(value);
-        const res = await fetch(`${gatewayUrl}/wallet/settings`, {
-          method: 'PUT',
-          headers: authHeaders(token),
-          body: JSON.stringify({ [key]: parsedValue }),
-        });
-        if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+        await walletClient(store, profile, gatewayUrl).updateWalletSettings({ [key]: parsedValue } as Partial<WalletSettings>);
         console.log(chalk.green(`Setting '${key}' updated to '${String(parsedValue)}'`));
       } catch (err) {
         throw new CliError(err instanceof Error ? err.message : String(err));
