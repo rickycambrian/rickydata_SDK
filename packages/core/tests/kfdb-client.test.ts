@@ -309,12 +309,17 @@ describe('KFDBClient', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_abc' });
+    const client = new KFDBClient({
+      baseUrl: BASE,
+      token: 'tok_abc',
+      clientId: 'rickydata-home',
+    });
     await client.listLabels();
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     const headers = new Headers((init?.headers ?? {}) as HeadersInit);
     expect(headers.get('authorization')).toBe('Bearer tok_abc');
+    expect(headers.get('x-client-id')).toBe('rickydata-home');
   });
 
   it('formats Authorization header with bearer apiKey when token not provided', async () => {

@@ -733,6 +733,9 @@ export class KFDBClient {
 
     const headers = new Headers(init?.headers ?? {});
     headers.set('Authorization', `Bearer ${token}`);
+    if (this.clientId && !headers.has('X-Client-ID')) {
+      headers.set('X-Client-ID', this.clientId);
+    }
 
     if (this.walletAddress) {
       headers.set('X-Wallet-Address', this.walletAddress);
