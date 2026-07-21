@@ -109,6 +109,7 @@ export class KFDBClient {
   private readonly encryptionKey?: CryptoKey;
   private readonly walletAddress?: string;
   private readonly onResponseMeta?: (meta: KfdbResponseMeta) => void;
+  private readonly clientId?: string;
   private deriveSessionId: string | null = null;
   private deriveKeyHex: string | null = null;
   private deriveExpiresAt: number | null = null;
@@ -127,6 +128,7 @@ export class KFDBClient {
     this.encryptionKey = config.encryptionKey;
     this.walletAddress = config.walletAddress;
     this.onResponseMeta = config.onResponseMeta;
+    this.clientId = config.clientId?.trim() || undefined;
 
     if (!this.token && !this.apiKey) {
       throw new Error('KFDBClient requires either token or apiKey');
@@ -528,7 +530,7 @@ export class KFDBClient {
     if (request.properties) payload.properties = request.properties;
     const res = await this.request('/api/v1/entities/embed', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.embeddingHeaders(request.clientId),
       body: JSON.stringify(payload),
       signal: request.signal,
     });
@@ -550,7 +552,7 @@ export class KFDBClient {
     });
     const res = await this.request('/api/v1/entities/embed/model-batch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.embeddingHeaders(request.clientId),
       body: JSON.stringify({ entities }),
       signal: request.signal,
     });
@@ -711,6 +713,13 @@ export class KFDBClient {
 
   private resolveScope(scope?: KfdbQueryScope): KfdbQueryScope {
     return scope ?? this.defaultReadScope;
+  }
+
+  private embeddingHeaders(clientId?: string): Headers {
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    const attributedClientId = clientId?.trim() || this.clientId;
+    if (attributedClientId) headers.set('X-Client-ID', attributedClientId);
+    return headers;
   }
 
   private async request(path: string, init?: RequestInit): Promise<Response> {

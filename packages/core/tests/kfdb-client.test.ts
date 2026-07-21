@@ -144,8 +144,13 @@ describe('KFDBClient', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const client = new KFDBClient({ baseUrl: BASE, token: 'tok_123' });
+    const client = new KFDBClient({
+      baseUrl: BASE,
+      token: 'tok_123',
+      clientId: 'rickydata-home',
+    });
     const response = await client.embedEntitiesBatch({
+      clientId: 'rickydata-home-maintenance',
       entities: [
         {
           label: 'WikiPage',
@@ -165,6 +170,7 @@ describe('KFDBClient', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/embed/model-batch`);
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('POST');
+    expect(new Headers(init.headers).get('X-Client-ID')).toBe('rickydata-home-maintenance');
     expect(JSON.parse(String(init.body))).toEqual({
       entities: [
         {

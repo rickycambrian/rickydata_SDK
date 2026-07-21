@@ -30,6 +30,8 @@ export interface KfdbClientConfig {
   walletAddress?: string;
   /** Observe request ids and timing without patching SDK internals. Observer failures are ignored. */
   onResponseMeta?: (meta: KfdbResponseMeta) => void;
+  /** Stable caller identity used to attribute embedding-provider cost. */
+  clientId?: string;
 }
 
 export interface KfdbLabelInfo {
@@ -422,6 +424,8 @@ export interface KfdbEmbedEntityRequest {
   text?: string;
   /** Which properties to embed when `text` is absent (default: auto-detect). */
   properties?: string[];
+  /** Per-job cost-attribution identity; overrides the client default. */
+  clientId?: string;
   signal?: AbortSignal;
 }
 
@@ -431,7 +435,9 @@ export interface KfdbEmbedEntityResponse {
 
 /** POST /api/v1/entities/embed/batch — embed up to 100 entities in one model batch. */
 export interface KfdbEmbedEntitiesBatchRequest {
-  entities: Array<Omit<KfdbEmbedEntityRequest, 'signal'>>;
+  entities: Array<Omit<KfdbEmbedEntityRequest, 'signal' | 'clientId'>>;
+  /** Per-job cost-attribution identity; overrides the client default. */
+  clientId?: string;
   signal?: AbortSignal;
 }
 
