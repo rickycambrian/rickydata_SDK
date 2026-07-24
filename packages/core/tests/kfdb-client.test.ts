@@ -138,6 +138,42 @@ describe('KFDBClient', () => {
     });
   });
 
+  it('lists and acknowledges durable private entity changes', async () => {
+    const eventId = '550e8400-e29b-41d4-a716-446655440010';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockJsonResponse({
+        changes: [{
+          event_id: eventId,
+          label: 'WikiPage',
+          node_id: '550e8400-e29b-41d4-a716-446655440000',
+          operation: 'upsert',
+          created_at: 1_753_331_200_000,
+        }],
+        count: 1,
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ acknowledged: 1 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new KFDBClient({
+      baseUrl: BASE,
+      token: 'tok_123',
+      walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+    });
+    client.setDeriveSession('derive-session', 'a'.repeat(64));
+
+    const page = await client.listEntityChanges({ limit: 100 });
+    const ack = await client.ackEntityChanges([eventId]);
+
+    expect(page.count).toBe(1);
+    expect(ack.acknowledged).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/v1/entities/changes?limit=100`);
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/api/v1/entities/changes/ack`);
+    const ackInit = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(ackInit.method).toBe('POST');
+    expect(JSON.parse(String(ackInit.body))).toEqual({ event_ids: [eventId] });
+    expect(new Headers(ackInit.headers).get('x-derive-session-id')).toBe('derive-session');
+  });
+
   it('embeds entities through one typed batch request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockJsonResponse({ embedded: 2, errors: 0, results: [], error_details: [] }),

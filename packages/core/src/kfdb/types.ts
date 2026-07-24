@@ -112,6 +112,28 @@ export interface KfdbBatchGetEntitiesResponse {
   requested: number;
 }
 
+export interface KfdbEntityChange {
+  event_id: string;
+  label: string;
+  node_id: string;
+  operation: 'upsert' | 'delete';
+  created_at: number;
+}
+
+export interface KfdbListEntityChangesOptions {
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+export interface KfdbListEntityChangesResponse {
+  changes: KfdbEntityChange[];
+  count: number;
+}
+
+export interface KfdbAckEntityChangesResponse {
+  acknowledged: number;
+}
+
 export interface KfdbWriteRequest {
   operations: Array<Record<string, unknown>>;
   skip_embedding?: boolean;

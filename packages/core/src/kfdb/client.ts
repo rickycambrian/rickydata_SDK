@@ -11,6 +11,9 @@ import type {
   KfdbGetEntityOptions,
   KfdbListEntitiesOptions,
   KfdbListEntitiesResponse,
+  KfdbListEntityChangesOptions,
+  KfdbListEntityChangesResponse,
+  KfdbAckEntityChangesResponse,
   KfdbListLabelsResponse,
   KfdbKnowledgeBundleRequest,
   KfdbKnowledgeBundleResponse,
@@ -345,6 +348,27 @@ export class KFDBClient {
       }
     }
     return data;
+  }
+
+  async listEntityChanges(
+    options: KfdbListEntityChangesOptions = {},
+  ): Promise<KfdbListEntityChangesResponse> {
+    const params = new URLSearchParams();
+    if (options.limit != null) params.set('limit', String(options.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const res = await this.request(`/api/v1/entities/changes${suffix}`, {
+      signal: options.signal,
+    });
+    return this.parseJson<KfdbListEntityChangesResponse>(res, 'list entity changes');
+  }
+
+  async ackEntityChanges(eventIds: string[]): Promise<KfdbAckEntityChangesResponse> {
+    const res = await this.request('/api/v1/entities/changes/ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_ids: eventIds }),
+    });
+    return this.parseJson<KfdbAckEntityChangesResponse>(res, 'ack entity changes');
   }
 
   async write(request: KfdbWriteRequest): Promise<KfdbWriteResponse> {
